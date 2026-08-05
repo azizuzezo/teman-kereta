@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="tk_widget_surface">#102E2A</color>
+    <color name="tk_widget_surface_active">#18334D</color>
+    <color name="tk_widget_primary">#F7FBFA</color>
+    <color name="tk_widget_secondary">#BED0CC</color>
+    <color name="tk_widget_accent">#75E6BF</color>
+    <color name="tk_widget_active_accent">#8CCBFF</color>
+    <color name="tk_widget_badge_background">#FFF0B5</color>
+    <color name="tk_widget_badge_text">#4D3B00</color>
+    <color name="tk_widget_status_normal">#75E6BF</color>
+    <color name="tk_widget_status_delayed">#FFC978</color>
+    <color name="tk_widget_status_disrupted">#FF9B8C</color>
+    <color name="tk_widget_status_unavailable">#BED0CC</color>
+</resources>

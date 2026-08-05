@@ -1,0 +1,50 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Teman Kereta</string>
+
+    <string name="active_trip_channel_name">Perjalanan aktif</string>
+    <string name="active_trip_channel_description">Pemantauan lokasi selama perjalanan yang dimulai pengguna</string>
+    <string name="active_trip_notification_title">Perjalanan aktif</string>
+    <string name="active_trip_notification_demo_title">Data Demo • Perjalanan aktif</string>
+    <string name="active_trip_notification_generic">Teman Kereta sedang mendampingi perjalanan aktif.</string>
+    <string name="active_trip_notification_tracking">Pemantauan lokasi sedang berjalan</string>
+    <string name="active_trip_notification_progress">%1$s → %2$s • %3$d stasiun tersisa</string>
+    <string name="active_trip_notification_next">Berikutnya %1$s • %2$d stasiun tersisa</string>
+    <string name="active_trip_notification_stop">Akhiri</string>
+
+    <string name="widget_next_departure_name">Kereta berikutnya</string>
+    <string name="widget_next_departure_description">Keberangkatan berikutnya dari stasiun pilihan</string>
+    <string name="widget_active_trip_name">Perjalanan aktif</string>
+    <string name="widget_active_trip_description">Ringkasan perjalanan yang sedang berlangsung</string>
+    <string name="widget_data_demo">DATA DEMO</string>
+    <string name="widget_no_data_badge">BELUM ADA DATA</string>
+    <string name="widget_next_departure_title">Kereta berikutnya</string>
+    <string name="widget_choose_station">Pilih stasiun di aplikasi</string>
+    <string name="widget_no_departure">Belum ada jadwal tersimpan</string>
+    <string name="widget_open_to_configure">Buka aplikasi untuk mengatur</string>
+    <string name="widget_status_unavailable">Status belum tersedia</string>
+    <string name="widget_updated_at">Diperbarui %1$s</string>
+    <string name="widget_refresh">Muat ulang data tersimpan</string>
+    <string name="widget_active_trip_title">Perjalanan aktif</string>
+    <string name="widget_no_active_trip">Tidak ada perjalanan aktif</string>
+    <string name="widget_route_to">%1$s • tujuan %2$s</string>
+    <string name="widget_start_trip_in_app">Mulai perjalanan dari aplikasi</string>
+    <string name="widget_current_station">Sekarang: %1$s</string>
+    <string name="widget_next_station">Berikutnya: %1$s</string>
+    <string name="widget_remaining_stations">%1$d stasiun tersisa</string>
+    <string name="widget_one_remaining_station">1 stasiun tersisa</string>
+    <string name="widget_eta">Tiba %1$s</string>
+    <string name="widget_open_trip">Buka perjalanan</string>
+    <string name="widget_open_app">Buka aplikasi</string>
+
+    <string name="widget_daily_route_name">Rute harian</string>
+    <string name="widget_daily_route_description">Rute favorit, tiga jadwal berikutnya, dan status jalur</string>
+    <string name="widget_daily_route_title">Pilih rute favorit di aplikasi</string>
+    <string name="widget_daily_route_no_departure">Belum ada jadwal tersimpan</string>
+    <string name="widget_daily_route_status_unavailable">Status jalur belum tersedia</string>
+
+    <string name="widget_service_status_name">Status jalur</string>
+    <string name="widget_service_status_description">Status beberapa jalur commuter line</string>
+    <string name="widget_service_status_title">Status jalur</string>
+    <string name="widget_service_status_no_data">Buka aplikasi untuk memuat status</string>
+</resources>
