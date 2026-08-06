@@ -1,3 +1,4 @@
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:teman_kereta/core/notifications/local_notification_service.dart';
@@ -7,6 +8,8 @@ import 'package:teman_kereta/domain/entities/transit_models.dart';
 import 'package:teman_kereta/features/active_trip/presentation/active_trip_controller.dart';
 
 import '../support/fakes.dart';
+
+const _nativeChannel = MethodChannel('id.temankereta.teman_kereta/native');
 
 /// A → B → C → D (transfer) → E → F → G → H → I → J (destination), matching
 /// the shape produced by MockTransitProvider for a Bogor-Manggarai-Sudirman
@@ -54,18 +57,31 @@ void main() {
 
   late ProviderContainer container;
   late FakeNotificationService notifications;
+  Map<String, Object?>? queuedGeofenceEvent;
 
   setUp(() {
     notifications = FakeNotificationService();
+    queuedGeofenceEvent = null;
     container = ProviderContainer(
       overrides: [
         preferencesStoreProvider.overrideWithValue(MemoryPreferencesStore()),
         localNotificationServiceProvider.overrideWithValue(notifications),
       ],
     );
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(_nativeChannel, (call) async {
+      if (call.method == 'getLastGeofenceEvent') {
+        return queuedGeofenceEvent;
+      }
+      return null;
+    });
   });
 
-  tearDown(() => container.dispose());
+  tearDown(() {
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(_nativeChannel, null);
+    container.dispose();
+  });
 
   test(
     'advanceStop walks through approaching-transfer, transferring, '
@@ -113,5 +129,79 @@ void main() {
 
     await notifier.cancel();
     expect(container.read(activeTripControllerProvider), isNull);
+  });
+
+  group('checkGeofenceProgress (real geofence ENTER auto-advances the trip)', () {
+    test('advances when the phone enters the next station along the route', () async {
+      final notifier = container.read(activeTripControllerProvider.notifier);
+      await notifier.start(_transferTrip()); // currentStationIndex 0 (A), next = B
+
+      queuedGeofenceEvent = <String, Object?>{
+        'stationIds': <String>['B'],
+        'transition': 'enter',
+        'occurredAtEpochMs': DateTime.utc(2026, 1, 1, 8, 5).millisecondsSinceEpoch,
+      };
+      await notifier.checkGeofenceProgress();
+
+      final session = container.read(activeTripControllerProvider);
+      expect(session?.currentStationIndex, 1);
+      expect(session?.state, ActiveTripState.approachingTransfer);
+    });
+
+    test('does nothing when the geofence event is for a different station', () async {
+      final notifier = container.read(activeTripControllerProvider.notifier);
+      await notifier.start(_transferTrip());
+
+      queuedGeofenceEvent = <String, Object?>{
+        'stationIds': <String>['C'], // not the next station (B)
+        'transition': 'enter',
+        'occurredAtEpochMs': DateTime.utc(2026, 1, 1, 8, 5).millisecondsSinceEpoch,
+      };
+      await notifier.checkGeofenceProgress();
+
+      expect(container.read(activeTripControllerProvider)?.currentStationIndex, 0);
+    });
+
+    test('does nothing on an exit/dwell transition, only enter', () async {
+      final notifier = container.read(activeTripControllerProvider.notifier);
+      await notifier.start(_transferTrip());
+
+      queuedGeofenceEvent = <String, Object?>{
+        'stationIds': <String>['B'],
+        'transition': 'dwell',
+        'occurredAtEpochMs': DateTime.utc(2026, 1, 1, 8, 5).millisecondsSinceEpoch,
+      };
+      await notifier.checkGeofenceProgress();
+
+      expect(container.read(activeTripControllerProvider)?.currentStationIndex, 0);
+    });
+
+    test('does not double-advance on a repeated (already-processed) event', () async {
+      final notifier = container.read(activeTripControllerProvider.notifier);
+      await notifier.start(_transferTrip());
+
+      queuedGeofenceEvent = <String, Object?>{
+        'stationIds': <String>['B'],
+        'transition': 'enter',
+        'occurredAtEpochMs': DateTime.utc(2026, 1, 1, 8, 5).millisecondsSinceEpoch,
+      };
+      await notifier.checkGeofenceProgress();
+      expect(container.read(activeTripControllerProvider)?.currentStationIndex, 1);
+
+      // Same event polled again (native side hasn't produced a new one yet).
+      await notifier.checkGeofenceProgress();
+      expect(container.read(activeTripControllerProvider)?.currentStationIndex, 1);
+    });
+
+    test('does nothing before a trip is confirmed onBoard', () async {
+      final notifier = container.read(activeTripControllerProvider.notifier);
+      queuedGeofenceEvent = <String, Object?>{
+        'stationIds': <String>['B'],
+        'transition': 'enter',
+        'occurredAtEpochMs': DateTime.utc(2026, 1, 1, 8, 5).millisecondsSinceEpoch,
+      };
+      await notifier.checkGeofenceProgress();
+      expect(container.read(activeTripControllerProvider), isNull);
+    });
   });
 }

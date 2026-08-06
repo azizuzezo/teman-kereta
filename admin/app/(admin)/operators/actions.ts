@@ -133,21 +133,55 @@ export async function toggleOperatorActive(formData: FormData) {
   revalidatePath("/operators");
 }
 
-export async function deleteOperator(formData: FormData) {
+export type DeleteOperatorState = { error?: string } | undefined;
+
+export async function deleteOperator(
+  _prevState: DeleteOperatorState,
+  formData: FormData
+): Promise<DeleteOperatorState> {
   const session = await verifyAdminSession();
   const id = String(formData.get("id"));
 
   const supabase = createServiceClient();
+
+  // Check first rather than parse the Postgres error afterward, so the
+  // message can say exactly what's blocking (name + count), not just "some
+  // lines exist somewhere" — the previous version made the admin guess.
+  const { data: blockingLines } = await supabase
+    .from("lines")
+    .select("name")
+    .eq("operator_id", id)
+    .limit(5);
+  if (blockingLines && blockingLines.length > 0) {
+    const { count } = await supabase
+      .from("lines")
+      .select("id", { count: "exact", head: true })
+      .eq("operator_id", id);
+    const names = blockingLines.map((l) => l.name).join(", ");
+    const more = count && count > blockingLines.length ? ` (dan ${count - blockingLines.length} lainnya)` : "";
+    return {
+      error: `Operator ini masih memiliki ${count ?? blockingLines.length} jalur terkait: ${names}${more}. Hapus atau pindahkan jalur tersebut dulu.`,
+    };
+  }
+
   const { error } = await supabase.from("operators").delete().eq("id", id);
 
-  if (!error) {
-    await recordAudit({
-      adminUserId: session.userId,
-      action: "delete",
-      tableName: "operators",
-      recordId: id,
-    });
+  if (error) {
+    if (error.code === "23503") {
+      return {
+        error:
+          "Operator ini masih memiliki data terkait yang tidak terdeteksi otomatis — periksa jalur/data lain yang mereferensikan operator ini.",
+      };
+    }
+    return { error: `Gagal menghapus: ${error.message}` };
   }
+
+  await recordAudit({
+    adminUserId: session.userId,
+    action: "delete",
+    tableName: "operators",
+    recordId: id,
+  });
 
   revalidatePath("/operators");
 }

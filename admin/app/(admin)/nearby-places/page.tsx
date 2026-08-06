@@ -2,7 +2,7 @@ import Link from "next/link";
 import { verifyAdminSession } from "@/lib/dal";
 import { createServiceClient } from "@/lib/supabase/service";
 import { CreateNearbyPlaceForm } from "./create-form";
-import { deleteNearbyPlace } from "./actions";
+import { DeleteNearbyPlaceButton } from "./delete-button";
 
 export default async function NearbyPlacesPage() {
   await verifyAdminSession();
@@ -72,15 +72,7 @@ export default async function NearbyPlacesPage() {
                       >
                         Edit
                       </Link>
-                      <form action={deleteNearbyPlace}>
-                        <input type="hidden" name="id" value={place.id} />
-                        <button
-                          type="submit"
-                          className="text-xs text-red-600 hover:underline dark:text-red-400"
-                        >
-                          Hapus
-                        </button>
-                      </form>
+                      <DeleteNearbyPlaceButton placeId={place.id} />
                     </div>
                   </td>
                 </tr>

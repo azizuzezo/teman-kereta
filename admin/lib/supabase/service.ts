@@ -15,6 +15,11 @@ export function createServiceClient() {
   return createSupabaseClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.SUPABASE_SERVICE_ROLE_KEY!,
-    { auth: { autoRefreshToken: false, persistSession: false } }
+    {
+      auth: { autoRefreshToken: false, persistSession: false },
+      // See lib/supabase/server.ts — must be bound to globalThis, not a bare
+      // reference, or this breaks identically under Node's own fetch too.
+      global: { fetch: globalThis.fetch.bind(globalThis) },
+    }
   );
 }

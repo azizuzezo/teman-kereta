@@ -3,7 +3,8 @@ import { verifyAdminSession } from "@/lib/dal";
 import { createServiceClient } from "@/lib/supabase/service";
 import { OPERATOR_TYPES, DATA_SOURCE_TYPES } from "./constants";
 import { CreateOperatorForm } from "./create-form";
-import { deleteOperator, toggleOperatorActive } from "./actions";
+import { toggleOperatorActive } from "./actions";
+import { DeleteOperatorButton } from "./delete-button";
 
 export default async function OperatorsPage() {
   await verifyAdminSession();
@@ -75,15 +76,7 @@ export default async function OperatorsPage() {
                     >
                       Edit
                     </Link>
-                    <form action={deleteOperator}>
-                      <input type="hidden" name="id" value={operator.id} />
-                      <button
-                        type="submit"
-                        className="text-xs text-red-600 hover:underline dark:text-red-400"
-                      >
-                        Hapus
-                      </button>
-                    </form>
+                    <DeleteOperatorButton operatorId={operator.id} />
                   </div>
                 </td>
               </tr>

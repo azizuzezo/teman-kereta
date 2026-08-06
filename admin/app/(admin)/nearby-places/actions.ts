@@ -137,21 +137,28 @@ export async function updateNearbyPlace(
   redirect("/nearby-places");
 }
 
-export async function deleteNearbyPlace(formData: FormData) {
+export type DeleteNearbyPlaceState = { error?: string } | undefined;
+
+export async function deleteNearbyPlace(
+  _prevState: DeleteNearbyPlaceState,
+  formData: FormData
+): Promise<DeleteNearbyPlaceState> {
   const session = await verifyAdminSession();
   const id = String(formData.get("id"));
 
   const supabase = createServiceClient();
   const { error } = await supabase.from("nearby_places").delete().eq("id", id);
 
-  if (!error) {
-    await recordAudit({
-      adminUserId: session.userId,
-      action: "delete",
-      tableName: "nearby_places",
-      recordId: id,
-    });
+  if (error) {
+    return { error: `Gagal menghapus: ${error.message}` };
   }
+
+  await recordAudit({
+    adminUserId: session.userId,
+    action: "delete",
+    tableName: "nearby_places",
+    recordId: id,
+  });
 
   revalidatePath("/nearby-places");
 }

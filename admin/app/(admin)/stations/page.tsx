@@ -2,7 +2,7 @@ import Link from "next/link";
 import { verifyAdminSession } from "@/lib/dal";
 import { createServiceClient } from "@/lib/supabase/service";
 import { CreateStationForm } from "./create-form";
-import { deleteStation } from "./actions";
+import { DeleteStationButton } from "./delete-button";
 
 export default async function StationsPage() {
   await verifyAdminSession();
@@ -54,15 +54,7 @@ export default async function StationsPage() {
                     >
                       Edit
                     </Link>
-                    <form action={deleteStation}>
-                      <input type="hidden" name="id" value={station.id} />
-                      <button
-                        type="submit"
-                        className="text-xs text-red-600 hover:underline dark:text-red-400"
-                      >
-                        Hapus
-                      </button>
-                    </form>
+                    <DeleteStationButton stationId={station.id} />
                   </div>
                 </td>
               </tr>

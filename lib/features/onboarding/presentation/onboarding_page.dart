@@ -3,11 +3,14 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../../app/config/app_environment.dart';
 import '../../../app/theme/app_theme.dart';
 import '../../../core/notifications/local_notification_service.dart';
 import '../../../core/preferences/preferences_store.dart';
 import '../../../core/widgets/data_badges.dart';
 import '../../../core/widgets/tk_logo.dart';
+import '../../../data/providers/provider_registry.dart';
+import '../../../domain/entities/transit_models.dart';
 import '../../settings/presentation/settings_controller.dart';
 
 class OnboardingPage extends ConsumerStatefulWidget {
@@ -189,13 +192,16 @@ class _WelcomeStep extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final isDemo = AppEnvironment.provider == TransitProviderKind.mock;
     return SingleChildScrollView(
       padding: const EdgeInsets.fromLTRB(24, 28, 24, 24),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: <Widget>[
-          const DemoDataBanner(),
-          const SizedBox(height: 36),
+          if (isDemo) ...<Widget>[
+            const DemoDataBanner(),
+            const SizedBox(height: 36),
+          ],
           Semantics(
             label: 'Ilustrasi kereta dan jalur perjalanan',
             image: true,
@@ -344,7 +350,7 @@ class _PermissionStep extends StatelessWidget {
   }
 }
 
-class _DailyRouteStep extends StatelessWidget {
+class _DailyRouteStep extends ConsumerWidget {
   const _DailyRouteStep({
     required this.homeStation,
     required this.workStation,
@@ -359,16 +365,15 @@ class _DailyRouteStep extends StatelessWidget {
   final ValueChanged<String?> onWorkChanged;
   final Future<void> Function() onFinish;
 
-  static const _stations = <DropdownMenuItem<String>>[
-    DropdownMenuItem(value: 'BOO', child: Text('Bogor')),
-    DropdownMenuItem(value: 'DP', child: Text('Depok')),
-    DropdownMenuItem(value: 'MRI', child: Text('Manggarai')),
-    DropdownMenuItem(value: 'SUD', child: Text('Sudirman')),
-    DropdownMenuItem(value: 'JAKK', child: Text('Jakarta Kota')),
-  ];
-
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    final stations = List<Station>.of(
+      ref.watch(stationListProvider).asData?.value ?? const <Station>[],
+    )..sort((a, b) => a.name.compareTo(b.name));
+    final stationItems = <DropdownMenuItem<String>>[
+      for (final station in stations)
+        DropdownMenuItem(value: station.id, child: Text(station.name)),
+    ];
     return SingleChildScrollView(
       padding: const EdgeInsets.fromLTRB(24, 30, 24, 24),
       child: Column(
@@ -389,7 +394,7 @@ class _DailyRouteStep extends StatelessWidget {
               labelText: 'Stasiun rumah',
               prefixIcon: Icon(Icons.home_outlined),
             ),
-            items: _stations,
+            items: stationItems,
             onChanged: onHomeChanged,
           ),
           const SizedBox(height: 16),
@@ -399,7 +404,7 @@ class _DailyRouteStep extends StatelessWidget {
               labelText: 'Stasiun kantor atau kampus',
               prefixIcon: Icon(Icons.work_outline_rounded),
             ),
-            items: _stations,
+            items: stationItems,
             onChanged: onWorkChanged,
           ),
           const SizedBox(height: 28),

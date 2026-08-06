@@ -14,6 +14,14 @@ export async function createClient() {
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
     {
+      // supabase-js defaults to the `cross-fetch` polyfill outside a browser,
+      // which conflicts with Cloudflare Workers' native fetch (surfaces as a
+      // generic "Connection closed" error, not an obvious fetch failure) —
+      // forcing the native global fetch here bypasses that polyfill. Must be
+      // bound to globalThis: passing the bare `fetch` reference loses its
+      // internal `this` and breaks the exact same way under Node's own
+      // undici-based fetch, not just avoiding the Workers issue.
+      global: { fetch: globalThis.fetch.bind(globalThis) },
       cookies: {
         getAll() {
           return cookieStore.getAll();

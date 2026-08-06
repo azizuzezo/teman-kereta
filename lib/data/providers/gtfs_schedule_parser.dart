@@ -285,7 +285,14 @@ class GtfsScheduleParser {
     return results;
   }
 
-  List<List<String>> _parseCsv(String input) {
+  List<List<String>> _parseCsv(String rawInput) {
+    // Strip a leading UTF-8 BOM (common in GTFS files exported from Excel/
+    // Windows tooling) — mirrors the same fix in admin/lib/gtfs/csv.ts.
+    // Left unstripped, it glues onto the first header cell and breaks every
+    // required-column check for that column.
+    final input = rawInput.isNotEmpty && rawInput.codeUnitAt(0) == 0xfeff
+        ? rawInput.substring(1)
+        : rawInput;
     final rows = <List<String>>[];
     var row = <String>[];
     var field = StringBuffer();

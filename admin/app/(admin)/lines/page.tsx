@@ -3,7 +3,7 @@ import { verifyAdminSession } from "@/lib/dal";
 import { createServiceClient } from "@/lib/supabase/service";
 import { TRANSPORT_MODES } from "./constants";
 import { CreateLineForm } from "./create-form";
-import { deleteLine } from "./actions";
+import { DeleteLineButton } from "./delete-button";
 
 export default async function LinesPage() {
   await verifyAdminSession();
@@ -71,15 +71,7 @@ export default async function LinesPage() {
                     >
                       Edit
                     </Link>
-                    <form action={deleteLine}>
-                      <input type="hidden" name="id" value={line.id} />
-                      <button
-                        type="submit"
-                        className="text-xs text-red-600 hover:underline dark:text-red-400"
-                      >
-                        Hapus
-                      </button>
-                    </form>
+                    <DeleteLineButton lineId={line.id} />
                   </div>
                 </td>
               </tr>

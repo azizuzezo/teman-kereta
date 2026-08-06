@@ -1,0 +1,28 @@
+diff --git a/node_modules/@opennextjs/aws/dist/build/copyTracedFiles.js b/node_modules/@opennextjs/aws/dist/build/copyTracedFiles.js
+index 9701b04..affae92 100644
+--- a/node_modules/@opennextjs/aws/dist/build/copyTracedFiles.js
++++ b/node_modules/@opennextjs/aws/dist/build/copyTracedFiles.js
+@@ -225,7 +225,22 @@ File ${serverPath} does not exist
+         }
+         if (symlink) {
+             try {
+-                symlinkSync(symlink, to);
++                // Windows requires elevated/Developer Mode privileges for real
++                // symlinks, but NOT for directory junctions — since every
++                // traced symlink target we hit here is a node_modules package
++                // (a directory), using 'junction' avoids that requirement
++                // entirely and is ignored (harmless) on non-Windows platforms.
++                let symlinkType;
++                try {
++                    const resolvedTarget = path.isAbsolute(symlink)
++                        ? symlink
++                        : path.resolve(path.dirname(from), symlink);
++                    symlinkType = statSync(resolvedTarget).isDirectory() ? "junction" : undefined;
++                }
++                catch (statError) {
++                    symlinkType = undefined;
++                }
++                symlinkSync(symlink, to, symlinkType);
+             }
+             catch (e) {
+                 if (e.code !== "EEXIST") {

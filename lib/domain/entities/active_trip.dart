@@ -69,4 +69,29 @@ abstract class ActiveTripSession with _$ActiveTripSession {
     }
     return null;
   }
+
+  /// Which physical rail leg (i.e. which real train/`externalTripId`) the
+  /// rider is currently on, derived from [currentStationIndex] against the
+  /// global transfer-boundary indices — used to tag crowd-sourced position
+  /// reports with the correct vehicle on a multi-leg trip. `transferring`
+  /// (index exactly at a boundary) still counts as "on the leg that just
+  /// arrived," not the next one, since the rider hasn't boarded it yet.
+  TripLeg? get currentRailLeg {
+    final railLegs = trip.legs
+        .where((leg) => leg.mode == TransportMode.commuterRail)
+        .toList(growable: false);
+    if (railLegs.isEmpty) {
+      return null;
+    }
+    if (railLegs.length == 1) {
+      return railLegs.first;
+    }
+    final boundaries = trip.transferBoundaries;
+    for (var i = 0; i < boundaries.length; i += 1) {
+      if (currentStationIndex <= boundaries[i].index) {
+        return railLegs[i];
+      }
+    }
+    return railLegs.last;
+  }
 }

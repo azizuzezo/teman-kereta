@@ -1,8 +1,10 @@
 package id.temankereta.teman_kereta
 
+import android.app.PendingIntent
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
+import android.os.Build
 import com.google.android.gms.location.Geofence
 import com.google.android.gms.location.GeofencingEvent
 
@@ -43,5 +45,26 @@ class StationGeofenceReceiver : BroadcastReceiver() {
         const val ACTION_STATION_GEOFENCE_EVENT =
             "id.temankereta.teman_kereta.action.STATION_GEOFENCE_EVENT"
         private const val REQUEST_ID_PREFIX = "station:"
+        private const val PENDING_INTENT_REQUEST_CODE = 52_001
+
+        // Shared by StationGeofenceManager (register/unregister from the Flutter side) and
+        // GeofenceBootReceiver (replaying the last scope after a reboot) so both target the
+        // exact same registered PendingIntent that Play Services matches transitions against.
+        fun pendingIntent(context: Context): PendingIntent {
+            val intent = Intent(context, StationGeofenceReceiver::class.java).apply {
+                action = ACTION_STATION_GEOFENCE_EVENT
+            }
+            val mutabilityFlag = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                PendingIntent.FLAG_MUTABLE
+            } else {
+                0
+            }
+            return PendingIntent.getBroadcast(
+                context,
+                PENDING_INTENT_REQUEST_CODE,
+                intent,
+                PendingIntent.FLAG_UPDATE_CURRENT or mutabilityFlag,
+            )
+        }
     }
 }

@@ -118,21 +118,48 @@ export async function updateLine(
   redirect("/lines");
 }
 
-export async function deleteLine(formData: FormData) {
+export type DeleteLineState = { error?: string } | undefined;
+
+export async function deleteLine(
+  _prevState: DeleteLineState,
+  formData: FormData
+): Promise<DeleteLineState> {
   const session = await verifyAdminSession();
   const id = String(formData.get("id"));
 
   const supabase = createServiceClient();
+
+  // Check first so the message can say exactly how many trips are blocking,
+  // not just that "some trips exist somewhere" — the previous version made
+  // the admin guess which schedule data to go clean up first.
+  const { count: tripCount } = await supabase
+    .from("trips")
+    .select("id", { count: "exact", head: true })
+    .eq("line_id", id);
+  if (tripCount && tripCount > 0) {
+    return {
+      error: `Jalur ini masih memiliki ${tripCount} trip/jadwal terkait — hapus trip tersebut dulu (misalnya lewat impor ulang GTFS dengan cakupan yang lebih kecil, atau hapus manual) sebelum menghapus jalur.`,
+    };
+  }
+
   const { error } = await supabase.from("lines").delete().eq("id", id);
 
-  if (!error) {
-    await recordAudit({
-      adminUserId: session.userId,
-      action: "delete",
-      tableName: "lines",
-      recordId: id,
-    });
+  if (error) {
+    if (error.code === "23503") {
+      return {
+        error:
+          "Jalur ini masih memiliki data terkait yang tidak terdeteksi otomatis — periksa trip/data lain yang mereferensikan jalur ini.",
+      };
+    }
+    return { error: `Gagal menghapus: ${error.message}` };
   }
+
+  await recordAudit({
+    adminUserId: session.userId,
+    action: "delete",
+    tableName: "lines",
+    recordId: id,
+  });
 
   revalidatePath("/lines");
 }

@@ -3,7 +3,13 @@
 // fields containing commas (e.g. long stop names/descriptions). Mirrors the
 // Dart implementation in lib/data/providers/gtfs_schedule_parser.dart —
 // keep the two in sync if either needs a fix.
-export function parseCsv(input: string): string[][] {
+export function parseCsv(rawInput: string): string[][] {
+  // Strip a leading UTF-8 BOM (common in GTFS files exported from Excel/
+  // Windows tooling) — left unstripped, it silently glues onto the first
+  // header cell (e.g. "﻿stop_id" instead of "stop_id"), making every
+  // required-column check for that column fail even though the data is
+  // otherwise well-formed.
+  const input = rawInput.charCodeAt(0) === 0xfeff ? rawInput.slice(1) : rawInput;
   const rows: string[][] = [];
   let row: string[] = [];
   let field = "";

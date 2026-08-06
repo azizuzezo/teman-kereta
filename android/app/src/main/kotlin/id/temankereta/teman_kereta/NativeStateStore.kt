@@ -4,6 +4,9 @@ import android.content.Context
 import android.content.SharedPreferences
 import java.text.DateFormat
 import java.util.Date
+import org.json.JSONArray
+import org.json.JSONException
+import org.json.JSONObject
 
 /**
  * Small, process-safe native state store shared by Flutter, widgets, receivers, and the
@@ -39,11 +42,22 @@ internal object NativeStateStore {
     const val NEXT_UPDATED_AT = "next_departure.updated_at_epoch_ms"
 
     const val GEOFENCE_REGISTERED_IDS = "geofence.registered_station_ids"
+    // Full station coordinates for the currently registered scope, kept alongside
+    // GEOFENCE_REGISTERED_IDS so GeofenceBootReceiver can replay the exact same
+    // registration after a device reboot (Play Services clears geofences on reboot,
+    // but not on a plain app process kill/restart).
+    const val GEOFENCE_DETAILS_JSON = "geofence.registered_station_details_json"
     const val GEOFENCE_EXPIRES_AT = "geofence.expires_at_epoch_ms"
     const val GEOFENCE_LAST_IDS = "geofence.last_event.station_ids"
     const val GEOFENCE_LAST_TRANSITION = "geofence.last_event.transition"
     const val GEOFENCE_LAST_AT = "geofence.last_event.at_epoch_ms"
     const val GEOFENCE_LAST_ERROR = "geofence.last_event.error"
+    // Written by GeofenceBootReceiver on every BOOT_COMPLETED it handles — the only
+    // observability this otherwise-silent, no-UI receiver has (mirrors the
+    // lastGeofenceEvent fields above rather than logging, matching this file's
+    // existing "expose native state through SharedPreferences" convention).
+    const val GEOFENCE_BOOT_RECOVERY_RESULT = "geofence.boot_recovery.result"
+    const val GEOFENCE_BOOT_RECOVERY_AT = "geofence.boot_recovery.at_epoch_ms"
 
     const val ACTIVITY_LAST_TYPE = "activity_recognition.last_event.type"
     const val ACTIVITY_LAST_CONFIDENCE = "activity_recognition.last_event.confidence"
@@ -224,6 +238,48 @@ internal object NativeStateStore {
         )
     }
 
+    data class GeofenceDetail(
+        val id: String,
+        val latitude: Double,
+        val longitude: Double,
+        val radiusMeters: Float,
+    )
+
+    fun encodeGeofenceDetails(details: List<GeofenceDetail>): String {
+        val array = JSONArray()
+        details.forEach { detail ->
+            array.put(
+                JSONObject()
+                    .put("id", detail.id)
+                    .put("latitude", detail.latitude)
+                    .put("longitude", detail.longitude)
+                    .put("radiusMeters", detail.radiusMeters.toDouble()),
+            )
+        }
+        return array.toString()
+    }
+
+    fun decodeGeofenceDetails(raw: String?): List<GeofenceDetail> {
+        if (raw.isNullOrEmpty()) return emptyList()
+        return try {
+            val array = JSONArray(raw)
+            (0 until array.length()).map { index ->
+                val obj = array.getJSONObject(index)
+                GeofenceDetail(
+                    id = obj.getString("id"),
+                    latitude = obj.getDouble("latitude"),
+                    longitude = obj.getDouble("longitude"),
+                    radiusMeters = obj.getDouble("radiusMeters").toFloat(),
+                )
+            }
+        } catch (error: JSONException) {
+            emptyList()
+        }
+    }
+
+    fun geofenceDetails(context: Context): List<GeofenceDetail> =
+        decodeGeofenceDetails(preferences(context).getString(GEOFENCE_DETAILS_JSON, null))
+
     fun lastGeofenceEvent(context: Context): Map<String, Any?> {
         val prefs = preferences(context)
         return mapOf(
@@ -231,6 +287,21 @@ internal object NativeStateStore {
             "transition" to prefs.getString(GEOFENCE_LAST_TRANSITION, null),
             "occurredAtEpochMs" to prefs.optionalLong(GEOFENCE_LAST_AT),
             "error" to prefs.getString(GEOFENCE_LAST_ERROR, null),
+        )
+    }
+
+    fun recordGeofenceBootRecovery(context: Context, result: String) {
+        preferences(context).edit()
+            .putString(GEOFENCE_BOOT_RECOVERY_RESULT, result)
+            .putLong(GEOFENCE_BOOT_RECOVERY_AT, System.currentTimeMillis())
+            .apply()
+    }
+
+    fun geofenceBootRecoverySnapshot(context: Context): Map<String, Any?> {
+        val prefs = preferences(context)
+        return mapOf(
+            "result" to prefs.getString(GEOFENCE_BOOT_RECOVERY_RESULT, null),
+            "occurredAtEpochMs" to prefs.optionalLong(GEOFENCE_BOOT_RECOVERY_AT),
         )
     }
 

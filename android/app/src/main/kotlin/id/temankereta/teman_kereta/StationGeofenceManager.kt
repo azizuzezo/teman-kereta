@@ -3,7 +3,6 @@ package id.temankereta.teman_kereta
 import android.Manifest
 import android.app.Activity
 import android.app.PendingIntent
-import android.content.Intent
 import android.content.pm.PackageManager
 import android.os.Build
 import com.google.android.gms.common.api.ApiException
@@ -115,6 +114,19 @@ internal class StationGeofenceManager(private val activity: Activity) {
                         val expiresAt = System.currentTimeMillis() + expirationMs
                         NativeStateStore.preferences(activity).edit()
                             .putStringSet(NativeStateStore.GEOFENCE_REGISTERED_IDS, stations.map { it.id }.toSet())
+                            .putString(
+                                NativeStateStore.GEOFENCE_DETAILS_JSON,
+                                NativeStateStore.encodeGeofenceDetails(
+                                    stations.map {
+                                        NativeStateStore.GeofenceDetail(
+                                            it.id,
+                                            it.latitude,
+                                            it.longitude,
+                                            it.radiusMeters,
+                                        )
+                                    },
+                                ),
+                            )
                             .putLong(NativeStateStore.GEOFENCE_EXPIRES_AT, expiresAt)
                             .apply()
                         result.success(
@@ -168,8 +180,14 @@ internal class StationGeofenceManager(private val activity: Activity) {
                 prefs.getStringSet(NativeStateStore.GEOFENCE_REGISTERED_IDS, emptySet())
                     .orEmpty() - requestedIds.toSet()
             }
+            val remainingDetails = NativeStateStore.geofenceDetails(activity)
+                .filter { it.id in remaining }
             prefs.edit()
                 .putStringSet(NativeStateStore.GEOFENCE_REGISTERED_IDS, remaining)
+                .putString(
+                    NativeStateStore.GEOFENCE_DETAILS_JSON,
+                    NativeStateStore.encodeGeofenceDetails(remainingDetails),
+                )
                 .apply {
                     if (remaining.isEmpty()) remove(NativeStateStore.GEOFENCE_EXPIRES_AT)
                 }
@@ -240,22 +258,7 @@ internal class StationGeofenceManager(private val activity: Activity) {
         }
     }
 
-    private fun geofencePendingIntent(): PendingIntent {
-        val intent = Intent(activity, StationGeofenceReceiver::class.java).apply {
-            action = StationGeofenceReceiver.ACTION_STATION_GEOFENCE_EVENT
-        }
-        val mutabilityFlag = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-            PendingIntent.FLAG_MUTABLE
-        } else {
-            0
-        }
-        return PendingIntent.getBroadcast(
-            activity,
-            GEOFENCE_PENDING_INTENT_REQUEST_CODE,
-            intent,
-            PendingIntent.FLAG_UPDATE_CURRENT or mutabilityFlag,
-        )
-    }
+    private fun geofencePendingIntent(): PendingIntent = StationGeofenceReceiver.pendingIntent(activity)
 
     private fun sendTaskError(result: MethodChannel.Result, code: String, error: Exception?) {
         val apiError = error as? ApiException
@@ -279,7 +282,6 @@ internal class StationGeofenceManager(private val activity: Activity) {
 
     companion object {
         private const val REQUEST_ID_PREFIX = "station:"
-        private const val GEOFENCE_PENDING_INTENT_REQUEST_CODE = 52_001
         private const val MAX_STATION_GEOFENCES = 20
         private const val DEFAULT_RADIUS_METERS = 250f
         private const val MIN_RADIUS_METERS = 100.0

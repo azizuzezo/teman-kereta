@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 
+import '../../../app/config/app_environment.dart';
 import '../../../app/theme/app_theme.dart';
 import '../../../core/platform/widget_sync.dart';
 import '../../../core/widgets/data_badges.dart';
@@ -81,7 +82,7 @@ class HomePage extends ConsumerWidget {
                 Text(
                   settings.offlineMode
                       ? 'Mode offline aktif • data terakhir tersimpan'
-                      : 'Semua berjalan lokal di perangkat',
+                      : _connectionLabel(),
                   style: Theme.of(context).textTheme.bodyMedium,
                 ),
                 const SizedBox(height: 16),
@@ -236,6 +237,19 @@ class HomePage extends ConsumerWidget {
     ActiveTripState.atStation => 'Terdeteksi di stasiun',
     ActiveTripState.possibleBoarding => 'Memeriksa kemungkinan naik KRL…',
     _ => null,
+  };
+
+  /// Was hardcoded to always claim "runs locally", regardless of which
+  /// provider was actually active — accurate when this app only ever had
+  /// `gtfs`/`mock`, wrong now that `local_supabase` genuinely reads a real,
+  /// live database. Matches this project's own established pattern of
+  /// re-checking hardcoded config claims whenever the config itself changes
+  /// (see the Round 21 "Local-only guard aktif" fix in ENGINEERING.md).
+  String _connectionLabel() => switch (AppEnvironment.provider) {
+    TransitProviderKind.localSupabase ||
+    TransitProviderKind.officialApi => 'Terhubung ke database secara real-time',
+    TransitProviderKind.gtfs => 'Jadwal dari berkas GTFS bawaan di perangkat',
+    TransitProviderKind.mock => 'Data demo • berjalan lokal di perangkat',
   };
 }
 

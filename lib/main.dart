@@ -19,7 +19,12 @@ Future<void> main() async {
   await preferences.load();
 
   final database = AppDatabase();
-  if (AppEnvironment.gtfsStaticEnabled) {
+  // Only the `gtfs` provider ever reads this locally-imported data
+  // (GtfsStaticScheduleProvider) — importing it under `local_supabase`/
+  // `official_api` is pure dead weight that used to silently block the
+  // first frame on a large synchronous import for no benefit.
+  if (AppEnvironment.gtfsStaticEnabled &&
+      AppEnvironment.provider == TransitProviderKind.gtfs) {
     await _importBundledGtfsFeedIfNeeded(database);
   }
 

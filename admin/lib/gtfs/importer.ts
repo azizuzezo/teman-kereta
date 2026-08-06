@@ -9,6 +9,7 @@ import {
   parseStopTimes,
   parseCalendar,
   parseCalendarDates,
+  parseStationDescription,
 } from "./parser";
 import { ServiceCalendar, dateWindow, routeTypeToTransportMode } from "./calendar";
 import type { GtfsFeed } from "./types";
@@ -131,6 +132,13 @@ export async function importGtfsFeed(params: {
       name: stop.name,
       latitude: stop.latitude,
       longitude: stop.longitude,
+      wheelchair_accessible:
+        stop.wheelchairBoarding === 1
+          ? true
+          : stop.wheelchairBoarding === 2
+            ? false
+            : null,
+      facilities: parseStationDescription(stop.description),
     })),
     "code"
   );
@@ -186,6 +194,38 @@ export async function importGtfsFeed(params: {
     list.push(stopTime);
     stopTimesByTripId.set(stopTime.tripId, list);
   }
+
+  // station_lines (station_id, line_id, stop_order) has existed in the
+  // schema since the initial migration but was never populated — Station.
+  // lineIds has consequently always come back empty in the Flutter app.
+  // One canonical trip per route (the one with the most stops) stands in
+  // for "the" station order on that line — a route's reverse-direction
+  // trips cover the same physical stations, just reversed, so this is
+  // enough to establish membership + order without needing both directions.
+  const canonicalTripByRoute = new Map<string, (typeof feed.trips)[number]>();
+  for (const trip of feed.trips) {
+    const stopCount = stopTimesByTripId.get(trip.tripId)?.length ?? 0;
+    const existing = canonicalTripByRoute.get(trip.routeId);
+    const existingCount = existing
+      ? stopTimesByTripId.get(existing.tripId)?.length ?? 0
+      : -1;
+    if (stopCount > existingCount) canonicalTripByRoute.set(trip.routeId, trip);
+  }
+  const stationLineRows: { station_id: string; line_id: string; stop_order: number }[] =
+    [];
+  for (const [routeId, trip] of canonicalTripByRoute) {
+    const lineId = lineIdByCode.get(routeId);
+    if (!lineId) continue;
+    const orderedStopTimes = [...(stopTimesByTripId.get(trip.tripId) ?? [])].sort(
+      (a, b) => a.stopSequence - b.stopSequence
+    );
+    orderedStopTimes.forEach((stopTime, index) => {
+      const stationId = stationIdByCode.get(stopTime.stopId);
+      if (!stationId) return;
+      stationLineRows.push({ station_id: stationId, line_id: lineId, stop_order: index + 1 });
+    });
+  }
+  await upsertInChunks(supabase, "station_lines", stationLineRows, "station_id,line_id");
 
   type TripInsert = {
     external_trip_id: string;

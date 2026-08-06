@@ -27,7 +27,8 @@ class SupabaseTransitProvider
   Map<String, String>? _stationCodeById;
 
   static const _stationColumns =
-      'id, code, name, latitude, longitude, address, wheelchair_accessible, facilities';
+      'id, code, name, latitude, longitude, address, wheelchair_accessible, '
+      'facilities, station_lines(stop_order, lines(code))';
 
   @override
   Future<List<Station>> getStations() async {
@@ -50,6 +51,14 @@ class SupabaseTransitProvider
 
   Station _stationFromRow(Map<String, dynamic> row) {
     final facilities = (row['facilities'] as Map<String, dynamic>?) ?? const {};
+    final stationLines = (row['station_lines'] as List<dynamic>? ?? <dynamic>[])
+        .cast<Map<String, dynamic>>()
+        .toList()
+      ..sort(
+        (a, b) => ((a['stop_order'] as int?) ?? 0).compareTo(
+          (b['stop_order'] as int?) ?? 0,
+        ),
+      );
     return Station(
       id: row['code'] as String,
       code: row['code'] as String,
@@ -57,11 +66,38 @@ class SupabaseTransitProvider
       latitude: (row['latitude'] as num).toDouble(),
       longitude: (row['longitude'] as num).toDouble(),
       wheelchairAccessible: row['wheelchair_accessible'] as bool? ?? false,
-      facilities: facilities.entries
-          .where((entry) => entry.value == true)
-          .map((entry) => entry.key)
+      facilities: _facilityTags(facilities),
+      lineIds: stationLines
+          .map((sl) => (sl['lines'] as Map<String, dynamic>?)?['code'] as String?)
+          .whereType<String>()
           .toList(growable: false),
     );
+  }
+
+  /// `stations.facilities` has carried two shapes over time: a boolean map
+  /// (`{"toilet": true}`, from manual admin entry) and, since the KRL
+  /// community-conversion GTFS import, a free-text label map parsed from
+  /// GTFS `stop_desc` (`{"fasilitas": "Parkir, lift, toilet, ..."}` — see
+  /// `parseStationDescription` in `admin/lib/gtfs/parser.ts`). Handles both
+  /// rather than silently dropping the free-text case (a real gap this
+  /// caused briefly: real facility data was imported but never rendered,
+  /// since the old code only ever matched boolean `true` values).
+  List<String> _facilityTags(Map<String, dynamic> facilities) {
+    final rawList = facilities['fasilitas'];
+    if (rawList is String) {
+      if (rawList.contains('belum dirinci')) {
+        return const <String>[];
+      }
+      return rawList
+          .split(',')
+          .map((tag) => tag.trim().replaceAll(RegExp(r'\.$'), ''))
+          .where((tag) => tag.isNotEmpty)
+          .toList(growable: false);
+    }
+    return facilities.entries
+        .where((entry) => entry.value == true)
+        .map((entry) => entry.key)
+        .toList(growable: false);
   }
 
   @override
@@ -87,7 +123,7 @@ class SupabaseTransitProvider
         scheduledAt: scheduled,
         expectedAt: scheduled,
         freshness: DataFreshness.estimated,
-        sourceLabel: 'Supabase lokal • jadwal statis',
+        sourceLabel: 'Basis data KRL • jadwal statis',
         tripNumber: row['trip_number'] as String?,
         isDemo: row['data_source'] == 'demo',
       );
@@ -190,10 +226,12 @@ class SupabaseTransitProvider
           lineName: row['line_name'] as String?,
           headsign: row['headsign'] as String?,
           stationIds: stationCodes,
+          externalTripId: row['external_trip_id'] as String?,
+          serviceDate: DateTime.tryParse(row['service_date'] as String? ?? ''),
         ),
       ],
       freshness: DataFreshness.estimated,
-      sourceLabel: 'Supabase lokal • jadwal statis, hanya perjalanan langsung',
+      sourceLabel: 'Basis data KRL • jadwal statis, hanya perjalanan langsung',
       updatedAt: DateTime.now(),
       isDemo: row['data_source'] == 'demo',
     );
@@ -251,6 +289,8 @@ class SupabaseTransitProvider
           headsign: row['outbound_headsign'] as String?,
           stationIds: outboundStationCodes,
           transferInstruction: 'Transit di $transferName ke arah ${row['inbound_line_name']}.',
+          externalTripId: row['outbound_external_trip_id'] as String?,
+          serviceDate: DateTime.tryParse(row['outbound_service_date'] as String? ?? ''),
         ),
         TripLeg(
           id: '$inboundTripId-rail',
@@ -262,10 +302,12 @@ class SupabaseTransitProvider
           lineName: row['inbound_line_name'] as String?,
           headsign: row['inbound_headsign'] as String?,
           stationIds: inboundStationCodes,
+          externalTripId: row['inbound_external_trip_id'] as String?,
+          serviceDate: DateTime.tryParse(row['inbound_service_date'] as String? ?? ''),
         ),
       ],
       freshness: DataFreshness.estimated,
-      sourceLabel: 'Supabase lokal • jadwal statis, satu kali transit',
+      sourceLabel: 'Basis data KRL • jadwal statis, satu kali transit',
       updatedAt: DateTime.now(),
       isDemo: isDemo,
     );
@@ -297,7 +339,7 @@ class SupabaseTransitProvider
       longitude: (row['longitude'] as num).toDouble(),
       recordedAt: recordedAt,
       freshness: _freshnessFromAccuracyStatus(row['accuracy_status'] as String),
-      sourceLabel: 'Supabase lokal • $source',
+      sourceLabel: 'Basis data KRL • $source',
       previousStationId: codes[row['current_station_id']],
       nextStationId: codes[row['next_station_id']],
       bearing: (row['bearing'] as num?)?.toDouble(),
@@ -346,7 +388,7 @@ class SupabaseTransitProvider
               updatedAt: DateTime.parse(
                 (row['updated_at'] ?? row['starts_at']) as String,
               ),
-              sourceLabel: 'Supabase lokal • ${row['source']}',
+              sourceLabel: 'Basis data KRL • ${row['source']}',
               lineId: row['line_id'] as String?,
               isOfficial: row['is_official'] as bool? ?? false,
               isDemo: row['source'] == 'demo',
@@ -393,7 +435,7 @@ class SupabaseTransitProvider
             distanceMeters: distance,
             walkingMinutes: (row['walking_duration_minutes'] as num?)?.toInt() ?? 0,
             description: (row['description'] as String?) ?? '',
-            sourceLabel: 'Supabase lokal • ${row['source']}',
+            sourceLabel: 'Basis data KRL • ${row['source']}',
             address: row['address'] as String?,
             isDemo: row['source'] == 'demo',
           );

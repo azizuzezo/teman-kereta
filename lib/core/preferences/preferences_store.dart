@@ -16,6 +16,7 @@ const _vibrationEnabledKey = 'notification_vibration_enabled';
 const _soundEnabledKey = 'notification_sound_enabled';
 const _stopAlertThresholdKey = 'notification_stop_alert_threshold';
 const _textScaleKey = 'accessibility_text_scale';
+const _deviceSessionIdKey = 'crowd_position_device_session_id';
 
 class StoredPreferences {
   const StoredPreferences({
@@ -33,6 +34,7 @@ class StoredPreferences {
     this.soundEnabled = true,
     this.stopAlertThreshold = 3,
     this.textScale = 1.0,
+    this.deviceSessionId,
   });
 
   final bool onboardingComplete;
@@ -60,6 +62,12 @@ class StoredPreferences {
   /// Dynamic text scale factor for PRD §33's "Dynamic text scaling".
   final double textScale;
 
+  /// A random per-install identifier, generated once on first use and never
+  /// tied to any real account — exists only so the crowd-sourced vehicle
+  /// position aggregation can count distinct reporters as a light
+  /// anti-spoofing signal server-side, not to identify anyone.
+  final String? deviceSessionId;
+
   StoredPreferences copyWith({
     bool? onboardingComplete,
     ThemeMode? themeMode,
@@ -75,6 +83,7 @@ class StoredPreferences {
     bool? soundEnabled,
     int? stopAlertThreshold,
     double? textScale,
+    Object? deviceSessionId = _unset,
   }) {
     return StoredPreferences(
       onboardingComplete: onboardingComplete ?? this.onboardingComplete,
@@ -101,6 +110,9 @@ class StoredPreferences {
       soundEnabled: soundEnabled ?? this.soundEnabled,
       stopAlertThreshold: stopAlertThreshold ?? this.stopAlertThreshold,
       textScale: textScale ?? this.textScale,
+      deviceSessionId: identical(deviceSessionId, _unset)
+          ? this.deviceSessionId
+          : deviceSessionId as String?,
     );
   }
 }
@@ -139,6 +151,8 @@ abstract interface class PreferencesStore {
   Future<void> setStopAlertThreshold(int value);
 
   Future<void> setTextScale(double value);
+
+  Future<void> setDeviceSessionId(String value);
 }
 
 class SharedPreferencesStore implements PreferencesStore {
@@ -165,6 +179,7 @@ class SharedPreferencesStore implements PreferencesStore {
       _preferences.getBool(_soundEnabledKey),
       _preferences.getInt(_stopAlertThresholdKey),
       _preferences.getDouble(_textScaleKey),
+      _preferences.getString(_deviceSessionIdKey),
     ]);
 
     _snapshot = StoredPreferences(
@@ -182,6 +197,7 @@ class SharedPreferencesStore implements PreferencesStore {
       soundEnabled: values[11] as bool? ?? true,
       stopAlertThreshold: values[12] as int? ?? 3,
       textScale: values[13] as double? ?? 1.0,
+      deviceSessionId: values[14] as String?,
     );
   }
 
@@ -267,6 +283,12 @@ class SharedPreferencesStore implements PreferencesStore {
   Future<void> setTextScale(double value) async {
     await _preferences.setDouble(_textScaleKey, value);
     _snapshot = _snapshot.copyWith(textScale: value);
+  }
+
+  @override
+  Future<void> setDeviceSessionId(String value) async {
+    await _preferences.setString(_deviceSessionIdKey, value);
+    _snapshot = _snapshot.copyWith(deviceSessionId: value);
   }
 
   Future<void> _setNullableString(String key, String? value) {
@@ -358,6 +380,11 @@ class MemoryPreferencesStore implements PreferencesStore {
   @override
   Future<void> setTextScale(double value) async {
     _snapshot = _snapshot.copyWith(textScale: value);
+  }
+
+  @override
+  Future<void> setDeviceSessionId(String value) async {
+    _snapshot = _snapshot.copyWith(deviceSessionId: value);
   }
 }
 

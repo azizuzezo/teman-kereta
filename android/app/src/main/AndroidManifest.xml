@@ -13,6 +13,11 @@
          Requested only when the user turns on auto-detection in Settings, never on launch. -->
     <uses-permission android:name="android.permission.ACTIVITY_RECOGNITION" />
 
+    <!-- Play services clears all geofence registrations on device reboot; GeofenceBootReceiver
+         replays the last-registered scope from native state once location permission already
+         granted (see NativeStateStore.GEOFENCE_DETAILS_JSON). -->
+    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
+
     <application
         android:label="@string/app_name"
         android:name="${applicationName}"
@@ -65,6 +70,15 @@
             android:name=".ActivityTransitionReceiver"
             android:enabled="true"
             android:exported="false" />
+
+        <receiver
+            android:name=".GeofenceBootReceiver"
+            android:enabled="true"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="android.intent.action.BOOT_COMPLETED" />
+            </intent-filter>
+        </receiver>
 
         <receiver
             android:name=".NextDepartureWidgetProvider"

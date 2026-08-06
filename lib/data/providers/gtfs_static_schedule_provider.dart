@@ -18,8 +18,8 @@ class GtfsStaticScheduleProvider
     implements StationProvider, TransitScheduleProvider {
   GtfsStaticScheduleProvider({
     required this._database,
-    required MockTransitProvider fallback,
-  }) : _fallback = fallback;
+    required this._fallback,
+  });
 
   final AppDatabase _database;
   final MockTransitProvider _fallback;
@@ -117,7 +117,9 @@ class GtfsStaticScheduleProvider
     ];
     trips.sort((a, b) {
       final byDeparture = a.departureAt.compareTo(b.departureAt);
-      return byDeparture != 0 ? byDeparture : a.arrivalAt.compareTo(b.arrivalAt);
+      return byDeparture != 0
+          ? byDeparture
+          : a.arrivalAt.compareTo(b.arrivalAt);
     });
     return trips.take(8).toList(growable: false);
   }
@@ -180,6 +182,8 @@ class GtfsStaticScheduleProvider
                 lineName: lineName,
                 headsign: candidate.trip.headsign,
                 stationIds: stationIds,
+                externalTripId: candidate.trip.id,
+                serviceDate: day,
               ),
             ],
             freshness: DataFreshness.estimated,
@@ -224,7 +228,10 @@ class GtfsStaticScheduleProvider
     final inboundByTransferStop = <String, List<GtfsTransferLegCandidate>>{};
     for (final candidate in inboundCandidates) {
       inboundByTransferStop
-          .putIfAbsent(candidate.boarding.stopId, () => <GtfsTransferLegCandidate>[])
+          .putIfAbsent(
+            candidate.boarding.stopId,
+            () => <GtfsTransferLegCandidate>[],
+          )
           .add(candidate);
     }
 
@@ -269,7 +276,9 @@ class GtfsStaticScheduleProvider
             inbound.boarding.departureSeconds,
           );
           if (transferDeparture.isBefore(
-            transferArrival.add(const Duration(seconds: _transferBufferSeconds)),
+            transferArrival.add(
+              const Duration(seconds: _transferBufferSeconds),
+            ),
           )) {
             continue;
           }
@@ -317,6 +326,8 @@ class GtfsStaticScheduleProvider
                   transferInstruction:
                       'Transit di $transferName ke arah '
                       '${inbound.route.shortName ?? inbound.route.longName ?? inbound.route.id}.',
+                  externalTripId: outbound.trip.id,
+                  serviceDate: day,
                 ),
                 TripLeg(
                   id: '${inbound.trip.id}-leg',
@@ -331,6 +342,8 @@ class GtfsStaticScheduleProvider
                       inbound.route.id,
                   headsign: inbound.trip.headsign,
                   stationIds: inboundStationIds,
+                  externalTripId: inbound.trip.id,
+                  serviceDate: day,
                 ),
               ],
               freshness: DataFreshness.estimated,

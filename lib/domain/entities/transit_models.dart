@@ -60,6 +60,14 @@ abstract class TripLeg with _$TripLeg {
     @Default(<String>[]) List<String> stationIds,
     @Default(0) int walkingMeters,
     String? transferInstruction,
+    // The raw GTFS trip_id + service date backing this leg's physical
+    // vehicle, when the originating provider actually has one (real feed
+    // data, not Data Demo/mock) — the shared identifier crowd-sourced
+    // position reports key off, since it's the one thing every provider
+    // (`gtfs`/`local_supabase`) agrees on regardless of which one is
+    // active. Null for mock/demo legs, which never report a position.
+    String? externalTripId,
+    DateTime? serviceDate,
   }) = _TripLeg;
 
   factory TripLeg.fromJson(Map<String, Object?> json) =>

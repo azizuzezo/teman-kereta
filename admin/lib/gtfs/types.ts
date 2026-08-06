@@ -3,6 +3,13 @@ export type GtfsStop = {
   name: string;
   latitude: number;
   longitude: number;
+  /** Raw `stop_desc` text, if present — see `parseStationDescription` in
+   * `parser.ts` for the "Label: value | Label: value" convention some real
+   * feeds (e.g. the community KRL conversion) use to carry platform/
+   * facility/accessibility notes that GTFS has no dedicated columns for. */
+  description: string | null;
+  /** GTFS `wheelchair_boarding`: 0 = no info, 1 = accessible, 2 = not. */
+  wheelchairBoarding: 0 | 1 | 2;
 };
 
 export type GtfsRoute = {

@@ -1,14 +1,18 @@
-// Calls public.refresh_estimated_vehicle_positions() on a fixed interval,
-// keeping public.vehicle_positions populated with schedule-based estimated
-// positions (source='estimated') so a `local_supabase` Flutter client has
-// something real to stream via Supabase Realtime. See the migration
-// `20260805170000_estimated_vehicle_positions.sql` for what the function
-// actually computes, and its doc comment for why this lives here instead of
-// a second, separate GTFS backend/schema.
+// Calls both public.refresh_estimated_vehicle_positions() and
+// public.refresh_crowd_vehicle_positions() on a fixed interval, keeping
+// public.vehicle_positions populated with schedule-based estimated
+// positions (source='estimated') AND real rider-reported crowd-sourced
+// positions (source='crowd_sourced', folded from public.
+// crowd_position_reports — see `20260806090000_crowd_sourced_positions.sql`
+// for what that function computes and its retention behavior). See
+// `20260805170000_estimated_vehicle_positions.sql` for the estimated
+// function, and its doc comment for why this lives here instead of a
+// second, separate GTFS backend/schema.
 //
-// This process only produces a visible effect when TRANSIT_PROVIDER=
-// local_supabase in the Flutter app's .env — under TRANSIT_PROVIDER=gtfs
-// (the current default) nothing reads public.vehicle_positions.
+// Unlike the estimated-only positions, the crowd-sourced ones DO reach
+// `TRANSIT_PROVIDER=gtfs` (the current default) too, via
+// HybridTransitRealtimeProvider — see provider_registry.dart. The
+// schedule-estimated positions still only reach `local_supabase`.
 //
 // Reads admin/.env.local itself, same as bootstrap-admin.mjs — no dotenv
 // dependency. Runs until killed (Ctrl+C); does not daemonize itself.
@@ -32,14 +36,20 @@ function loadEnvLocal() {
 
 async function tick(supabase) {
   const startedAt = new Date().toISOString();
-  const { data, error } = await supabase.rpc(
-    "refresh_estimated_vehicle_positions",
-  );
-  if (error) {
-    console.error(`[${startedAt}] refresh failed:`, error.message);
-    return;
+
+  const estimated = await supabase.rpc("refresh_estimated_vehicle_positions");
+  if (estimated.error) {
+    console.error(`[${startedAt}] estimated refresh failed:`, estimated.error.message);
+  } else {
+    console.log(`[${startedAt}] refreshed ${estimated.data} estimated vehicle position(s)`);
   }
-  console.log(`[${startedAt}] refreshed ${data} estimated vehicle position(s)`);
+
+  const crowd = await supabase.rpc("refresh_crowd_vehicle_positions");
+  if (crowd.error) {
+    console.error(`[${startedAt}] crowd refresh failed:`, crowd.error.message);
+  } else {
+    console.log(`[${startedAt}] refreshed ${crowd.data} crowd-sourced vehicle position(s)`);
+  }
 }
 
 async function main() {
@@ -52,7 +62,7 @@ async function main() {
   );
 
   console.log(
-    `Polling refresh_estimated_vehicle_positions() every ${pollSeconds}s against ${env.NEXT_PUBLIC_SUPABASE_URL}. Ctrl+C to stop.`,
+    `Polling refresh_estimated_vehicle_positions() + refresh_crowd_vehicle_positions() every ${pollSeconds}s against ${env.NEXT_PUBLIC_SUPABASE_URL}. Ctrl+C to stop.`,
   );
 
   let stopping = false;

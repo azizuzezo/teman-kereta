@@ -121,21 +121,48 @@ export async function updateStation(
   redirect("/stations");
 }
 
-export async function deleteStation(formData: FormData) {
+export type DeleteStationState = { error?: string } | undefined;
+
+export async function deleteStation(
+  _prevState: DeleteStationState,
+  formData: FormData
+): Promise<DeleteStationState> {
   const session = await verifyAdminSession();
   const id = String(formData.get("id"));
 
   const supabase = createServiceClient();
+
+  // Check first so the message says exactly what's blocking (which table,
+  // how many rows) instead of a generic "something references this" — the
+  // previous version gave no way to tell schedule data from anything else.
+  const { count: stopTimeCount } = await supabase
+    .from("stop_times")
+    .select("id", { count: "exact", head: true })
+    .eq("station_id", id);
+  if (stopTimeCount && stopTimeCount > 0) {
+    return {
+      error: `Stasiun ini masih punya ${stopTimeCount} baris jadwal (stop_times) terkait — biasanya berarti stasiun ini masih ada di feed GTFS yang diimpor. Impor ulang GTFS tanpa stasiun ini, atau hapus baris stop_times-nya langsung, sebelum menghapus stasiun.`,
+    };
+  }
+
   const { error } = await supabase.from("stations").delete().eq("id", id);
 
-  if (!error) {
-    await recordAudit({
-      adminUserId: session.userId,
-      action: "delete",
-      tableName: "stations",
-      recordId: id,
-    });
+  if (error) {
+    if (error.code === "23503") {
+      return {
+        error:
+          "Stasiun ini masih dipakai oleh data lain yang tidak terdeteksi otomatis (mis. rute tersimpan pengguna) — periksa data tersebut dulu sebelum menghapus stasiun.",
+      };
+    }
+    return { error: `Gagal menghapus: ${error.message}` };
   }
+
+  await recordAudit({
+    adminUserId: session.userId,
+    action: "delete",
+    tableName: "stations",
+    recordId: id,
+  });
 
   revalidatePath("/stations");
 }

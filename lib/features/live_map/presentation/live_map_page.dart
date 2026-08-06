@@ -2,11 +2,23 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../../app/config/app_environment.dart';
 import '../../../app/theme/app_theme.dart';
 import '../../../core/widgets/data_badges.dart';
 import '../../../core/widgets/empty_state.dart';
 import '../../../data/providers/provider_registry.dart';
 import '../../../domain/entities/transit_models.dart';
+
+/// Picks up to [count] entries evenly spaced across [items] (always
+/// including the first and last), rather than truncating to a prefix —
+/// so a sampled real line still visually spans its whole real length.
+List<Station> _evenSample(List<Station> items, int count) {
+  if (items.length <= count) return items;
+  final step = (items.length - 1) / (count - 1);
+  return <Station>[
+    for (var i = 0; i < count; i += 1) items[(i * step).round()],
+  ];
+}
 
 class LiveMapPage extends ConsumerWidget {
   const LiveMapPage({super.key});
@@ -40,26 +52,21 @@ class LiveMapPage extends ConsumerWidget {
             message: 'Data jalur lokal tidak dapat dimuat.',
           ),
           data: (items) {
-            final visible = items
-                .where(
-                  (station) => const <String>{
-                    'BOO',
-                    'CTA',
-                    'DP',
-                    'UI',
-                    'PSM',
-                    'MRI',
-                    'SUD',
-                    'GDD',
-                    'JAKK',
-                  }.contains(station.id),
-                )
-                .toList(growable: false);
+            if (items.isEmpty) {
+              return const AppEmptyState(
+                icon: Icons.map_outlined,
+                title: 'Peta belum tersedia',
+                message: 'Belum ada data stasiun untuk ditampilkan.',
+              );
+            }
+            final visible = List<Station>.of(items)
+              ..sort((a, b) => a.name.compareTo(b.name));
+            final isDemo = AppEnvironment.provider == TransitProviderKind.mock;
             return ListView(
               padding: const EdgeInsets.fromLTRB(16, 8, 16, 28),
               children: <Widget>[
-                const DemoDataBanner(),
-                const SizedBox(height: 16),
+                if (isDemo) const DemoDataBanner(),
+                if (isDemo) const SizedBox(height: 16),
                 Card(
                   clipBehavior: Clip.antiAlias,
                   child: Column(
@@ -93,20 +100,51 @@ class LiveMapPage extends ConsumerWidget {
                           ],
                         ),
                       ),
-                      Semantics(
-                        image: true,
-                        label:
-                            'Diagram jalur demo dari Bogor menuju Jakarta Kota, dengan percabangan ke Sudirman.',
-                        child: SizedBox(
-                          height: 360,
-                          width: double.infinity,
-                          child: CustomPaint(
-                            painter: _RailDiagramPainter(
-                              brightness: Theme.of(context).brightness,
-                              hasEstimatedVehicle: vehicles.value?.isNotEmpty ?? false,
+                      Builder(
+                        builder: (context) {
+                          // Real per-line membership + real geographic order
+                          // (station_lines/coordinates, both populated by
+                          // the KRL GTFS import) — a genuine line's actual
+                          // stations south-to-north, not an arbitrary
+                          // alphabetical subset. Falls back to a plain
+                          // alphabetical sample only if no line membership
+                          // data exists yet (e.g. `gtfs`/`mock` providers).
+                          final bogorLine = List<Station>.of(
+                            items.where((s) => s.lineIds.contains('BOGOR')),
+                          )..sort((a, b) => a.latitude.compareTo(b.latitude));
+                          final source = bogorLine.isNotEmpty ? bogorLine : visible;
+                          final mainLine = _evenSample(source, 8);
+                          final branch = items.firstWhere(
+                            (s) => s.code == 'SUD',
+                            orElse: () => visible.length > 8
+                                ? visible[8]
+                                : mainLine.last,
+                          );
+                          final isRealTopology = bogorLine.isNotEmpty;
+                          return Semantics(
+                            image: true,
+                            label: isDemo
+                                ? 'Diagram jalur demo dari ${mainLine.first.name} menuju ${mainLine.last.name}, dengan percabangan ke ${branch.name}.'
+                                : isRealTopology
+                                ? 'Skema Lintas Bogor dari ${mainLine.first.name} menuju ${mainLine.last.name}, dengan sebagian stasiun ditampilkan dan percabangan transit ke ${branch.name}.'
+                                : 'Skema ilustratif memakai nama stasiun asli dari ${mainLine.first.name} menuju ${mainLine.last.name}, dengan percabangan ke ${branch.name}. Bukan urutan jalur sebenarnya — lihat daftar stasiun di bawah untuk data lengkap.',
+                            child: SizedBox(
+                              height: 360,
+                              width: double.infinity,
+                              child: CustomPaint(
+                                painter: _RailDiagramPainter(
+                                  brightness: Theme.of(context).brightness,
+                                  hasEstimatedVehicle:
+                                      vehicles.value?.isNotEmpty ?? false,
+                                  stationLabels: mainLine
+                                      .map((s) => s.name)
+                                      .toList(growable: false),
+                                  branchLabel: branch.name,
+                                ),
+                              ),
                             ),
-                          ),
-                        ),
+                          );
+                        },
                       ),
                     ],
                   ),
@@ -162,10 +200,14 @@ class _RailDiagramPainter extends CustomPainter {
   const _RailDiagramPainter({
     required this.brightness,
     required this.hasEstimatedVehicle,
+    required this.stationLabels,
+    required this.branchLabel,
   });
 
   final Brightness brightness;
   final bool hasEstimatedVehicle;
+  final List<String> stationLabels;
+  final String branchLabel;
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -203,18 +245,10 @@ class _RailDiagramPainter extends CustomPainter {
       );
     canvas.drawPath(path, branch);
 
-    const labels = <String>[
-      'Bogor',
-      'Citayam',
-      'Depok',
-      'UI',
-      'Pasar Minggu',
-      'Manggarai',
-      'Gondangdia',
-      'Jakarta Kota',
-    ];
+    final labels = stationLabels;
+    final divisor = labels.length > 1 ? labels.length - 1 : 1;
     for (var index = 0; index < labels.length; index += 1) {
-      final ratio = index / (labels.length - 1);
+      final ratio = index / divisor;
       final point = Offset(
         origin.dx,
         origin.dy + ((end.dy - origin.dy) * ratio),
@@ -241,9 +275,9 @@ class _RailDiagramPainter extends CustomPainter {
     canvas
       ..drawCircle(branchEnd, 8, node)
       ..drawCircle(branchEnd, 8, nodeBorder);
-    final sudirman = TextPainter(
+    final branchText = TextPainter(
       text: TextSpan(
-        text: 'Sudirman',
+        text: branchLabel,
         style: TextStyle(
           color: muted,
           fontSize: 12,
@@ -252,7 +286,7 @@ class _RailDiagramPainter extends CustomPainter {
       ),
       textDirection: TextDirection.ltr,
     )..layout();
-    sudirman.paint(canvas, branchEnd + const Offset(-22, 15));
+    branchText.paint(canvas, branchEnd + const Offset(-22, 15));
 
     if (hasEstimatedVehicle) {
       final trainPoint = Offset(
@@ -277,6 +311,8 @@ class _RailDiagramPainter extends CustomPainter {
   @override
   bool shouldRepaint(covariant _RailDiagramPainter oldDelegate) {
     return oldDelegate.brightness != brightness ||
-        oldDelegate.hasEstimatedVehicle != hasEstimatedVehicle;
+        oldDelegate.hasEstimatedVehicle != hasEstimatedVehicle ||
+        oldDelegate.stationLabels != stationLabels ||
+        oldDelegate.branchLabel != branchLabel;
   }
 }

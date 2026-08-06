@@ -13,6 +13,7 @@ import '../../domain/entities/transit_models.dart';
 import '../../domain/providers/transit_providers.dart';
 import 'gtfs_realtime_provider.dart';
 import 'gtfs_static_schedule_provider.dart';
+import 'hybrid_transit_realtime_provider.dart';
 import 'mock_transit_provider.dart';
 import 'official_api_transit_provider.dart';
 import 'supabase_transit_provider.dart';
@@ -59,6 +60,24 @@ final supabaseTransitProvider = Provider<SupabaseTransitProvider>((Ref ref) {
   return SupabaseTransitProvider(Supabase.instance.client);
 });
 
+/// Merges `gtfs`'s real-feed vehicle positions (empty today — no GTFS-RT
+/// URL configured) with Supabase's `vehicle_positions` (schedule-estimated
+/// + genuine crowd-sourced rider reports), so `TRANSIT_PROVIDER=gtfs` shows
+/// real crowd-sourced positions without needing schedule data to also come
+/// from Supabase. Only constructed when `SUPABASE_ENABLED=true` — see
+/// `transitRealtimeProvider` below, which falls back to plain
+/// `gtfsRealtimeTransitProvider` otherwise.
+final hybridGtfsRealtimeProvider = Provider<HybridTransitRealtimeProvider>((
+  Ref ref,
+) {
+  final provider = HybridTransitRealtimeProvider(
+    primary: ref.watch(gtfsRealtimeTransitProvider),
+    supplementalPositions: ref.watch(supabaseTransitProvider),
+  );
+  ref.onDispose(() => unawaited(provider.dispose()));
+  return provider;
+});
+
 /// Real schedule/station data once `GtfsStaticImporter` has populated the
 /// GTFS Drift tables; falls back to [mockTransitProvider] (Data Demo) until
 /// then, so `TRANSIT_PROVIDER=gtfs` never shows an empty app pre-import.
@@ -73,16 +92,22 @@ final gtfsStaticScheduleProvider = Provider<GtfsStaticScheduleProvider>((
 
 // Fallback matrix, by TRANSIT_PROVIDER (see AppEnvironment.provider):
 //   mock          -> demo data for everything.
-//   gtfs          -> real GTFS-Realtime feed for vehicle positions / trip
-//                    updates / alerts; schedule/station data comes from
+//   gtfs          -> vehicle positions come from HybridTransitRealtimeProvider
+//                    when SUPABASE_ENABLED (real GTFS-RT feed, empty today,
+//                    merged with Supabase's crowd-sourced/estimated
+//                    positions) — otherwise plain GtfsRealtimeTransitProvider
+//                    (empty until a real feed URL exists). Trip
+//                    updates/alerts always come from the plain GTFS-RT
+//                    provider — no crowd-sourced equivalent for those.
+//                    Schedule/station data comes from
 //                    GtfsStaticScheduleProvider once a feed has been
 //                    imported via GtfsStaticImporter (see
 //                    docs/backend-local.md) — Data Demo before that.
 //   officialApi   -> a self-hosted REST backend for every capability.
 //   localSupabase -> a real Supabase-backed provider (see
 //                    supabase_transit_provider.dart), but trip search only
-//                    resolves DIRECT (no-transfer) trips — see that file's
-//                    doc comment and ENGINEERING.md's "Known gaps".
+//                    resolves direct + single-transfer trips — see that
+//                    file's doc comment and ENGINEERING.md's "Known gaps".
 final stationProvider = Provider<StationProvider>((Ref ref) {
   return switch (AppEnvironment.provider) {
     TransitProviderKind.gtfs => ref.watch(gtfsStaticScheduleProvider),
@@ -103,7 +128,9 @@ final transitScheduleProvider = Provider<TransitScheduleProvider>((Ref ref) {
 
 final transitRealtimeProvider = Provider<TransitRealtimeProvider>((Ref ref) {
   return switch (AppEnvironment.provider) {
-    TransitProviderKind.gtfs => ref.watch(gtfsRealtimeTransitProvider),
+    TransitProviderKind.gtfs => AppEnvironment.supabaseEnabled
+        ? ref.watch(hybridGtfsRealtimeProvider)
+        : ref.watch(gtfsRealtimeTransitProvider),
     TransitProviderKind.officialApi => ref.watch(officialApiTransitProvider),
     TransitProviderKind.localSupabase => ref.watch(supabaseTransitProvider),
     _ => ref.watch(mockTransitProvider),

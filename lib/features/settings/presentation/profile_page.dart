@@ -8,6 +8,8 @@ import '../../../core/widgets/data_badges.dart';
 import '../../../core/widgets/tk_logo.dart';
 import '../../../data/providers/provider_registry.dart';
 import '../../../domain/entities/transit_models.dart';
+import '../../account/presentation/account_controller.dart';
+import 'edit_display_name_dialog.dart';
 import '../../ride_detection/presentation/ride_detection_controller.dart';
 import 'settings_controller.dart';
 
@@ -20,6 +22,8 @@ class ProfilePage extends ConsumerWidget {
     final controller = ref.read(settingsControllerProvider.notifier);
     final stations =
         ref.watch(stationListProvider).asData?.value ?? const <Station>[];
+    final account = ref.watch(accountControllerProvider).asData?.value;
+    final displayName = ref.watch(userDisplayNameProvider).asData?.value;
 
     return Scaffold(
       appBar: AppBar(title: const Text('Profil & pengaturan')),
@@ -30,54 +34,65 @@ class ProfilePage extends ConsumerWidget {
             Card(
               child: Padding(
                 padding: const EdgeInsets.all(18),
-                child: Row(
-                  children: <Widget>[
-                    const CircleAvatar(
-                      radius: 28,
-                      child: TkLogo(size: 36, showLabel: false),
-                    ),
-                    const SizedBox(width: 14),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: <Widget>[
-                          Text(
-                            'Mode tanpa akun',
-                            style: Theme.of(context).textTheme.titleLarge,
-                          ),
-                          const Text('Preferensi disimpan di perangkat ini.'),
-                        ],
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-            const SizedBox(height: 14),
-            Card(
-              color: Theme.of(context).colorScheme.primaryContainer,
-              child: const Padding(
-                padding: EdgeInsets.all(16),
-                child: Row(
+                child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: <Widget>[
-                    Icon(Icons.developer_mode_rounded),
-                    SizedBox(width: 12),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: <Widget>[
-                          Text(
-                            'Local-only guard aktif',
-                            style: TextStyle(fontWeight: FontWeight.w700),
+                    Row(
+                      children: <Widget>[
+                        const CircleAvatar(
+                          radius: 28,
+                          child: TkLogo(size: 36, showLabel: false),
+                        ),
+                        const SizedBox(width: 14),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: <Widget>[
+                              Text(
+                                account != null
+                                    ? (displayName?.isNotEmpty ?? false)
+                                          ? displayName!
+                                          : (account.email ?? 'Akun masuk')
+                                    : 'Mode tanpa akun',
+                                style: Theme.of(context).textTheme.titleLarge,
+                              ),
+                              Text(
+                                account != null
+                                    ? 'Masuk dengan akun. Preferensi tetap tersimpan di perangkat ini.'
+                                    : 'Preferensi disimpan di perangkat ini.',
+                              ),
+                            ],
                           ),
-                          SizedBox(height: 4),
-                          Text(
-                            'Endpoint non-lokal, Firebase, dan build release ditolak saat APP_ENV=local.',
+                        ),
+                        if (account != null)
+                          IconButton(
+                            icon: const Icon(Icons.edit_outlined),
+                            tooltip: 'Ubah nama',
+                            onPressed: () => showEditDisplayNameDialog(
+                              context,
+                              ref,
+                              currentName: displayName,
+                            ),
                           ),
-                        ],
-                      ),
+                      ],
                     ),
+                    if (AppEnvironment.supabaseEnabled) ...<Widget>[
+                      const SizedBox(height: 12),
+                      Align(
+                        alignment: Alignment.centerLeft,
+                        child: account != null
+                            ? OutlinedButton(
+                                onPressed: () => ref
+                                    .read(accountControllerProvider.notifier)
+                                    .signOut(),
+                                child: const Text('Keluar'),
+                              )
+                            : FilledButton.tonal(
+                                onPressed: () => context.push('/account/login'),
+                                child: const Text('Masuk atau buat akun'),
+                              ),
+                      ),
+                    ],
                   ],
                 ),
               ),
@@ -204,7 +219,10 @@ class ProfilePage extends ConsumerWidget {
                       title: const Text('Deteksi otomatis naik KRL'),
                       subtitle: const Text(
                         'Meminta izin sensor gerak dan mendaftarkan geofence stasiun rumah/kantor. '
-                        'Tetap meminta konfirmasi sebelum memulai panduan perjalanan.',
+                        'Tetap meminta konfirmasi sebelum memulai panduan perjalanan. '
+                        'Saat perjalanan aktif berjalan, posisi GPS-mu juga dikirim secara berkala '
+                        'ke server untuk membantu menampilkan posisi kereta ke pengguna lain — '
+                        'lihat halaman Privasi untuk detail lengkap.',
                       ),
                     ),
                   ],
@@ -297,13 +315,6 @@ class ProfilePage extends ConsumerWidget {
                     trailing: const Icon(Icons.chevron_right_rounded),
                     onTap: () => context.push('/settings/widgets'),
                   ),
-                  const Divider(height: 1),
-                  ListTile(
-                    leading: const Icon(Icons.schedule_send_outlined),
-                    title: const Text('Impor jadwal GTFS'),
-                    trailing: const Icon(Icons.chevron_right_rounded),
-                    onTap: () => context.push('/settings/gtfs-import'),
-                  ),
                 ],
               ),
             ),
@@ -356,11 +367,13 @@ class ProfilePage extends ConsumerWidget {
               ),
             ),
             const SizedBox(height: 18),
-            const Center(child: DemoDataBanner(compact: true)),
-            const SizedBox(height: 8),
+            if (AppEnvironment.provider == TransitProviderKind.mock) ...<Widget>[
+              const Center(child: DemoDataBanner(compact: true)),
+              const SizedBox(height: 8),
+            ],
             Center(
               child: Text(
-                'TK 0.1.0 • ${AppEnvironment.name} • ${AppEnvironment.providerName}',
+                'TK 0.1.0',
                 style: Theme.of(context).textTheme.bodySmall,
               ),
             ),

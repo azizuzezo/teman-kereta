@@ -3,6 +3,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../core/widgets/empty_state.dart';
+import '../../features/account/presentation/login_page.dart';
+import '../../features/premium/presentation/premium_paywall_page.dart';
 import '../../features/active_trip/presentation/active_trip_page.dart';
 import '../../features/history/presentation/notification_center_page.dart';
 import '../../features/history/presentation/offline_mode_page.dart';
@@ -206,6 +208,16 @@ final appRouterProvider = Provider<GoRouter>((Ref ref) {
         path: '/settings/gtfs-import',
         parentNavigatorKey: _rootNavigatorKey,
         builder: (context, state) => const GtfsImportPage(),
+      ),
+      GoRoute(
+        path: '/account/login',
+        parentNavigatorKey: _rootNavigatorKey,
+        builder: (context, state) => const LoginPage(),
+      ),
+      GoRoute(
+        path: '/premium/paywall',
+        parentNavigatorKey: _rootNavigatorKey,
+        builder: (context, state) => const PremiumPaywallPage(),
       ),
     ],
     errorBuilder: (context, state) => Scaffold(

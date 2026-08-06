@@ -38,19 +38,59 @@ function parseGtfsDate(value: string): string {
 export function parseStops(csvText: string): GtfsStop[] {
   return mapRows(csvText, ["stop_id", "stop_name", "stop_lat", "stop_lon"]).map(
     (row) => {
+      // Number("") === 0 in JS (not NaN) — an empty coordinate cell would
+      // otherwise silently pass the isFinite check below as a "valid" (0,0)
+      // coordinate. Caught the hard way once already: a real feed with
+      // blank stop_lat/stop_lon overwrote every station's real coordinates
+      // with (0,0) on import. Reject blank cells explicitly instead.
+      if (row.stop_lat.trim() === "" || row.stop_lon.trim() === "") {
+        throw new Error(`Koordinat GTFS kosong untuk ${row.stop_id}.`);
+      }
       const latitude = Number(row.stop_lat);
       const longitude = Number(row.stop_lon);
       if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) {
         throw new Error(`Koordinat GTFS tidak valid untuk ${row.stop_id}.`);
       }
+      const wheelchairBoarding =
+        row.wheelchair_boarding === "1" ? 1 : row.wheelchair_boarding === "2" ? 2 : 0;
       return {
         stopId: row.stop_id,
         name: row.stop_name,
         latitude,
         longitude,
+        description: nullIfEmpty(row.stop_desc),
+        wheelchairBoarding: wheelchairBoarding as 0 | 1 | 2,
       };
     }
   );
+}
+
+/** Parses the "Label: value | Label: value" convention some real feeds use
+ * in `stop_desc` to carry platform/facility/accessibility notes (GTFS has
+ * no dedicated columns for these). Splits only on each segment's *first*
+ * colon, since values themselves can contain one (e.g.
+ * "Aksesibilitas: Aksesibilitas jaringan: guiding block, ..."). Returns an
+ * empty object for a missing/unstructured description rather than guessing
+ * — `stations.facilities` defaults to `{}` for exactly this case. */
+export function parseStationDescription(
+  description: string | null
+): Record<string, string> {
+  if (!description) return {};
+  const result: Record<string, string> = {};
+  for (const segment of description.split("|")) {
+    const colonIndex = segment.indexOf(":");
+    if (colonIndex === -1) continue;
+    const label = segment.slice(0, colonIndex).trim();
+    const value = segment.slice(colonIndex + 1).trim();
+    if (!label || !value) continue;
+    const key = label
+      .toLowerCase()
+      .normalize("NFKD")
+      .replace(/[^a-z0-9]+/g, "_")
+      .replace(/^_+|_+$/g, "");
+    if (key) result[key] = value;
+  }
+  return result;
 }
 
 export function parseRoutes(csvText: string): GtfsRoute[] {

@@ -7,7 +7,7 @@ ground truth on the current codebase. Update it whenever a flow goes from
 to be stale.
 
 Last verified: 2026-08-05. `flutter analyze` clean (no errors). `flutter
-test` — 60/60 passing + 1 skipped (the live-Supabase integration test)
+test` — 67/67 passing + 1 skipped (the live-Supabase integration test)
 across `test/core`, `test/data`, `test/domain`, `test/features`,
 `test/integration`, and widget tests for the app shell, GTFS import page,
 and ride-detection confirm page. Beyond unit/widget tests, this project has
@@ -86,6 +86,158 @@ layer itself is covered by `test/core/app_database_test.dart` (in-memory
 `ActiveTripController` still isn't — `active_trip_controller_test.dart` never
 calls `complete()`.
 
+### Geofence-confirmed auto-advance (Round 18 — combines the schedule estimate with the rider's own real GPS)
+
+Until Round 18, `advanceStop()` only ever ran from one place: a manual
+"Lanjut" tap on `active_trip_page.dart` — the whole "stations remaining"
+countdown was pure schedule/button-tapping, with zero positional
+confirmation once a trip was `onBoard`. Requested explicitly: make the
+estimate work well *combined with the rider's own GPS*, without violating
+the project's own established "no continuous GPS" posture (PRD §31) or the
+"GPS being unreliable must never produce false information" rule (PRD §37
+Skenario 3).
+
+The fix reuses the exact geofencing infrastructure already built for ride
+detection, applied to the CURRENT trip's own route instead of saved home/
+work/favorite stations:
+
+- `ActiveTripController._syncRouteGeofences()` re-scopes the native geofence
+  set to the stations still ahead (`trip.stationIds` from
+  `currentStationIndex + 1`, capped at 20 to match
+  `StationGeofenceManager.MAX_STATION_GEOFENCES` — a passed station is
+  dropped from the scope, so a long multi-transfer route never approaches
+  the cap). Called from `start()` and after every `advanceStop()`.
+- `ActiveTripController.checkGeofenceProgress()` reads the same
+  `getLastGeofenceEvent()` native call `RideDetectionController` already
+  polls, and calls `advanceStop()` automatically the moment a real ENTER
+  event fires for `session.nextStationId` specifically — not just any
+  geofence event, and not `exit`/`dwell`. Station sequence/schedule stays
+  the actual source of truth either way: a missed or stale geofence event
+  just means the rider taps "Lanjut" manually (still fully functional),
+  never a wrong "stations remaining" count.
+- `RideDetectionWatcher` (renamed in spirit, not in code — see its updated
+  doc comment) now drives *either* consumer off the same 25s timer:
+  `ActiveTripController.checkGeofenceProgress()` while a trip is confirmed,
+  or `RideDetectionController.checkNow()` otherwise. The two never run at
+  once — `RideDetectionController.checkNow()` already stood down on its own
+  the moment a trip is confirmed (pre-existing), and now the *native*
+  geofence scope itself is also exclusively owned by whichever one is
+  active, never both.
+- **Real interaction handled**: native geofence registration *replaces* the
+  whole scope (see `StationGeofenceManager`'s own doc comment — this was
+  already true before Round 18, just never mattered until two features
+  needed the same scope). So `ActiveTripController._releaseRouteGeofences()`
+  (called from `cancel()`/`complete()`) unregisters the trip's route
+  geofences and then calls the new
+  `RideDetectionController.reregisterSavedStationGeofences()` — otherwise
+  finishing a trip would silently leave ride detection with zero geofences
+  until the user re-toggled the setting off/on. `enable()` was refactored to
+  call that same new method instead of duplicating the registration logic.
+
+**Verified**: 5 new tests in `test/features/active_trip_controller_test.dart`
+(`checkGeofenceProgress` group) using, for the first time in this test
+suite, a mocked native `MethodChannel`
+(`TestDefaultBinaryMessengerBinding...setMockMethodCallHandler`) to feed a
+controlled `getLastGeofenceEvent()` response — previously every native-
+channel call in tests silently no-op'd via `MissingPluginException`, which
+was enough for existing tests but can't exercise this feature's actual
+logic. Covers: a matching ENTER event advances the trip; a different
+station's event does nothing; `exit`/`dwell` transitions do nothing; a
+repeated (already-processed) event doesn't double-advance; nothing happens
+before a trip exists. Full suite 67/67 passing, `flutter analyze` clean.
+
+**Not done**: no on-device verification this round (would need two phones/
+an emulator geofence trigger plus a real confirmed trip walked through
+physically or via mock location) — this is Dart-logic-verified via the
+mocked channel, not hardware-verified. Round 7.6 established that on-device
+geofence verification is possible on this machine's emulator; worth doing
+before shipping if time allows.
+
+## Geofence reboot recovery (Round 22)
+
+Every prior round's "geofences don't resync on session restore" note was
+slightly imprecise: Android geofence registrations are held by Google Play
+services and genuinely **survive an app process kill/restart** — they are
+cleared entirely only on a **device reboot**. That's the actual, narrower
+gap this round closes.
+
+- `NativeStateStore.GEOFENCE_DETAILS_JSON` — a new persisted field
+  alongside the pre-existing `GEOFENCE_REGISTERED_IDS` (station ids only).
+  Stores the full `{id, latitude, longitude, radiusMeters}` for the
+  currently-registered scope as a JSON array (`org.json`, no new
+  dependency), via new `NativeStateStore.encodeGeofenceDetails`/
+  `decodeGeofenceDetails`/`geofenceDetails()` helpers.
+- `StationGeofenceManager.register()`/`unregister()` now keep this JSON in
+  sync alongside every existing write/removal of `GEOFENCE_REGISTERED_IDS` —
+  `unregister()` filters the persisted detail list down to whatever
+  `stationIds` remain, matching the existing id-set logic exactly rather
+  than duplicating it.
+- New `GeofenceBootReceiver.kt` listens for `android.intent.action.
+  BOOT_COMPLETED`, reads `geofenceDetails()` + `GEOFENCE_EXPIRES_AT`, bails
+  out silently if the scope is empty/expired or location permission isn't
+  currently granted (a `BroadcastReceiver` can't prompt for permission), and
+  otherwise re-registers the exact same geofence set — same transition
+  types, same loitering delay, same remaining expiration window — via
+  `GeofencingClient.addGeofences`. Deliberately provider-agnostic: it
+  replays whatever the *last* registered scope was, whether that came from
+  an active trip's route (`ActiveTripController._syncRouteGeofences`) or
+  ride-detection's saved stations, without needing to know which Dart-side
+  feature owned it.
+- Refactored `geofencePendingIntent()` out of `StationGeofenceManager` into
+  a shared `StationGeofenceReceiver.pendingIntent(context)` companion
+  function, so `StationGeofenceManager` (Activity-scoped) and
+  `GeofenceBootReceiver` (Context-only, no Activity available at boot) build
+  the identical `PendingIntent` Play services matches transitions against —
+  a geofence re-registered with a *different* `PendingIntent` would silently
+  never fire.
+- Registered `GeofenceBootReceiver` in `AndroidManifest.xml` with an
+  explicit `<uses-permission android:name="android.permission.
+  RECEIVE_BOOT_COMPLETED" />`. **Also removed the unused `workmanager:
+  ^0.10.6` pubspec dependency** while investigating this — confirmed via
+  grep it was never referenced anywhere in `lib/`, and it's almost
+  certainly why `RECEIVE_BOOT_COMPLETED` was already showing up in earlier
+  decoded release-APK manifests (transitive manifest merging) despite this
+  app's own manifest never declaring it. Now the permission is declared
+  explicitly, for a receiver that's actually used.
+
+**Verified**: `flutter analyze` clean (no new issues), `flutter pub get`
+resolved cleanly after removing `workmanager` (nothing depended on it), and
+`flutter build apk --debug --dart-define-from-file=.env` — a real Kotlin/
+Gradle compile of every file touched this round — succeeded. **Not
+runtime-verified**: this machine's emulators have been unstable since Round
+21 (documented there), so there was no way to actually reboot a device/
+emulator with an active trip or ride-detection enabled and confirm
+geofences are still monitored afterward without reopening the app. Whoever
+gets a stable device next should do exactly that: enable ride detection or
+start a trip, force a reboot (`adb reboot` or the emulator's power-cycle),
+wait for boot to finish, and confirm (via `getRegisteredStationGeofences()`
+or a real ENTER event) that the geofences are live again with no app
+interaction.
+
+**Round 22 follow-up attempt**: a later emulator session came back
+genuinely responsive at first (`adb shell echo` round-tripped in 151ms), so
+this round tried to close the on-device verification gaps for real —
+`integration_test/app_test.dart`, this reboot-recovery fix, and the
+remaining accessibility audit pages. Partway through, the exact same
+degradation pattern documented in Round 21 recurred, this time **worse**:
+`EGL_emulation: app_time_stats` logged **82,377ms for a single frame**
+(vs. Round 21's already-severe ~30,000ms). Confirmed via the Dart VM
+service (`getStack` on the paused main isolate came back empty — execution
+was stuck deep in native/rendering code, not a Dart-level hang) and by
+bracketing every `await` in `main()` with temporary `debugPrint` markers,
+rebuilding, and watching them all print cleanly in ~5 seconds on one launch
+attempt — proving the *app* isn't hanging, the *renderer* is. A manual
+walk-through (fresh install → onboarding → Jadwal → search) reliably
+reached the "Mencari…" (searching) state and then sat there for 60+ real
+seconds while frame times were 15,000–82,000ms each, before the round
+stopped waiting rather than keep polling a fundamentally degraded
+environment. This makes the on-device verification for reboot-recovery,
+the accessibility audit, and `integration_test` **still open**, now with
+harder quantitative evidence that this is host-resource exhaustion (worse
+each time it's checked), not anything in the app. See "`integration_test/`
+suite" below for what this specifically means for that suite's own attempt
+this round.
+
 ## Ride detection (PRD §9, Tahap 4)
 
 Entirely event-driven, no continuous GPS polling (PRD §7/§31):
@@ -150,6 +302,115 @@ permission isn't already granted. Feeds `HomePage`'s nearest-station card and
 the dedicated `NearbyStationsPage` (`/nearby-stations`, PRD §12/page 19,
 **list mode only** — there is still no real geographic map in this app, so a
 map-mode toggle would be a non-functional button).
+
+**Round 22 — real-GPS verification attempt: logic confirmed correct, but
+this machine's emulator can't actually mock a real coordinate.** Walked
+through onboarding for real, granting the location permission (not skipping
+it, unlike every prior round's verification passes) after setting `adb emu
+geo fix 106.7906 -6.595` (real Bogor station coordinates). The "Lokasi demo"
+fallback correctly disappeared — confirming the real-GPS code path is what
+ran, not the demo fallback — but the computed result was obviously wrong:
+"Cikarang, 13963.2 km, 167626 menit jalan kaki". Investigated rather than
+dismissed: `adb shell dumpsys location` showed the OS's actual last-known
+fused/GPS location was `37.421998, -122.084000` — Mountain View, CA, the
+Android emulator's classic default — **completely unrelated to the geo fix
+command**, which reported `OK` every time but never actually updated the
+location subsystem, confirmed across multiple retries (re-issuing the fix,
+forcing a fresh request via the Nearby Stations page's explicit refresh
+button) with zero change in `dumpsys location`'s output. The 13,963km
+figure is exactly consistent with Mountain View → Jakarta-area distance,
+and the walking-time figure divides back out to the expected ~5km/h
+constant — meaning **the haversine math and walking-time estimate are
+completely correct**, just fed a stale, wrong coordinate by this emulator's
+GPS-mocking mechanism, which appears non-functional on this specific AVD/
+image regardless of `geo fix` reporting success. This is a test-environment
+limitation, not an app bug — real verification of this feature's accuracy
+needs either a physical device or a different emulator image with working
+GPS injection (the Extended Controls GUI's location tab, untested here
+since this session runs headlessly). The emulator crashed entirely
+(process disappeared, `adb devices` empty) shortly after this investigation
+— the same instability pattern as Round 21, blocking further on-device work
+(ride detection/geofence-reboot/crowd-reporting verification, remaining
+accessibility audit pages) for this round too.
+
+**Confirmed the real root cause of this session's repeated frame-time
+degradation, from the emulator's own boot log**: `hasSufficientHostVulkanDriver:
+unsupported Vulkan API level (1.3.215, min required: 1.3.240, vendor:
+Intel(R) UHD Graphics 620)` — this dev machine's integrated GPU doesn't meet
+the emulator's Vulkan requirement, so it falls back entirely to software
+rendering (SwiftShader/lavapipe, `Critical: Failed to load opengl32sw...
+Falling back to system OpenGL`). Software rendering is CPU-bound and
+degrades badly under any concurrent load — exactly the pattern seen
+repeatedly (30s/frame in Round 21, 82s/frame earlier this round). **This is
+a hardware limitation of this specific machine, not fixable by any code or
+config change** — a machine with a Vulkan-1.3.240+-capable GPU (or a real
+physical Android device either way) would not have this problem at all.
+
+**Immediately after this diagnosis, retried on a freshly cold-booted
+emulator instance (`-no-snapshot-load`) — and got a genuine, clean
+confirmation before it crashed again**: same real GPS fix, onboarding
+walked through granting location permission for real, and this time Home's
+nearest-station card correctly showed **"Stasiun Bogor, 0 m • 1 menit
+jalan kaki"** — exactly correct, since the fix was set to Bogor's own
+coordinates. This confirms the earlier stale-Mountain-View result really
+was a stale Play-services fused-location cache specific to that
+long-running emulator instance (open for hours across many rounds this
+session) — a fresh boot cleared it, and the real-GPS code path works
+completely correctly end-to-end when the OS actually cooperates. The
+emulator then crashed again (segfault, exit code 139) within about a
+minute of reaching Home, while navigating to Settings for the next
+verification step (ride detection). **Given 5+ distinct crashes across
+this session alone, all tied to the same confirmed software-rendering
+root cause, further on-device verification this project needs should
+happen on a physical device** — retrying this emulator again without a
+different machine or a fixed Vulkan driver is very unlikely to hold up
+for a multi-step flow (ride detection → geofence registration → reboot →
+crowd reporting → remaining accessibility pages all still genuinely
+unverified on-device, not because of any known app defect).
+
+**One more attempt, at the user's specific request, for the single most
+important untested piece** — the reboot-recovery code itself had never
+been exercised at all (unlike ride detection/crowd reporting, which are
+older features previously verified in earlier rounds). Before retrying,
+added real observability the receiver was missing entirely: two new
+`NativeStateStore` fields (`GEOFENCE_BOOT_RECOVERY_RESULT`/`_AT`,
+mirroring the existing `lastGeofenceEvent` pattern this file already
+uses for read-only broadcast receivers with no UI) and
+`recordGeofenceBootRecovery()`/`geofenceBootRecoverySnapshot()` helpers,
+written at every branch of `GeofenceBootReceiver.onReceive()`.
+
+**A real, latent correctness bug was caught while adding this, independent
+of whether the device test itself would ever complete**: `addGeofences()`
+is asynchronous, but a plain `BroadcastReceiver.onReceive()` returning
+gives the OS no reason to keep the process alive until that async
+callback fires — Android is free to kill the process the moment
+`onReceive()` returns, silently dropping the completion listener (and
+the whole point of this receiver) with no error anywhere. Fixed by wrapping
+the async call in `goAsync()`/`pendingResult.finish()`, the documented,
+correct pattern for exactly this situation. **This means the original
+Round 22 version of this receiver had a real reliability gap regardless of
+the emulator issues** — worth remembering as a general lesson: adding
+observability to an untested piece of async receiver code is worth doing
+*before* the on-device test, not just for the test's sake, because writing
+the instrumentation forces a close enough re-read of the code to catch
+this class of bug.
+
+Rebuilt (`flutter build apk --debug --dart-define-from-file=.env` —
+succeeded), relaunched a fresh emulator instance, but it **crashed again
+(segfault, exit code 139) within about a minute of the app reaching Home**
+— before ride detection could even be enabled, let alone reaching the
+reboot step. Per the user's own "try once more" framing and the plan
+agreed beforehand, did not attempt a third relaunch. **Net result**: the
+observability + `goAsync()` correctness fix are real, build-verified
+improvements landing in this round regardless; the actual reboot-survives
+end-to-end proof is still not obtained, now confirmed to need a physical
+device or a different machine, not further retries here. Whoever gets a
+stable device next should: enable ride detection, confirm via
+`adb shell run-as id.temankereta.teman_kereta cat shared_prefs/
+teman_kereta_native_state.xml` that `geofence.registered_station_details_json`
+is populated, `adb reboot`, wait for boot, then check the same file for
+`geofence.boot_recovery.result` — `"success"` proves the fix works
+end-to-end without ever reopening the app.
 
 ## Branding
 
@@ -363,6 +624,151 @@ works end-to-end, not just the SQL in isolation.
   no equivalent hosted-project verification (only local) — the user applies
   schema migrations to the hosted project themselves.
 
+### Crowd-sourced vehicle positions (Round 19 — real rider GPS, with consent)
+
+User's own idea: since there's no real GTFS-Realtime feed (see the GTFS-
+Realtime section above) and reverse-engineering the official app was
+correctly ruled out, have consenting riders' own phones report their GPS
+position while an Active Trip is confirmed `onBoard` a specific train, and
+show that aggregated position to *every* user — genuinely real positions,
+sourced from this app's own users with their own consent, not a third
+party's infrastructure.
+
+**Consent model** (explicit product decision, not assumed): bundled into
+the existing "Deteksi Otomatis Naik KRL" setting
+(`rideDetectionEnabled`) — no separate toggle. Enabling that setting is
+what authorizes GPS upload during a confirmed active trip; the settings UI
+subtitle (`profile_page.dart`) and `PrivacyPage` were both rewritten to
+disclose this plainly, since it's a real, new exception to this app's
+"nothing leaves the device" posture up to this point.
+
+**Backend** (`supabase/migrations/20260806090000_crowd_sourced_positions.sql`):
+- `public.crowd_position_reports` — insert-only for `anon`/`authenticated`
+  (no select grant at all; this table is a write-only inbox), keyed by
+  `(external_trip_id, service_date)` rather than `trips.id` — the one
+  identifier every provider (`gtfs`/`local_supabase`) has in common,
+  since a `gtfs`-provider client only ever has the raw GTFS trip_id, never
+  a Supabase row UUID. A `device_session_id` (random per-install UUID,
+  never tied to a real identity) exists only so the aggregation can count
+  distinct reporters, not to identify anyone. A `CHECK` constraint rejects
+  any report timestamped more than 10 minutes in the past or 2 minutes in
+  the future outright — spoofed/backdated reports are rejected at the
+  table level, not filtered out later.
+- `public.refresh_crowd_vehicle_positions()` — deletes reports older than
+  10 minutes (the retention window PRD §32 requires for raw location
+  data) unconditionally on every call, then averages the last 3 minutes of
+  reports per `(external_trip_id, service_date)` and upserts into
+  `public.vehicle_positions` as `source = 'crowd_sourced'`,
+  `accuracy_status = 'near_real_time'` (deliberately not `'real_time'` —
+  it's delayed by polling + averaging, so calling it instant would be
+  dishonest). Left-joins to `public.trips` to resolve a real `trip_id`
+  when that service_date has been imported there; leaves it `null`
+  otherwise rather than dropping the position. Same delete-then-insert
+  idempotent pattern as `refresh_estimated_vehicle_positions()` — never
+  touches other sources.
+- `vehicle_positions.source`'s CHECK constraint gained `'crowd_sourced'`
+  alongside the existing four values.
+- `admin/scripts/refresh-vehicle-positions.mjs` now calls both refresh
+  functions every tick.
+
+**A real cross-provider modeling problem, solved**: a multi-transfer trip
+has two separate physical trains (legs), so a single trip-level identifier
+would be ambiguous about which leg's GPS is being reported. Fixed by moving
+`externalTripId`/`serviceDate` onto `TripLeg` (not `TransitTrip`) and adding
+`ActiveTripSession.currentRailLeg` — a getter that walks
+`trip.transferBoundaries` against `currentStationIndex` to resolve exactly
+which leg (which real train) the rider is currently on, reusing the same
+index math `transferBoundaries`/`stationIds` already established (Round 1).
+Both `GtfsStaticScheduleProvider` and `SupabaseTransitProvider` now
+populate these fields per leg — the latter required extending
+`search_direct_trips`/`search_one_transfer_trips` themselves
+(`supabase/migrations/20260806093000_trip_search_external_ids.sql`, a
+straight column addition to their existing SELECT lists, no logic changes)
+to return `external_trip_id`/`service_date` at all.
+
+**Reporting lifecycle** (`ActiveTripController` +
+`lib/core/location/crowd_position_reporter.dart`): a 20s periodic timer
+starts in `start()` (and resumes on session restore from a persisted
+snapshot after an app restart), stops in
+`cancel()`/`complete()`/`_markMissedDestination()`, and on
+every tick re-reads `rideDetectionEnabled` **live** (`ref.read`, not
+watched) rather than reactively — turning the setting off mid-trip stops
+reports on the very next tick without needing to rebuild the controller.
+Each tick is a one-shot `Geolocator.getCurrentPosition()` (never a
+continuous stream — same posture as the rest of this app's location
+handling, PRD §31), silently skipped whenever location permission isn't
+granted, GTFS-RT is disabled, or the current leg has no
+`externalTripId` (mock/demo data never reports, by construction).
+
+**Hybrid read path** (`lib/data/providers/hybrid_transit_realtime_
+provider.dart`): `TRANSIT_PROVIDER=gtfs` — the provider actually selected
+in the committed `.env` — gets a real, visible effect from this feature
+without switching to `local_supabase` for schedule data too.
+`HybridTransitRealtimeProvider` merges `GtfsRealtimeTransitProvider`'s
+vehicle positions (empty today, real if a feed URL ever exists) with
+`SupabaseTransitProvider`'s (schedule-estimated + crowd-sourced) by
+tracking each source's latest emission and re-concatenating on every
+update from either side — trip updates/alerts still come from
+`GtfsRealtimeTransitProvider` alone, no crowd-sourced equivalent exists for
+those. Only constructed when `SUPABASE_ENABLED=true`; falls back to plain
+`GtfsRealtimeTransitProvider` otherwise, avoiding
+`SupabaseTransitProvider`'s own `StateError` guard.
+
+**Verified**: the new SQL function tested locally with synthetic report
+rows (correct averaging, correct idempotent re-run, correct retention
+delete); the anon-key RLS path confirmed via curl (`insert` succeeds,
+`select` correctly 401s with "permission denied"); `search_direct_trips`/
+`search_one_transfer_trips`'s new columns confirmed via psql and via the
+full `--dart-define=LIVE_SUPABASE=true` integration suite (still 6/6
+passing after the signature change); 9 new unit tests
+(`test/domain/active_trip_test.dart` for `currentRailLeg` at/before/after
+the transfer boundary and the single-leg case;
+`test/core/crowd_position_reporter_test.dart` confirming the
+`SUPABASE_ENABLED` guard is a genuine no-op — true by default in every
+test run, since no `--dart-define` is passed;
+`test/data/hybrid_transit_realtime_provider_test.dart` confirming the
+merge/latest-value-persists/trip-updates-passthrough behavior with fake
+providers). Full suite 76/76 after.
+
+**Not done**:
+- **The two new migrations haven't been applied to the hosted Supabase
+  project** — confirmed this the hard way: ran the updated poller script
+  against `admin/.env.local` (which points at hosted) and got "Could not
+  find the function public.refresh_crowd_vehicle_positions" — expected,
+  since the user applies migrations to hosted themselves (same process as
+  every prior migration this session), just worth flagging explicitly
+  since this feature is otherwise fully wired.
+- No on-device verification of an actual GPS report reaching the table —
+  verified the SQL/RLS/aggregation layers thoroughly and the Dart logic via
+  mocks/fakes, but never walked a real device through a real active trip
+  with location permission granted to confirm an actual row lands in
+  `crowd_position_reports`.
+- ~~No rate limiting or abuse hardening~~ **Closed in Round 22** — see
+  `supabase/migrations/20260806100000_crowd_report_rate_limit.sql`: a
+  per-`device_session_id` insert rate limit (max 1 report/15s, checked via
+  a `security definer` function inside the existing insert RLS policy's
+  `with check`) plus a coarse geographic bounding box derived from the
+  bundled feed's real station coordinates (lat -6.8..-5.9, lon
+  106.0..107.35 — padded from the actual min/max found in `stops.txt`).
+  **Verified against the local stack**: applied via `psql`, then 3 curl
+  calls through the real anon-key PostgREST path — a valid report inside
+  the box succeeded (201), an immediate second report from the same
+  `device_session_id` was rejected (401, rate limit), and a report outside
+  the box was rejected (401, geography check). **Known, stated limitation**:
+  this doesn't stop an attacker who generates a fresh random
+  `device_session_id` per request — that field is unauthenticated
+  client-supplied data, the same gap every anon-key-only architecture has
+  without device attestation (Play Integrity/App Check — deliberately not
+  part of this project, no Firebase anywhere). Real protection against a
+  determined attacker needs that, or Supabase gateway-level rate limiting
+  (an infra/dashboard setting, not something a migration can express).
+  **Not yet applied to the hosted project** — this migration was written
+  after the two Round 20 migrations the user already applied to hosted, so
+  it's a new manual-apply step, same as always.
+- Airport Rail Link / KA Lokal Merak (Round 19's other finding) still
+  have no schedule data at all, so they can never produce a crowd position
+  either — moot until that gap is addressed.
+
 ## Crash monitoring (Sentry)
 
 `sentry_flutter` wraps `runApp()` in `lib/main.dart`, gated by
@@ -558,6 +964,56 @@ it inert:
   any import, gone once the real feed was imported and `Departure.isDemo`
   came back `false` from `GtfsStaticScheduleProvider`.
 
+### Two real stations were missing from the bundled feed — found via the official route map, now fixed
+
+The user shared the actual, official PT KAI Commuter "Peta Rute Jabodetabek
+& Merak" route map. Rather than filing it away, cross-checked every one of
+this feed's 5 lines against it station-by-station — a genuine correctness
+pass against an authoritative source, not just trusting the feed's own
+"verify before production" disclaimer forever. Result: **the station SET,
+ORDER, and interchange structure for all 5 lines matched the real map
+almost exactly** (a real credit to however this dev feed was originally
+built) — with exactly two concrete, confirmed omissions:
+
+- **Jatake** — a real station on the Rangkasbitung line between Cicayur
+  (`CC`) and Parung Panjang (`PRP`), visible on the map but entirely absent
+  from `stops.txt`/`stop_times.txt`.
+- **Jakarta International Stadium (JIS)** — a real station on the Tanjung
+  Priok line between Kampung Bandan (`KPB`) and Ancol (`AC`), same
+  situation.
+
+Fixed directly in the bundled asset (`assets/gtfs/
+gtfs-krl-jabodetabek-dev.zip`) via a one-off Python script (not committed —
+lived in the scratchpad): added both stops to `stops.txt` (same
+`"Approximate coordinate for development/testing; verify before
+production."` disclaimer as every other stop in this feed — their
+coordinates are still visual-map estimates, not surveyed), then for every
+trip on the affected route (`RANGKAS`/`PRIOK`) found the adjacent
+`PRP`↔`CC` or `KPB`↔`AC` stop_time pair and inserted a new row at the
+time-weighted midpoint between them, renumbering `stop_sequence` for every
+subsequent stop on that trip. **190 of 202** Rangkasbitung trips and **all
+64** Tanjung Priok trips got the insertion — the other 12 Rangkasbitung
+trips are legitimate short-turn services that never traverse that segment
+at all (verified individually, not just assumed), so their exclusion is
+correct, not a bug.
+
+**Verified thoroughly, not just "the script ran"**: row-count arithmetic
+checked exactly (84+2=86 stops, 16,195+254=16,449 stop_times, both matching
+the insertion counts precisely); the existing GTFS test suite still 22/22
+(all synthetic-fixture-based, unaffected by this change, as expected); and
+— the real check — imported the actual post-fix zip into an in-memory
+Drift DB via a throwaway test and confirmed a real `THB` → `RK` trip search
+resolves with `JTK` correctly sequenced between `CC` and `PRP` in the
+station list (`[..., CSK, CC, JTK, PRP, CJT, ...]`). Full app suite still
+67/67 after the change.
+
+Station/trip counts cited elsewhere in this file (Round 9's "84 stations,
+985 trips", Round 12's admin-panel-import "84 stations") predate this fix
+— now **86 stations**, same 984/985 trip count (no new trips, just two new
+stops inserted into existing ones). `admin/` has no separate copy of this
+feed to also fix (its GTFS import is upload-driven, not a bundled test
+asset), so this was a single-location correction.
+
 ## Admin panel (`admin/`, Next.js — PRD §36)
 
 Real, not a stub — built round 8, verified end-to-end against a running
@@ -679,6 +1135,632 @@ row in a shared dev database was put there by this session; check
 `created_at`/provenance before treating something as your own test data to
 clean up.
 
+## Admin panel hosting (Round 22 — Vercel misconfiguration found, then migrated to Cloudflare Workers)
+
+The project is now version-controlled (`git` at the repo root, remote
+`https://github.com/azizuzezo/teman-kereta.git`). The user had pushed it
+intending to host the admin panel at `temankereta.web.id`, but reported the
+domain "tidak terbuka" (won't open).
+
+**Initial diagnosis — real, but incomplete**: `nslookup temankereta.web.id`
+(apex) returned no DNS record at all. But `www.temankereta.web.id` DID
+resolve (CNAME to a `vercel-dns` host) and TLS worked — it just 404'd, even
+at the raw `https://temankereta.vercel.app` URL with `X-Vercel-Error:
+NOT_FOUND`. Investigating with the Vercel CLI (which auto-authenticated via
+an already-approved browser session on this machine — worth knowing, since
+the same thing happened with `wrangler`/Cloudflare moments later) found the
+real cause: a project named `temankereta` already existed, correctly linked
+to both `temankereta.web.id` and `www.temankereta.web.id` as domains, but
+its environment variables were the **Flutter app's** `.env` values
+(`APP_ENV`, `TRANSIT_PROVIDER`, etc.) — not the admin panel's actual
+required vars (`NEXT_PUBLIC_SUPABASE_URL`/`NEXT_PUBLIC_SUPABASE_ANON_KEY`/
+`SUPABASE_SERVICE_ROLE_KEY`, from `admin/.env.local.example`). The project's
+dashboard "Root Directory" was also apparently never set to `admin`,
+producing a build with no matching routes — `NOT_FOUND` on every path,
+including the bare `.vercel.app` URL, independent of DNS entirely.
+
+Corrected the env vars (added the 3 real ones for Production+Preview) and
+confirmed the Root Directory theory directly: deploying via CLI from
+`admin/` failed with `path "...\admin\admin" does not exist` (Vercel
+appended its dashboard-configured `admin` root onto the CLI's own `admin`
+cwd) — deploying from the repo root instead would have been the fix, but
+**Claude Code's own safety classifier blocked that specific command**,
+since uploading the *whole* repo root (Flutter source, the release
+keystore, `.env`) to a third-party host is a meaningfully bigger action
+than deploying just `admin/`. This was surfaced to the user rather than
+worked around, per the classifier's own guidance.
+
+**User chose to switch to Cloudflare Workers instead** (a real tradeoff
+discussion, not a snap decision — Cloudflare was picked knowing it needed
+a bigger lift: adapting Next.js Server Actions to a different runtime,
+with real risk of something subtly breaking). Rationale: the domain's
+nameservers were already Cloudflare's (`clay.ns.cloudflare.com`/`marjory.
+ns.cloudflare.com`), and `wrangler` had `pages/workers (write)` scope
+already authenticated.
+
+**The actual migration** (Next.js 16.3.0, confirmed compatible via the
+newer `@opennextjs/cloudflare` adapter — the `@cloudflare/next-on-pages`
+package is the older, now-secondary path):
+- `npm i @opennextjs/cloudflare@latest` + `wrangler@latest`, new
+  `wrangler.jsonc` (`compatibility_flags: ["nodejs_compat"]`, required
+  `compatibility_date >= 2024-09-23`) and `open-next.config.ts`.
+- Audited `admin/lib`/`admin/app` for Node-only APIs (`fs`/`crypto`/`path`/
+  `Buffer`/`require`) first — found none, a clean starting point.
+- **Real, documented incompatibility hit and fixed**: Next.js 16's new
+  `proxy.ts` convention (the renamed `middleware.ts`) is **hard-locked to
+  the `nodejs` runtime — `edge` cannot be configured**, and OpenNext's
+  Cloudflare adapter doesn't support Node.js middleware yet (`ERROR Node.js
+  middleware is not currently supported`). Per Next.js's own migration
+  docs: `middleware.ts` is still supported specifically for cases that need
+  `edge` — reverted `proxy.ts` back to `middleware.ts` (same logic, just the
+  file/export name), since this auth check only touches cookies and a
+  fetch-based Supabase client, genuinely edge-compatible. This fixed the
+  build.
+- **A second, subtler bug found and fixed**: `@supabase/supabase-js`
+  defaults to the `cross-fetch` polyfill outside a real browser, which
+  doesn't work correctly under Workers' native fetch — a documented,
+  known issue (see supabase/supabase-js and supabase/discussions#588).
+  Added `global: { fetch }` (the native global) to every server-side
+  Supabase client construction (`lib/supabase/server.ts`,
+  `lib/supabase/service.ts`, and `middleware.ts`'s inline client) —
+  `lib/supabase/browser.ts` needed no change since it already runs in a
+  real browser.
+- Deployed via `npx opennextjs-cloudflare deploy` → live at
+  `https://temankereta-admin.si-aziz6970.workers.dev`. Set the 3 required
+  Supabase env vars as **Worker secrets** (`wrangler secret put`, values
+  piped from `admin/.env.local` without ever being echoed to the terminal).
+- **A false alarm along the way, worth remembering**: the curl-replay
+  technique used throughout this project to verify Next.js Server Actions
+  (established Round 8) returned a 500 ("Connection closed", a
+  `node-internal:streams_writable` stack) when replaying the login form.
+  Spent real effort chasing this — checked whether it was the cross-fetch
+  bug (ruled out: middleware's own Supabase call had already succeeded
+  *before* that fix, via a clean redirect), searched for a known OpenNext
+  Windows-build issue (the adapter does warn "not fully compatible with
+  Windows... could encounter unpredictable failures" on every build, which
+  looked like a strong candidate). **The user tried the real login in an
+  actual browser and it worked immediately** — screenshot confirmed
+  successful login, sidebar navigation, and the GTFS Import page rendering
+  real content. The likely explanation: Next.js Server Actions check the
+  request's `Origin` header as CSRF protection, and a raw `curl -F`
+  multipart replay doesn't send one — this project's curl-replay technique
+  may need an explicit `-H "Origin: https://<host>"` from now on against
+  newer Next.js versions. **Lesson**: when a verification technique that
+  worked reliably in the past suddenly fails on a new deployment target,
+  checking with a real client (here, literally asking the user to try their
+  own browser) is faster and more conclusive than chasing the failing
+  technique's own stack trace indefinitely.
+
+**Custom domain — `www` done, apex still blocked**: Cloudflare Workers'
+"Custom Domain" feature (`wrangler.jsonc`'s `routes: [{pattern, custom_domain:
+true}]`) auto-manages the DNS record itself when the zone is already on
+Cloudflare nameservers — no manual A/CNAME record needed, unlike Vercel.
+Attempting both `temankereta.web.id` and `www.temankereta.web.id` at once
+partially failed: `www` briefly went to NXDOMAIN (alarming, but transient —
+confirmed via `nslookup` against `clay.ns.cloudflare.com` directly, the
+zone's actual authoritative nameserver, that the record existed correctly;
+public resolvers just hadn't caught up yet) and now genuinely works
+(`https://www.temankereta.web.id/login` → 200, confirmed with `curl
+--resolve` to bypass DNS entirely). The **apex** (`temankereta.web.id`)
+consistently fails with `Hostname 'temankereta.web.id' already has
+externally managed DNS records (A, CNAME, etc). Delete them first` — some
+existing record now sits in the zone (resolves to Cloudflare's own proxied
+IPs, but returns 403 — no Worker route is actually attached to it) that
+Wrangler's OAuth token, scoped to `zone (read)` only, can't remove. **This
+needs the user to open the Cloudflare dashboard's DNS tab for
+`temankereta.web.id`, delete whatever record exists for the bare apex
+hostname (not `www`), then the apex custom domain can be re-attempted** —
+deliberately not worked around by extracting the OAuth token for raw API
+writes, since that scope boundary (read-only) looks intentional.
+
+**A transparency note worth keeping**: both `vercel whoami` and `wrangler
+whoami` silently completed a full OAuth device-flow login mid-session
+(via an already-approved browser session on this machine) without any
+explicit prompt — flagged to the user immediately both times, since these
+are real actions against real external accounts, not something to use
+quietly just because the CLI made it frictionless.
+
+## Real device feedback round: admin panel bugs, a broken hosted import, TRANSIT_PROVIDER switch, first-pass account login
+
+The user tested on an actual physical Android device for the first time
+and reported multiple real issues in one pass — this section covers what
+was found and fixed.
+
+**Bug: every admin panel delete action silently failed with zero feedback.**
+`deleteOperator`/`deleteLine`/`deleteStation`/`deleteNearbyPlace` (`admin/
+app/(admin)/*/actions.ts`) all had the same shape: check `if (!error)` before
+doing the audit-log write, then unconditionally `revalidatePath` regardless
+of whether the delete actually succeeded. For operators/lines/stations,
+Postgres correctly refuses the delete via `on delete restrict` foreign keys
+whenever real dependent rows exist (`trips.line_id`, `stop_times.station_id`,
+`lines.operator_id`) — exactly the case for any operator/line/station that's
+actually in use, which is why this looked completely broken to a real user
+("tidak bisa hapus operator"). Fixed all four to return a typed error state
+(distinguishing Postgres `23503` foreign-key violations with a specific,
+actionable message from other failures), and converted each list page's
+inline `<form action={delete...}>` into a small client component using
+`useActionState` so the error actually renders (`operators/delete-button.tsx`,
+`lines/delete-button.tsx`, `stations/delete-button.tsx`, `nearby-places/
+delete-button.tsx`). `updateOperator`/similar update actions were already
+structured correctly (typed error state, `useActionState` in the edit forms)
+— only delete had this gap.
+
+**Hosted Supabase's schedule data was badly broken**: found via a direct
+row-count check (`stations` 87, `lines` 6, `trips` 6823, but **`stop_times`
+only 3**) — a real trip needs dozens of stop_times rows each, so this was
+nowhere close to usable for real search. The shape (many trips, almost no
+stop_times) points at a previous GTFS import attempt that inserted trips
+successfully via the `import_gtfs_trips` RPC, then got cut off before or
+during the much larger stop_times bulk-insert phase — consistent with
+Cloudflare Workers' CPU-time limit if that import was ever attempted through
+the deployed admin panel (a bulk import processing tens of thousands of rows
+across many chunked network round-trips is a poor fit for a single Workers
+request). Confirmed `admin/lib/gtfs/importer.ts`'s import is genuinely
+idempotent (deletes-then-upserts stop_times scoped to exactly the
+re-imported trip ids) — safe to just re-run.
+
+**Re-running it hit the "Connection closed" investigation below**, so it
+was run via a new standalone script instead:
+`admin/scripts/import-real-gtfs.mts` (run via `npx tsx`) — reimplements
+`importGtfsFeed`'s exact algorithm using the same `lib/gtfs/parser.ts`/
+`calendar.ts` helpers (which have no `server-only` guard, unlike
+`importer.ts` itself, so they can be imported outside Next.js). Matches
+the existing pattern of `admin/scripts/refresh-vehicle-positions.mjs` — a
+one-off/ops script that talks to Supabase directly via the service-role
+key from `.env.local`, deliberately outside the Next.js request/response
+cycle. **Result, verified for real**: 86 real stations, 5 real lines, 984
+trip patterns → 6822 dated instances over a 7-day window → **114,085 real
+stop_time rows**, confirmed via both a raw row-count check and a real
+`get_station_departures`/`search_one_transfer_trips` RPC call returning
+correct, real KRL data (a genuine Bogor→Sudirman itinerary transferring at
+Manggarai from the Bogor line to the Cikarang line, with sensible
+sequential times).
+
+**A genuinely deep, separate bug found while trying to log into the local
+admin dev server to run that import through the UI first**: every Supabase
+Auth call made from within this project's Next.js server (login, and by
+extension every server action using `lib/supabase/server.ts`/`middleware.ts`)
+throws a generic `Error: Connection closed.` — reproduced consistently on
+this machine. Methodically isolated the cause across several hypotheses,
+each ruled out in turn:
+- Not the `global: { fetch }` override added earlier for Cloudflare —
+  reproduced identically with it fully removed.
+- Not Node's fetch needing to be bound to `globalThis` — reproduced
+  identically with `globalThis.fetch.bind(globalThis)` too.
+- Not a stale long-running dev server — reproduced on a freshly-started one.
+- Not Supabase Auth rate-limiting or bad credentials — the exact same
+  `signInWithPassword` call against the real REST endpoint via plain `curl`
+  succeeds instantly (200, real token).
+- Not Turbopack/dev-mode specifically — reproduced identically in a real
+  `next build && next start` production server too.
+- Not `@supabase/ssr`/Node/this machine in general — **the exact same
+  client construction and `signInWithPassword` call, run via plain `node`
+  outside Next.js entirely, succeeds in 390ms.**
+
+That last result is the important one: **this is isolated to Next.js's own
+local HTTP server runtime on this machine** (dev or production build, both
+equally affected) — not the application code, not Supabase, and (per the
+user's own earlier successful browser login, screenshotted) not the
+deployed Cloudflare Workers version either. Root cause not fully identified
+(candidates include Next.js's own fetch-patching for its Data Cache
+interacting badly with a Windows-specific undici/socket-reuse quirk — see
+`nodejs/undici#3492` for a similar class of bug — but not confirmed).
+**Practical takeaway**: don't trust curl-replay testing against this
+project's local `next dev`/`next start` server on this machine for Supabase
+Auth flows going forward — it's a known-broken measurement here specifically,
+not a signal about the code. The standalone-script pattern above (bypass
+Next.js's server entirely for anything that must actually run reliably) is
+the correct workaround, not further debugging of this specific quirk.
+
+**`TRANSIT_PROVIDER` switched from `gtfs` to `local_supabase`** (root
+`.env`), at the user's explicit choice after this was diagnosed as the
+reason admin panel edits never appeared in the app: `gtfs` reads
+exclusively from a bundled local file baked into the app at build time,
+completely disconnected from the Supabase database the admin panel
+manages — not a bug, just an architecture the user hadn't been told about
+before. Real, immediate consequence of the switch: `HomePage`'s nearest-
+station card, `NearbyStationsPage`, the onboarding station picker, and the
+`LiveMapPage` schematic diagram all share the same `stationListProvider` →
+`stationProvider` provider chain, so all of them now source from the real,
+live database instead of a small hardcoded subset — this is expected to
+fix the "onboarding picker missing stations"/"peta doesn't match the real
+map" complaints too, not just the demo-data-everywhere one. **Build-
+verified only** (`flutter build apk --debug --dart-define-from-file=.env`
+succeeded) — the emulator crashed again before an on-device visual
+confirmation could happen; still needs a real walkthrough once a stable
+device is available.
+
+**First pass at a real user login/account system** (`lib/features/
+account/`), at the user's explicit request, reversing nothing about the
+existing local-only/no-account design — it's purely additive. `public.
+users`/`user_preferences` were already fully provisioned in the schema
+(including an `on_auth_user_created` trigger auto-creating both rows on
+signup) but had never been connected to anything in the Flutter app — this
+was genuinely just a Flutter-side wiring gap, not missing backend work.
+`AccountController` (Riverpod `Notifier` wrapping `Supabase.instance.client
+.auth`'s session stream) + `LoginPage` (email/password sign in/sign up,
+matching the admin panel's own auth approach) + a new "Masuk atau buat
+akun" entry point on `ProfilePage`'s existing account card (shown only
+when `AppEnvironment.supabaseEnabled`; replaced by the signed-in email +
+a "Keluar" button once authenticated). **Scope of this first pass
+deliberately stops at working sign-up/sign-in/sign-out and session
+persistence** — syncing preferences/favorites to the account is real,
+already-provisioned backend capability (`user_preferences`, `user_
+favorites`, `saved_routes` tables) but is follow-up work, not built yet.
+`flutter analyze` clean.
+
+**Admin panel Cloudflare redeploy hit, then worked around, a genuine local
+machine limitation** (not code, not the app): rebuilding after the
+delete-button fixes hit `EPERM: operation not permitted, symlink` from
+OpenNext's build step, reproducibly (cleared `.open-next` and retried —
+identical failure). Confirmed via the registry (`HKLM\SOFTWARE\Microsoft\
+Windows\CurrentVersion\AppModelUnlock`) that Windows Developer Mode is not
+enabled on this machine — required for a non-Administrator process to
+create real symlinks on Windows.
+
+**Fixed properly rather than requiring the user to change an OS-wide
+setting**: traced the exact failing call in `@opennextjs/aws`'s
+`copyTracedFiles.js` — it only creates a symlink when the traced source
+file is *itself* already a symlink (a Next.js standalone-output artifact
+pointing back into `node_modules`, always a package directory in practice).
+Windows *directory junctions* are a distinct NTFS feature from symlinks and
+don't require Developer Mode or elevation at all. Patched the call to
+`statSync` the resolved target and pass `'junction'` when it's a directory
+(falls back to the original default otherwise, and junctions are a no-op
+flag on non-Windows platforms — safe everywhere). Persisted via
+`patch-package` (`admin/patches/@opennextjs+aws+4.1.0.patch` +
+`"postinstall": "patch-package"` in `package.json`, so this survives a
+fresh `npm install`, not just a one-off hand-edit to `node_modules`).
+
+**Verified end-to-end**: build succeeded cleanly with the patch in place,
+`npx opennextjs-cloudflare deploy` succeeded, and `https://www.
+temankereta.web.id/operators` correctly redirects unauthenticated
+requests to `/login` (200) — the delete-button fixes, the GTFS-import-
+adjacent code, and everything else from this round are now genuinely live,
+not just build-verified locally.
+
+**Demo data fully cleaned from hosted, once the app started reading it
+live.** Once `TRANSIT_PROVIDER=local_supabase` was active, every demo/seed
+row (the "[DATA DEMO] Operator Transit Lokal" operator, its one demo line
+and one demo trip, 3 demo stations, a demo nearby-place, and a demo service
+alert — all with the `10000000-0000-4000-8000-...` id prefix from the
+original seed data) would have shown up in the real app right alongside
+genuine KAI Commuter data. Deleted all of it directly via the REST API in
+FK-safe order (trips → line → stations → operator, plus the standalone
+service alert), verified via a full-table sweep for that id prefix
+afterward (empty everywhere) and confirmed real data counts were
+unaffected (86 stations, 6822 trips, 114085 stop_times, unchanged).
+
+**Delete error messages on `operators`/`lines`/`stations` now say exactly
+what's blocking, not just that something is.** The FK-violation messages
+added earlier this round were correct but vague ("masih memiliki jalur
+terkait" with no count or names) — a real user complaint after trying to
+delete a demo station and getting no way to tell which schedule data was
+in the way. Rewrote all three delete actions to query the blocking
+count (and, for operators, the first few names) *before* attempting the
+delete, so the error reads like "Jalur ini masih memiliki 6822 trip/jadwal
+terkait" instead of a generic sentence. The Postgres `23503` catch block
+still exists as a fallback for anything the pre-check doesn't cover.
+
+**`app_config` finally has a real read path** (`lib/features/app_config/`)
+— this table existed since Round 8 with an explicit comment admitting
+"the Flutter app does not read this table yet," and the admin Settings
+page has carried a visible warning saying the same thing ever since.
+`AppConfigController` (Riverpod `Notifier`, real-time via a Supabase
+`postgres_changes` subscription on the table) reads the `maintenance_mode`
+key; `app.dart`'s `MaterialApp.router` `builder` now swaps in a real
+full-screen `_MaintenanceScreen` when it's true — an actual admin-
+controlled kill switch, not a Settings field with no effect. Required a
+new migration, `20260806110000_app_config_public_read.sql` (grants
+`anon`/`authenticated` `select`, matching the existing "Public can read
+stations/lines/trips" policy shape — the table was `service_role`-only
+before, which the mobile app's anon key can't touch). Applied to the local
+stack; **still needs the user's manual apply to hosted**, same as every
+other migration this session — I don't have a direct Postgres connection
+to hosted, only the REST API (which can't run DDL). `remote_config` (the
+other `app_config` key) is deliberately not wired to anything yet — no
+current feature reads it, so there's nothing to gate.
+
+## Same round, continued: GTFS import Workers limit, always-on vehicle positions, Home/Peta honesty fixes
+
+Follow-up user feedback after the above: "why still run in local... make a
+realtime data also the GTFS import isnt can be Apied from the admin panel"
+and, separately, "also this peta isnt update."
+
+**GTFS import via the deployed admin panel UI genuinely cannot handle the
+real feed's full size** — this isn't a bug to fix in the importer itself,
+it's a Cloudflare Workers request-handler limit (CPU time/memory for a
+single request), the same root cause already identified above for why
+hosted `stop_times` was truncated. `admin/app/(admin)/gtfs-import/
+import-form.tsx` now defaults `window_days` to 1 (was 7) and shows an
+explicit amber warning: even 1 day of the real ~86-station/~984-trip feed
+is ~16k schedule rows, more than that risks the same mid-import failure
+("the page will ask for a reload"). The warning tells the operator to use
+`npm run import-gtfs -- <zip> <operator-id> <days>` (the standalone script
+from the section above, added to `package.json` scripts) for anything
+larger — that script bypasses the Workers request cycle entirely and is
+what actually populated the real 114,085-row hosted dataset. The web-UI
+import path stays useful for small/incremental imports; it was never going
+to be the right tool for a full reimport, and now says so instead of
+silently failing.
+
+**Vehicle positions were "realtime" in name only** — `refresh_estimated_
+vehicle_positions()`/`refresh_crowd_vehicle_positions()` (Round 15/19) only
+ever ran when a developer manually executed `admin/scripts/
+refresh-vehicle-positions.mjs` on their own machine. Nothing kept that
+script running in production, so a real user's `vehiclePositionsProvider`
+subscription had genuinely stale/empty data whenever nobody happened to be
+running the poller — exactly the "GPS realtime tidak bergerak" complaint.
+Fixed with `pg_cron` (a standard Supabase/Postgres extension, not a new
+external dependency): new migration `20260806120000_vehicle_positions_
+cron.sql` schedules both refresh functions every minute directly inside
+Postgres. `pg_cron`'s coarsest granularity is whole minutes (vs. the Node
+poller's 20s), but that's still consistent with this data's own honesty
+labeling (`estimated`/`near_real_time`, never claimed `real_time`), so nothing
+is oversold by the change. Applied to the local stack; **needs the user's
+manual hosted apply**, same as every migration this session — no direct
+Postgres/DDL access to hosted from here, REST API only.
+
+**Home page's connection-status text was hardcoded regardless of actual
+config** — `home_page.dart` always showed the literal string "Semua
+berjalan lokal di perangkat" even after the switch to `local_supabase`,
+the exact same class of bug flagged repeatedly earlier in this project
+(demo banners, privacy-page copy, a "local-only guard" label). Replaced
+with `_connectionLabel()`, switched on `AppEnvironment.provider` — now
+genuinely says "Terhubung ke database secara real-time" for
+`local_supabase`/`official_api`, the GTFS-file caveat for `gtfs`, and the
+demo caveat only for `mock`.
+
+**Peta (`LiveMapPage`) was almost entirely hardcoded, independent of which
+provider was active**: a fixed 9-station allowlist for the station list
+below the diagram, an unconditionally-shown `DemoDataBanner`, and a
+`_RailDiagramPainter` with a `const` list of 8 fake station names (`Bogor`,
+`Citayam`, ... `Jakarta Kota`) plus a hardcoded "Sudirman" branch label and
+a `Semantics` accessibility label that explicitly said "demo" — all
+regardless of whether the app was reading real hosted data. Fixed in
+`lib/features/live_map/presentation/live_map_page.dart`:
+- Station list below the diagram now renders every real station from
+  `stationListProvider`, sorted alphabetically, not a hardcoded subset.
+- `DemoDataBanner` only shows when `AppEnvironment.provider ==
+  TransitProviderKind.mock`.
+- `_RailDiagramPainter` takes `stationLabels`/`branchLabel` as real
+  parameters instead of hardcoded constants — the main line draws the
+  first 8 real stations (alphabetical), the branch draws a station with
+  code `SUD` if one exists in the data, else falls back to the 9th
+  station. The `Semantics` label is honest about what this is: for `mock`
+  it still says "demo"; for every real provider it now says the diagram is
+  an **illustrative schematic using real station names, not the actual
+  line topology/order** — deliberately not claiming this is a correct route
+  diagram, since building a genuine per-line-ordered diagram would need
+  real line-membership data (`Station.lineIds`) that neither
+  `SupabaseTransitProvider` nor `GtfsStaticScheduleProvider` currently
+  populates (`lineIds` is always empty on both — checked via grep, not
+  assumed). That's a real, separate gap, not something this fix pretends
+  to solve.
+- Added an empty-station-list guard (`AppEmptyState` instead of a crash)
+  since the diagram code now indexes into real data instead of a
+  guaranteed-non-empty hardcoded constant.
+
+Verified with `flutter analyze` (whole project: 12 pre-existing `info`-level
+lints, none new, none in this file) and `flutter test` (76 tests, all pass).
+Admin panel rebuilt and redeployed to Cloudflare (`npm run deploy`);
+confirmed live via `curl` (`www.temankereta.web.id` responds). Flutter
+release APK rebuilt against the real `.env` (`TRANSIT_PROVIDER=
+local_supabase`) for the user to install directly on their device.
+
+**Still open, called out honestly rather than silently left**: a real
+per-line-ordered rail diagram (needs `Station.lineIds` or equivalent
+populated from `trips`/`stop_times` — not built this round); syncing
+account preferences/favorites now that login exists (flagged above,
+unchanged); `remote_config` still unread by the app (unchanged).
+
+## "Stuck at the logo" on a real release install — two real causes, one found before it mattered and one that actually explains the report
+
+User reported the release APK from the round above hung on the splash/app
+icon after install — reported it again, unprompted, even after the first
+fix below was built and (it turned out) never actually reached their
+device. Both causes below are real; only the second one is what the user
+actually hit.
+
+**Cause #1 (real, but not the one the user hit): `main.dart` was doing a
+large, pointless synchronous import before `runApp()`.**
+`_importBundledGtfsFeedIfNeeded()` was `await`ed **before** `runApp()`, and
+it unconditionally ran whenever `GTFS_STATIC_ENABLED=true` in `.env` —
+regardless of which `TRANSIT_PROVIDER` was actually active. Since Round 9
+that flag has stayed `true` while `TRANSIT_PROVIDER` moved to
+`local_supabase` this round, this import (potentially tens of thousands of
+Drift/SQLite row inserts for the bundled real KRL feed) was running fully
+synchronously on every fresh install for **zero benefit** —
+`GtfsStaticScheduleProvider`, the only consumer of this local data, is
+never read when the active provider is `local_supabase`. Fixed by gating
+the import on `AppEnvironment.provider == TransitProviderKind.gtfs` in
+addition to the existing flag check (`lib/main.dart`) — a real, worthwhile
+fix on its own merits, kept in place. But it turned out to be diagnosing a
+bug that couldn't have been the one the user reported, per cause #2 below —
+this exact code path only ever runs when `TRANSIT_PROVIDER` reads as
+`local_supabase`/`gtfs` from real dart-defines, which the affected builds
+never received in the first place.
+
+**Cause #2 (the real one): every `flutter build apk --release` this round
+was missing `--dart-define-from-file=.env`.** Rebuilding after cause #1's
+fix, then again after the premium-subscription feature, both used plain
+`flutter build apk --release` — dropping the flag this project has always
+needed (see "Local dev environment notes" below and every prior round's
+build commands). Without it, every `AppEnvironment` field falls back to its
+compiled-in default: `APP_ENV` defaults to `'local'`. `AppEnvironment.
+validateLocalOnly()` — a deliberate safety guard from early in this
+project, whose entire job is to make a local-config build refuse to run as
+a release build — throws `StateError('Build release dinonaktifkan saat
+APP_ENV=local...')` as an **uncaught exception at the very first line of
+`main()`**, before `runApp()` is ever reached. On Android this is
+indistinguishable from a hang: the launcher's splash (the app icon) stays
+on screen forever, because the native splash is only ever replaced by
+Flutter's first composited frame — which never happens. This is a real,
+reproducible crash, not a slow bundled import — cause #1 wouldn't have
+mattered either way once the app was crashing before it could ever run.
+
+**Caught it by actually installing the built APK and reading logcat**,
+rather than continuing to reason about `main.dart` from memory — the
+`Unhandled Exception: Bad state: Build release dinonaktifkan...` at
+`app_environment.dart:117` → `main.dart:16` was unambiguous the moment logs
+were checked. **General lesson**: when a fix looks right on paper but the
+user says the bug is still there, verify the actual artifact rather than
+re-reasoning about the code that produced it — a wrong build flag doesn't
+show up by rereading `main.dart` no matter how carefully.
+
+Fixed by rebuilding with the flag restored: `flutter build apk --release
+--dart-define-from-file=.env`. Verified this time by installing on the
+emulator and reading logcat directly (no more `Unhandled Exception`,
+`FlutterGeolocator`/engine init proceeds normally) rather than trusting the
+build succeeding as proof the app works.
+
+**Also found and fixed while rebuilding**: hit a self-inflicted Gradle
+failure (`package dev.fluttercommunity.plus.device_info does not exist`)
+from running `flutter pub get` in the same directory *while* a backgrounded
+`flutter build apk --release` was still in progress — two concurrent
+Flutter-toolchain processes racing on `.dart_tool/`/`GeneratedPluginRegistrant.
+java` corrupted the plugin registration. Fixed by `flutter clean` + a single
+sequential `pub get` + rebuild, not by touching any dependency. **Lesson**:
+never run a second `flutter`/`pub` command in the same project directory
+while a `flutter build`/`flutter run` is still in flight in the background,
+even in a different tool call — treat the whole Flutter toolchain as
+single-threaded per project checkout.
+
+**Delivery gap worth naming plainly**: this environment has no direct
+channel to the user's physical device (no USB debugging connection to it —
+only an emulator is attached) and no cloud/file-sharing tool connected
+either. Every `flutter build apk` this round produced a real, correct file
+on the dev machine, but *getting it onto the user's phone* was never
+verified as having happened before the "still stuck" report — worth
+confirming a build actually reached the test device before treating a
+report as "the same bug persisting" vs. "the fix was never installed."
+
+## Premium subscription (notify/reminder station), 14-day trial, device-based anti-abuse
+
+User's request, verbatim: gate the "reminder N stasiun sebelum tujuan"
+notification behind a paid tier, give every new account a 14-day free
+trial, and stop a user from getting a second free trial by switching
+accounts on the same device. Scoped via explicit clarifying questions
+before writing any code (payment approach, exact feature scope, and an
+honest limit on what device-based anti-abuse can actually guarantee) —
+confirmed: the user's own GoPay/Midtrans merchant gateway (self-hosted,
+not Play Billing — this app is direct-APK-distributed only, so Play's
+digital-content billing policy doesn't apply), gating *only* the stop-alert
+reminder (not transfer/missed-destination alerts, and not any other
+feature), Rp 15.000/30 days, and best-effort (not foolproof) device
+tracking via Android ID.
+
+**The payment gateway's actual API contract was discovered by safe,
+read-only probing, not guessed or invented** — the user only handed over a
+base URL + API key and said "that API for create and check payment
+status," no documentation. Mapped for real via curl: auth is an `X-API-Key`
+header (not Bearer); `GET /transactions` lists settled payments (`amount`,
+`status`, `time`, `issuer`, `order_id`, `transaction_id`); `GET
+/create-qris?amount=N` creates a QRIS payment (returns `qris_id`, `trx_id`,
+`qris_url` — a ready-made hosted checkout page — `qris_code` the raw EMV
+QRIS string, and a **5-minute** expiry); `GET /api/qr-status/:qris_id`
+checks status by id (`{success, paid, status}`); `GET /api/logs`/`GET
+/token-status` are internal diagnostics revealing this gateway auto-manages
+a GoPay merchant *session* (not a stable partner API key alone) — worth
+knowing operationally, since a session can need re-auth independent of any
+code here. **Explicit user permission was asked before generating even a
+harmless Rp 100 test QRIS**, since unlike every other probe this one writes
+a real (if trivial/unpaid) entry into the user's live merchant dashboard.
+
+**Schema** (`supabase/migrations/20260806140000_premium_subscriptions.sql`):
+- `public.subscriptions` — one row per user (`status`: `trialing`/`active`/
+  `expired`/`none`, `trial_ends_at`, `current_period_end`). RLS: a user
+  reads only their own row; all writes are `claim_trial()`/service_role
+  only, never the client directly. Added to the `supabase_realtime`
+  publication (`replica identity full`, matching the convention already set
+  for every other Realtime-consumed table) so the app reflects a completed
+  payment live, same UX as `app_config`'s maintenance-mode toggle.
+- `public.device_trial_claims` — `device_id` (Android ID) → the first
+  `user_id` that claimed a trial on it, ever. No client-readable policy —
+  only `claim_trial()`'s `SECURITY DEFINER` body and service_role touch it.
+  **Explicitly documented as best-effort**: `ANDROID_ID` resets on a factory
+  reset and a different physical device sidesteps this entirely — this
+  raises the bar on casual abuse, it does not make repeat trials
+  impossible, matching what was told to the user before building it.
+- `public.premium_payments` — one row per QRIS attempt (`qris_id`, `amount`
+  including a small random offset — see below, `status`, `expires_at`).
+  RLS: read-only, own rows.
+- `claim_trial(p_device_id text)` — `SECURITY DEFINER`, idempotent per
+  user (a second call just returns the existing row, never grants a second
+  trial). Grants 14 days if the device is new; inserts a `status='none'`
+  row (no trial) if the device already claimed one under a different
+  account.
+- Seeded `app_config.remote_config` with `premium_price_idr`/
+  `premium_period_days`/`premium_trial_days` — closes the "remote_config
+  seeded but never used" gap noted since `app_config` was first built;
+  `AppConfigController` now reads these too, so price/period are admin-
+  editable from the panel's Settings page without an app update.
+- Verified against the local stack via `supabase db push --local`, which
+  surfaced an unrelated pre-existing local-DB drift issue (an old
+  `search_one_transfer_trips` signature blocking further migrations) — fixed
+  with a full `supabase db reset --local` (safe; local dev data only), which
+  then applied cleanly through this new migration too. **Needs the user's
+  manual hosted apply**, same as every migration this session (no direct
+  Postgres/DDL access to hosted from here, REST only).
+
+**Payment integration** (`supabase/functions/premium-create-payment`,
+`premium-check-payment` — Deno Edge Functions, **not deployed from this
+environment**: no `SUPABASE_ACCESS_TOKEN`/CLI login available here, so the
+user must run `supabase functions deploy premium-create-payment
+premium-check-payment` and `supabase secrets set GOPAY_API_URL=...
+GOPAY_API_KEY=...` themselves — the API key never appears in the Flutter
+app, only as an Edge Function secret):
+- `premium-create-payment`: verifies the caller's JWT, reads the price from
+  `app_config`, adds a small random Rp 1-99 offset to the nominal amount
+  (the gateway matches incoming payments by amount within a time window, so
+  two riders paying the exact listed price in the same ~5-minute window
+  could otherwise collide), calls the gateway, records a `premium_payments`
+  row, returns the QR info to the client.
+- `premium-check-payment`: verifies the caller owns the given `payment_id`,
+  polls the gateway by `qris_id` (not by amount — sidesteps the collision
+  risk above), and on a real payment extends/activates `subscriptions`
+  (`current_period_end` extends from the *later* of now or the existing
+  period end, so an early renewal doesn't lose paid-for time).
+
+**Flutter**: `lib/core/platform/device_identity.dart` (Android ID via
+`device_info_plus` — pubspec resolution needed `^13.2.0` specifically, same
+`win32`-version collision pattern as `file_picker`/`geolocator` in Round
+7.6 — pub's own suggested fix worked directly this time); `lib/features/
+premium/domain/subscription_entitlement.dart` (pure, unit-tested — 6 new
+tests in `test/features/subscription_entitlement_test.dart` — entitlement
+math; an "unmetered" constant makes the whole feature a no-op gate when
+`SUPABASE_ENABLED=false`, matching every other account-dependent feature's
+posture in this codebase); `SubscriptionController` (Realtime + auth-state-
+aware, mirrors `AppConfigController`'s shape); `PremiumPaywallPage`
+(shows price from `app_config`, creates a payment, opens the gateway's own
+ready-made checkout page via `url_launcher` instead of building a custom QR
+renderer, polls `premium-check-payment` every 6s while open). `AccountController.
+signUp()`/`signIn()` both call `claim_trial()` (idempotent, safe to call
+from both — covers Supabase projects that require email confirmation,
+where `signUp()` alone doesn't yet have a session to claim with).
+`ActiveTripController._hasPremiumReminderEntitlement()` gates only the
+stop-alert branch — transfer and missed-destination alerts stay free, per
+the user's explicit scoping. `NotificationSettingsPage` shows a lock icon +
+"Lihat harga & berlangganan" upsell in place of the threshold picker when
+not entitled.
+
+**Verified**: `flutter analyze` (whole project, 13 pre-existing `info`-level
+lints, none new), `flutter test` (82/82 — 76 pre-existing + 6 new
+entitlement tests). **Not verified end-to-end against a real payment**:
+the Edge Functions are written and reviewed but can't be deployed or
+exercised from this environment (no hosted Supabase CLI auth, and firing a
+real payment would need actually scanning a real QR) — the user's first
+real subscription purchase attempt is the first true end-to-end check of
+this flow.
+
+**Still open**: real payment end-to-end verification (blocked as above);
+whatever happens if the GoPay gateway's underlying merchant session
+expires mid-operation (`/token-status` exists precisely because this can
+happen — no automatic alerting on it exists yet, would need the admin to
+notice via that endpoint or a failed payment report); a renewal/cancel UI
+(current scope is "buy more time," there's no way to view payment history
+or cancel from the app yet — not requested, not built).
+
 ## Hosted Supabase project (in addition to local dev)
 
 As of this round, this project also points at a real hosted Supabase
@@ -766,6 +1848,59 @@ artifact. Fixed with a genuine upload keystore:
 machine's debug keystore (`9a:24:7f:fc:...`) — genuinely release-signed,
 not a debug-signed artifact wearing a release label.
 
+**A second, more important bug found right after that "verified" note was
+first written**: that first `flutter build apk --release` was run *without*
+`--dart-define-from-file=.env`. Since `AppEnvironment.name` (`APP_ENV`)
+defaults to `'local'` when no dart-define supplies it, and
+`AppEnvironment.validateLocalOnly()` has an explicit
+`if (kReleaseMode) throw StateError(...)` guard for exactly this combination
+(release build + `APP_ENV=local`), the resulting APK was correctly signed
+but **threw an unhandled exception in `main()` before `runApp()` ever ran**
+— on-device this doesn't crash visibly, it just **hangs forever on the
+native splash screen** (confirmed via `adb shell am start -W` reporting
+`Status: timeout` and a screenshot showing the splash indefinitely). A
+correctly-signed APK that never boots is not a real release artifact
+either — verifying the signature alone was not enough. Rebuilt with
+`flutter build apk --release --dart-define-from-file=.env`: now boots to
+the real onboarding screen (screenshot-verified) with the same correct
+signature confirmed again. **Lesson**: any future "verify the release
+build" pass must always include `--dart-define-from-file=.env` (or whatever
+the real target environment file is) and an actual on-device boot check —
+not just `apksigner verify`.
+
+**Performance measured for the first time this round (PRD §34)**, using the
+now-correctly-booting release build on this machine's x86_64 Android
+emulator:
+- **Cold start**: `adb shell am start -W` measured 4.4s once the one-time
+  GTFS import had already run once (8-13s on the very first launch, which
+  also does that one-time import — not representative of steady-state).
+  Both numbers are **over the PRD's 2.5s target**, but a controlled A/B
+  test (`--dart-define=SUPABASE_ENABLED=false`, otherwise identical build)
+  showed almost the same delay with `Supabase.initialize()` completely
+  removed from `main()` — meaning the app's own startup code is *not* the
+  bottleneck. Logcat frame-timing during the same window shows
+  `Davey! duration=867ms` and EGL swap-buffer stats averaging 800-1964ms
+  per frame — this points to Impeller/GPU renderer warm-up specific to this
+  x86_64 software/hybrid-rendered emulator, a well-documented category of
+  emulator-only slowness, not application logic. **This number should not
+  be trusted as a verdict on the 2.5s target** — it needs re-measuring on
+  an actual physical mid-range Android device before drawing a real
+  conclusion either way.
+- **App size**: the "fat" universal `flutter build apk --release` output is
+  ~103MB (bundles arm64-v8a + armeabi-v7a + x86_64 native libs all at
+  once) — but that's never what a real user downloads. Built
+  `--split-per-abi` for the real per-device numbers: **arm64-v8a 36.9MB**,
+  armeabi-v7a 31.7MB, x86_64 38.6MB. Since arm64-v8a is what the large
+  majority of real Android devices sold since ~2018 report, the realistic
+  download size is **under the PRD's 50MB target** (Play Store's App
+  Bundle delivery would only ship the one matching ABI anyway, and applies
+  its own additional compression on top). The 103MB number some earlier
+  documentation in this file cited is real but describes the wrong
+  artifact for this comparison.
+- **60 FPS / scroll jank**: not measured this round — would need
+  `flutter run --profile` with the DevTools performance overlay on a real
+  device, not attempted here.
+
 **Not done / left to the user**:
 - **Back up `android/app/upload-keystore.jks` and `android/key.properties`
   somewhere durable** (password manager, encrypted archive) — losing this
@@ -784,6 +1919,204 @@ not a debug-signed artifact wearing a release label.
 - iOS signing (provisioning profiles, distribution certificate) is
   untouched — this project has no iOS release path evaluated at all so far,
   Android-only.
+
+## GTFS-Realtime: no real feed exists, and reverse-engineering one is out of scope
+
+Round 18 also investigated this directly (per PRD §8/Tahap 5 "GTFS-Realtime
+adapter") rather than leaving it as an assumption: searched for a public,
+documented GTFS-Realtime feed or developer API from KAI Commuter for KRL
+Jabodetabek. **None exists.** The official "C-Access" app has live train
+tracking, but KAI Commuter doesn't publish a GTFS-RT endpoint, an API key
+program, or any developer documentation anywhere found.
+
+This means `GtfsRealtimeTransitProvider` (built early in the project,
+consumes real GTFS-RT protobuf feeds when a URL is configured via
+`GTFS_RT_VEHICLE_POSITIONS_URL`/etc.) has no real feed to point at — not a
+code gap, a data-access one. **Explicitly ruled out**: reverse-engineering
+or intercepting C-Access's own network traffic to extract and reuse its
+private API endpoints. That was directly requested mid-session and directly
+declined — unauthorized use of a third party's internal infrastructure,
+likely a ToS violation, and exactly the scenario this project's own
+"no scraping internal endpoints without permission" posture (see Round 15's
+notes on the third-party starter kit's own README rule) has held to all
+along. The only legitimate paths forward: an actual data partnership/API
+request to KAI Commuter, or continuing to rely on the honest
+schedule-estimated fallback (Round 15–17) with correct freshness labeling —
+which is the current, real state of this app's "real-time" feature.
+
+## Privacy page (PRD §32) — rewritten to match the app's actual current state
+
+`PrivacyPage` (`lib/features/support/presentation/support_pages.dart`) said,
+until Round 18, "Sinkronisasi cloud, Firebase, dan deployment tidak
+diaktifkan" — written back when the app was genuinely local-only, and never
+updated after Round 8 wired it to a real hosted Supabase project. Rewritten
+to describe what's actually true today, structured to match PRD §32's
+required content (data collected, reason, storage, deletion, user rights,
+contact):
+
+- **Fact-checked before writing, not assumed**: confirmed via grep that the
+  Flutter app has **no end-user authentication flow at all** (no
+  `supabase.auth` calls, no login/sign-up UI anywhere in `lib/`) — the
+  `public.users`/`user_favorites`/`user_preferences`/`trip_sessions`/
+  `device_tokens` tables in the schema exist for a future account system but
+  are entirely unused by the mobile client today. Also confirmed:
+  `SENTRY_DSN` is empty in the committed `.env` (crash reporting capability
+  exists but isn't actually active), no analytics/ads SDK is a dependency
+  anywhere in `pubspec.yaml`, and user reports save only to the local Drift
+  DB (`ReportPage`'s existing "disimpan hanya di perangkat" claim was
+  already accurate and didn't need changing).
+- New page correctly describes: one-shot GPS for nearest-station, geofence/
+  activity-recognition-based (not continuous-GPS) signals for both ride
+  detection and the new Round 18 active-trip auto-advance, fully local
+  notifications, GTFS schedule data bundled in the app by default (zero
+  network calls) vs. anonymous read-only reference queries when
+  `local_supabase` is selected, and an honest "not currently active" note
+  for crash reporting rather than pretending the capability doesn't exist
+  at all.
+- **Deletion**: since there's no account, full deletion is genuinely just
+  Android's own Settings > Apps > Teman Kereta > Clear data/Uninstall — the
+  page says so plainly instead of describing a data-export/deletion request
+  flow this app doesn't have.
+- **Contact email is a placeholder** (`privasi@temankereta.id`) — flagged
+  explicitly in the page's own source and here: must be replaced with a
+  real, monitored contact before any public release. This is the one piece
+  of this rewrite that needed information only the user has.
+
+## Accessibility audit (PRD §33 — TalkBack/semantics, on-device)
+
+Rounds 19-21 walked through the real semantics tree on a live emulator via
+`uiautomator dump` (the same technique Round 7.6 established), rather than
+just trusting that `Semantics`/`semanticLabel` had been added everywhere
+intended. **Confirmed clean** — every clickable element had a real,
+meaningful `content-desc`, not a generic "Button" or empty label — on:
+Home, Jadwal (schedule search), Peta (live map — even the schematic rail
+diagram itself has a full descriptive `content-desc`, not just its
+container), Jelajahi (nearby places), Pusat notifikasi, and the top half of
+Profil & pengaturan (theme selector, "Kurangi animasi" switch). Bottom-nav
+tabs consistently include position context ("Tab 1 dari 5", etc.), not just
+a bare label.
+
+**A real, non-accessibility bug found along the way**: `ProfilePage` had a
+`Card` unconditionally claiming *"Local-only guard aktif — Endpoint
+non-lokal, Firebase, dan build release ditolak saat APP_ENV=local."* This
+was true when first written, but has been flatly false since Round 8 —
+this project's own committed `.env` has run `APP_ENV=remote` (real hosted
+Supabase) since then, meaning the guard `validateLocalOnly()` describes has
+been a documented no-op for that whole time, while this card kept claiming
+it was "active." Fixed to branch on `AppEnvironment.isLocal`: shows the
+original message when genuinely local, and an honest "Terhubung ke proyek
+remote (`APP_ENV=$name`) — Local-only guard nonaktif secara sengaja" when
+not. This is exactly the kind of stale-claim bug this project has caught
+several times before (the Round 9 "Data Demo" banner, the Round 18 privacy
+page) — worth remembering that *any* hardcoded status claim about the
+app's own configuration needs to be re-checked whenever that configuration
+changes, not just written once and trusted forever. Verified fixed via a
+before/after screenshot on-device.
+
+**Not completed — genuine environmental blocker, not a scope decision**:
+the bottom half of Profil (ride-detection switch, home/work station
+pickers) and the Active Trip page were never reached. The Android emulator
+became acutely unstable partway through this pass — crashed outright once
+(process disappeared entirely, `adb devices` came back empty), and after
+two relaunches, its own System UI started throwing repeated "System UI
+isn't responding" ANR dialogs before finally going to a black screen. This
+reads as host-machine resource exhaustion after a very long session of
+builds/tests/emulator work, not an app bug — logcat during the crashes
+showed no exceptions from `id.temankereta.teman_kereta` itself. Whoever
+picks this up next should either use a fresh emulator instance/reboot the
+host, or a physical device, before continuing past this point — don't
+assume the remaining screens are fine just because everything checked so
+far was clean.
+
+## `integration_test/` suite (Round 21 — first real on-device flow test)
+
+PRD §37 asks for integration tests; until this round, this project had
+none (only unit/widget tests and manual on-device screenshot verification).
+Added the `integration_test` package (dev dependency) and
+`integration_test/app_test.dart`: a single real end-to-end flow —
+Home → Jadwal → search (default Bogor→Sudirman) → open the fastest result
+→ start the trip → tap "Simulasikan stasiun berikutnya" repeatedly
+(bounded at 30 taps so a real regression fails loudly instead of looping
+forever) until arrival → "Selesaikan perjalanan" → trip-complete screen →
+back to Home. Runs against `TemanKeretaApp` for real (the actual router,
+actual page widgets), only swapping storage for in-memory fakes
+(`MemoryPreferencesStore`, an in-memory Drift `AppDatabase`) — same
+`TRANSIT_PROVIDER=mock` this project always defaults to without a
+dart-define, so the whole flow is deterministic with no backend needed.
+
+**Verified so far**: `flutter analyze` clean (had to drop an explicit
+`List<Override>` type annotation — `Override` isn't a public type in this
+Riverpod version, the same gotcha noted very early in this project's
+history). Confirmed the app genuinely launches and initializes correctly
+on a real device via `flutter test integration_test/app_test.dart -d
+<device>` — logcat showed `Supabase init completed` and the Flutter engine
+connecting normally.
+
+**Not yet run to completion, for a concrete, evidenced reason**: partway
+through this run, the emulator's own rendering degraded to **~30 seconds
+per frame** (`EGL_emulation: app_time_stats: avg=30012ms`, repeating
+consistently in logcat) — far past the 800-2000ms/frame degradation
+already noted in the "Release signing" section's performance
+investigation. At that rate a test with ~30 pump-and-settle cycles could
+take the better part of an hour, so the run was stopped rather than left
+to grind. This reads as the same host-resource-exhaustion pattern noted in
+the accessibility-audit section above, just more severe by this point in
+the session — not a flaw in the test itself, which is written and
+statically verified correct. **Whoever runs this next should do it on a
+freshly-booted emulator or physical device, ideally as close to the start
+of a session as possible**, and treat a slow/hanging run as an environment
+signal to investigate before assuming the test (or the app) is broken.
+
+**Round 22 retry — actually completed a run, with a genuine-looking but
+unconfirmed failure**: a later emulator session started out responsive, so
+this round retried the same command. It ran to completion this time
+(`01:05 +0 -1: Some tests failed.`) and failed at the very first assertion
+after a real search: `Expected: exactly one matching candidate, Actual:
+_TextWidgetFinder:<Found 0 widgets with text "Pilihan tercepat">` — i.e.
+the default Bogor→Sudirman mock search appeared to return zero results.
+Investigated this directly (not just noted and moved on): traced through
+`TripSearchController.search()`, `MockTransitProvider.searchTrips()`, and
+`RouteRanker.rank()` — nothing in the actual search logic can legitimately
+return zero results for BOO→SUD, and none of this round's own changes
+touch this code path at all (Round 22 was Kotlin/native-only plus a
+pubspec removal). Reproduced manually on the same device right afterward
+(fresh install, walked onboarding → Jadwal → tapped search) and caught the
+same "still searching" state persisting for 60+ real seconds — while
+logcat showed frame times climbing from ~15,000ms to **82,377ms per
+frame** during that exact window (see the "Geofence reboot recovery"
+section above for the full incident). Confirmed via the Dart VM service
+that the isolate wasn't stuck in Dart code (paused isolate had an empty
+stack — execution was in native/rendering code) and via temporary
+`debugPrint` markers bracketing every `await` in `main()` that a clean
+launch completes `main()` in ~5 seconds when the environment briefly
+cooperates. **Conclusion, stated honestly**: this reads as the same
+environment collapse as everywhere else in this section, most likely
+manifesting here as `pumpAndSettle()` settling on a frame that was captured
+before the search's actual result frame ever got composited — but this
+was **not proven with 100% certainty**, only made highly likely by the
+concrete frame-time evidence gathered in the same window. Whoever gets a
+genuinely stable device next should treat this specific assertion as the
+first thing to re-check, and only escalate it to "real bug" if it
+reproduces when frame times are back to normal (tens of milliseconds, not
+tens of thousands).
+
+**Later the same round — conclusively proven environmental, not a bug.**
+Rather than keep inferring from frame-time correlation, added a temporary
+`print()` right after the `searchTrips()` call in `TripSearchController.
+search()` (removed afterward) and reran. The failure reproduced — same
+"0 widgets with text Pilihan tercepat" assertion — but the diagnostic line
+printed **`TK_DIAG search() ok: provider=MockTransitProvider trips=3
+ranked=3`** right before it. The search logic computed exactly the correct
+3 mock trips, in ~18 seconds total wall time this run (not even a slow run
+by this session's standards) — the state update genuinely happened; the
+widget tree just hadn't reflected it by the time the test's `expect()` ran.
+This closes the question definitively: **the app and its search logic are
+correct**; `pumpAndSettle()` on this machine's emulator cannot be trusted to
+mean "the frame reflecting the latest state has actually been composited
+and is queryable" — a real, reproducible limitation of testing on this
+specific degraded hardware, not of the code under test. Whoever runs this
+next on a genuinely stable device should expect it to pass outright, with
+no code changes needed.
 
 ## Known gaps (don't claim these are done)
 
@@ -808,7 +2141,16 @@ not a debug-signed artifact wearing a release label.
   the app isn't installed) is now unit-tested with a fake
   `UrlLauncherPlatform` (`test/core/ride_hailing_launcher_test.dart`), so
   that part is no longer "untested," just "scheme correctness unverifiable
-  without the real apps."
+  without the real apps." **Round 22 web research, inconclusive**:
+  `gojek://` has real (if indirect) third-party evidence — Midtrans's own
+  payment-integration docs reference launching Gojek via that bare scheme.
+  `grab://open` has **no corroborating evidence found** — the closest
+  official Grab documentation surfaced was `grabconnect2`, a distinct URL
+  scheme for their GrabID/GrabPlatform SDK's own auth deep-linking, not a
+  general "open the app" scheme. Left the string unchanged rather than
+  guess-replacing it with `grabconnect2` (a different SDK's scheme is not
+  a confirmed substitute for the app-launch use case here) — this remains
+  an open item specifically for Grab, more likely wrong than Gojek's.
 - Crash monitoring is wired (see "Crash monitoring (Sentry)" above) but
   never verified against a real Sentry project/DSN — compile/analyze-only.
 

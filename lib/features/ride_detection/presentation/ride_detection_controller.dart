@@ -46,27 +46,10 @@ class RideDetectionController extends Notifier<RideDetectionPhase?> {
       return false;
     }
 
-    final stationIds = _candidateStationIds();
-    if (stationIds.isNotEmpty) {
-      final stations = await ref.read(stationProvider).getStations();
-      final geofenceStations = stations
-          .where((station) => stationIds.contains(station.id))
-          .map(
-            (station) => <String, Object?>{
-              'stationId': station.id,
-              'latitude': station.latitude,
-              'longitude': station.longitude,
-            },
-          )
-          .toList(growable: false);
-      if (geofenceStations.isNotEmpty) {
-        await native.registerStationGeofences(geofenceStations);
-      }
-    }
-
     await ref
         .read(settingsControllerProvider.notifier)
         .setRideDetectionEnabled(true);
+    await reregisterSavedStationGeofences();
     state = const RideDetectionPhase(state: ActiveTripState.idle);
     return true;
   }
@@ -79,6 +62,38 @@ class RideDetectionController extends Notifier<RideDetectionPhase?> {
         .read(settingsControllerProvider.notifier)
         .setRideDetectionEnabled(false);
     state = null;
+  }
+
+  /// Re-registers the saved home/work/favorite station geofences, a no-op
+  /// if the setting is off. Native geofence registration always *replaces*
+  /// the whole scope (see `StationGeofenceManager`'s doc comment), so an
+  /// active trip taking over the scope for its own route stations means
+  /// this has to be called again once that trip ends, or ride detection
+  /// would silently end up with no geofences at all — see
+  /// `ActiveTripController._releaseRouteGeofences`.
+  Future<void> reregisterSavedStationGeofences() async {
+    if (!ref.read(settingsControllerProvider).rideDetectionEnabled) {
+      return;
+    }
+    final stationIds = _candidateStationIds();
+    if (stationIds.isEmpty) {
+      return;
+    }
+    final stations = await ref.read(stationProvider).getStations();
+    final geofenceStations = stations
+        .where((station) => stationIds.contains(station.id))
+        .map(
+          (station) => <String, Object?>{
+            'stationId': station.id,
+            'latitude': station.latitude,
+            'longitude': station.longitude,
+          },
+        )
+        .toList(growable: false);
+    if (geofenceStations.isEmpty) {
+      return;
+    }
+    await ref.read(nativeTripServiceProvider).registerStationGeofences(geofenceStations);
   }
 
   Set<String> _candidateStationIds() {

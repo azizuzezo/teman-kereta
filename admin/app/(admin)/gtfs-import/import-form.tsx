@@ -58,15 +58,27 @@ export function GtfsImportForm({
           type="number"
           min={1}
           max={30}
-          defaultValue={7}
+          defaultValue={1}
           required
           className="w-24 rounded-md border border-black/15 bg-transparent px-2 py-1.5 text-sm dark:border-white/20"
         />
         <p className="text-xs text-black/50 dark:text-white/50">
           calendar.txt/calendar_dates.txt tidak berulang di skema ini —
           setiap hari yang dipilih menjadi baris trip nyata bertanggal.
-          Jumlah besar × banyak trip bisa menghasilkan banyak baris; mulai
-          kecil (mis. 7 hari) lalu naikkan bila perlu.
+          Jumlah besar × banyak trip bisa menghasilkan banyak baris.
+        </p>
+        <p className="text-xs font-medium text-amber-700 dark:text-amber-400">
+          Untuk feed KRL asli (≈86 stasiun, ≈984 trip), 1 hari saja
+          menghasilkan ±16 ribu baris jadwal — lebih dari itu berisiko
+          melebihi batas waktu/memori satu request Cloudflare Workers dan
+          gagal di tengah jalan (halaman ini akan minta reload). Untuk impor
+          lebih dari beberapa hari sekaligus, jalankan dari terminal:{" "}
+          <code className="rounded bg-black/5 px-1 dark:bg-white/10">
+            npm run import-gtfs -- &lt;path-zip&gt; &lt;operator-id&gt;{" "}
+            &lt;jumlah-hari&gt;
+          </code>{" "}
+          — skrip yang sama yang dipakai untuk mengisi data asli saat ini,
+          tidak terikat batas satu request web.
         </p>
       </div>
       <button

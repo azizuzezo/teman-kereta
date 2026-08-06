@@ -86,6 +86,10 @@ _TripLeg _$TripLegFromJson(Map<String, dynamic> json) => _TripLeg(
       const <String>[],
   walkingMeters: (json['walkingMeters'] as num?)?.toInt() ?? 0,
   transferInstruction: json['transferInstruction'] as String?,
+  externalTripId: json['externalTripId'] as String?,
+  serviceDate: json['serviceDate'] == null
+      ? null
+      : DateTime.parse(json['serviceDate'] as String),
 );
 
 Map<String, dynamic> _$TripLegToJson(_TripLeg instance) => <String, dynamic>{
@@ -100,6 +104,8 @@ Map<String, dynamic> _$TripLegToJson(_TripLeg instance) => <String, dynamic>{
   'stationIds': instance.stationIds,
   'walkingMeters': instance.walkingMeters,
   'transferInstruction': instance.transferInstruction,
+  'externalTripId': instance.externalTripId,
+  'serviceDate': instance.serviceDate?.toIso8601String(),
 };
 
 const _$TransportModeEnumMap = {

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../../app/config/app_environment.dart';
 import '../../../core/widgets/data_badges.dart';
 import '../../../core/widgets/empty_state.dart';
 import '../../../data/providers/provider_registry.dart';
@@ -24,6 +25,7 @@ class _ExplorePageState extends ConsumerState<ExplorePage> {
   Widget build(BuildContext context) {
     final stations = ref.watch(stationListProvider);
     final places = ref.watch(nearbyPlacesProvider(_stationId));
+    final isDemo = AppEnvironment.provider == TransitProviderKind.mock;
 
     return Scaffold(
       appBar: AppBar(title: const Text('Jelajahi sekitar stasiun')),
@@ -31,8 +33,10 @@ class _ExplorePageState extends ConsumerState<ExplorePage> {
         child: ListView(
           padding: const EdgeInsets.fromLTRB(16, 8, 16, 28),
           children: <Widget>[
-            const DemoDataBanner(),
-            const SizedBox(height: 16),
+            if (isDemo) ...<Widget>[
+              const DemoDataBanner(),
+              const SizedBox(height: 16),
+            ],
             stations.when(
               loading: () => const LinearProgressIndicator(),
               error: (error, stack) => const Text(
@@ -111,9 +115,10 @@ class _ExplorePageState extends ConsumerState<ExplorePage> {
                     if (filtered.isEmpty)
                       AppEmptyState(
                         icon: Icons.travel_explore_outlined,
-                        title: 'Belum ada contoh tempat',
-                        message:
-                            'Data demo untuk stasiun ini belum diisi. Coba Bogor, Sudirman, atau Jakarta Kota.',
+                        title: 'Belum ada tempat terdaftar',
+                        message: isDemo
+                            ? 'Data demo untuk stasiun ini belum diisi. Coba Bogor, Sudirman, atau Jakarta Kota.'
+                            : 'Belum ada destinasi terdaftar untuk stasiun ini.',
                         action: OutlinedButton(
                           onPressed: () => context.push('/station/$_stationId'),
                           child: const Text('Lihat detail stasiun'),
@@ -121,7 +126,9 @@ class _ExplorePageState extends ConsumerState<ExplorePage> {
                       )
                     else ...<Widget>[
                       Text(
-                        '${filtered.length} tempat contoh',
+                        isDemo
+                            ? '${filtered.length} tempat contoh'
+                            : '${filtered.length} tempat',
                         style: Theme.of(context).textTheme.titleLarge,
                       ),
                       const SizedBox(height: 10),
@@ -192,7 +199,9 @@ class _PlaceCard extends StatelessWidget {
                     const SizedBox(height: 4),
                     Text('${place.category} • ${place.walkingMinutes} menit jalan'),
                     Text(
-                      '${place.distanceMeters} meter • Data Demo',
+                      place.isDemo
+                          ? '${place.distanceMeters} meter • Data Demo'
+                          : '${place.distanceMeters} meter',
                       style: Theme.of(context).textTheme.bodySmall,
                     ),
                   ],
