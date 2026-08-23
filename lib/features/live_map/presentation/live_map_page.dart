@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:geolocator/geolocator.dart';
 import 'package:latlong2/latlong.dart';
 
 import '../../../app/theme/app_theme.dart';
@@ -26,6 +27,8 @@ class LiveMapPage extends ConsumerStatefulWidget {
 
 class _LiveMapPageState extends ConsumerState<LiveMapPage> {
   final MapController _mapController = MapController();
+  LatLng? _myLocation;
+  bool _locatingMe = false;
 
   static const Map<String, String> _lineLabels = {
     'BOGOR': 'Lintas Bogor',
@@ -175,9 +178,26 @@ class _LiveMapPageState extends ConsumerState<LiveMapPage> {
                     height: 22,
                     child: const _YouAreHereMarker(),
                   ),
+                if (_myLocation != null)
+                  Marker(
+                    point: _myLocation!,
+                    width: 20,
+                    height: 20,
+                    child: const _MyLocationMarker(),
+                  ),
               ],
             ),
           ],
+        ),
+        Positioned(
+          right: 12,
+          top: 12,
+          child: _MapControls(
+            onZoomIn: () => _zoomBy(1),
+            onZoomOut: () => _zoomBy(-1),
+            onLocateMe: _goToMyLocation,
+            locating: _locatingMe,
+          ),
         ),
         Positioned(
           left: 12,
@@ -194,12 +214,20 @@ class _LiveMapPageState extends ConsumerState<LiveMapPage> {
     );
   }
 
+  /// Older/mock data uses long-form line codes that don't match the real
+  /// production `lines.code` values in [railLineShapes] — map them so both
+  /// naming schemes resolve to the same real track geometry.
+  static const Map<String, String> _lineIdAliases = <String, String>{
+    'RANGKASBITUNG': 'RANGKAS',
+    'TANJUNG_PRIOK': 'PRIOK',
+  };
+
   /// The polyline to draw for [lineId]: the real track geometry from
   /// [railLineShapes] (sourced from OpenStreetMap route relations) when
   /// available, otherwise a straight-segment fallback through
   /// [_orderedLineStations] for lines OSM data hasn't been fetched for yet.
   List<LatLng> _lineTrackPoints(List<Station> stations, String lineId) {
-    final shape = railLineShapes[lineId];
+    final shape = railLineShapes[lineId] ?? railLineShapes[_lineIdAliases[lineId]];
     if (shape != null) {
       return shape
           .map((point) => LatLng(point[0], point[1]))
@@ -231,6 +259,69 @@ class _LiveMapPageState extends ConsumerState<LiveMapPage> {
     return onLine;
   }
 
+  void _zoomBy(double delta) {
+    final camera = _mapController.camera;
+    _mapController.move(
+      camera.center,
+      (camera.zoom + delta).clamp(9, 18),
+    );
+  }
+
+  /// Centers the map on the device's current position, requesting location
+  /// permission if needed — an explicit tap on a clearly-labeled "lokasi
+  /// saya" button already explains why, matching the pattern in
+  /// `NearestStationController.requestPermissionAndRefresh`.
+  Future<void> _goToMyLocation() async {
+    if (_locatingMe) {
+      return;
+    }
+    setState(() => _locatingMe = true);
+    try {
+      final serviceEnabled = await Geolocator.isLocationServiceEnabled();
+      if (!serviceEnabled) {
+        _showLocationMessage('Aktifkan layanan lokasi di perangkat Anda.');
+        return;
+      }
+      var permission = await Geolocator.checkPermission();
+      if (permission == LocationPermission.denied) {
+        permission = await Geolocator.requestPermission();
+      }
+      final granted = permission == LocationPermission.always ||
+          permission == LocationPermission.whileInUse;
+      if (!granted) {
+        _showLocationMessage('Izin lokasi diperlukan untuk fitur ini.');
+        return;
+      }
+      final position = await Geolocator.getCurrentPosition(
+        locationSettings: const LocationSettings(
+          accuracy: LocationAccuracy.medium,
+          timeLimit: Duration(seconds: 8),
+        ),
+      );
+      if (!mounted) {
+        return;
+      }
+      final here = LatLng(position.latitude, position.longitude);
+      setState(() => _myLocation = here);
+      _mapController.move(here, 15);
+    } on Object {
+      _showLocationMessage('Tidak dapat mengambil lokasi saat ini.');
+    } finally {
+      if (mounted) {
+        setState(() => _locatingMe = false);
+      }
+    }
+  }
+
+  void _showLocationMessage(String message) {
+    if (!mounted) {
+      return;
+    }
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(message), duration: const Duration(seconds: 2)),
+    );
+  }
+
   void _showStationName(Station station) {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(content: Text(station.name), duration: const Duration(seconds: 2)),
@@ -253,6 +344,100 @@ class _YouAreHereMarker extends StatelessWidget {
         ],
       ),
       child: const Icon(Icons.person_pin_circle, size: 14, color: Colors.white),
+    );
+  }
+}
+
+class _MyLocationMarker extends StatelessWidget {
+  const _MyLocationMarker();
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      decoration: const BoxDecoration(
+        color: Colors.blue,
+        shape: BoxShape.circle,
+        border: Border.fromBorderSide(BorderSide(color: Colors.white, width: 3)),
+        boxShadow: <BoxShadow>[
+          BoxShadow(color: Colors.black26, blurRadius: 4),
+        ],
+      ),
+    );
+  }
+}
+
+class _MapControls extends StatelessWidget {
+  const _MapControls({
+    required this.onZoomIn,
+    required this.onZoomOut,
+    required this.onLocateMe,
+    required this.locating,
+  });
+
+  final VoidCallback onZoomIn;
+  final VoidCallback onZoomOut;
+  final VoidCallback onLocateMe;
+  final bool locating;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      children: <Widget>[
+        _MapControlButton(
+          icon: locating
+              ? const SizedBox(
+                  width: 18,
+                  height: 18,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                )
+              : const Icon(Icons.my_location),
+          onPressed: locating ? null : onLocateMe,
+          tooltip: 'Lokasi saya',
+        ),
+        const SizedBox(height: 8),
+        Material(
+          color: Theme.of(context).colorScheme.surface.withValues(alpha: 0.95),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          elevation: 2,
+          child: Column(
+            children: <Widget>[
+              IconButton(
+                icon: const Icon(Icons.add),
+                tooltip: 'Perbesar',
+                onPressed: onZoomIn,
+              ),
+              const Divider(height: 1),
+              IconButton(
+                icon: const Icon(Icons.remove),
+                tooltip: 'Perkecil',
+                onPressed: onZoomOut,
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _MapControlButton extends StatelessWidget {
+  const _MapControlButton({
+    required this.icon,
+    required this.onPressed,
+    required this.tooltip,
+  });
+
+  final Widget icon;
+  final VoidCallback? onPressed;
+  final String tooltip;
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: Theme.of(context).colorScheme.surface.withValues(alpha: 0.95),
+      shape: const CircleBorder(),
+      elevation: 2,
+      child: IconButton(icon: icon, tooltip: tooltip, onPressed: onPressed),
     );
   }
 }
