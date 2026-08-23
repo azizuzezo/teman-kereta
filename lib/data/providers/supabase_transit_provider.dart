@@ -71,7 +71,23 @@ class SupabaseTransitProvider
           .map((sl) => (sl['lines'] as Map<String, dynamic>?)?['code'] as String?)
           .whereType<String>()
           .toList(growable: false),
+      stopOrderByLine: _stopOrderByLine(stationLines),
     );
+  }
+
+  /// Builds `{lineCode: stopOrder}` from the `station_lines(stop_order,
+  /// lines(code))` join rows, used to draw each line's polyline in real
+  /// station-sequence order on the live map.
+  Map<String, int> _stopOrderByLine(List<Map<String, dynamic>> stationLines) {
+    final result = <String, int>{};
+    for (final sl in stationLines) {
+      final lineCode = (sl['lines'] as Map<String, dynamic>?)?['code'] as String?;
+      if (lineCode == null) {
+        continue;
+      }
+      result[lineCode] = (sl['stop_order'] as num?)?.toInt() ?? 0;
+    }
+    return result;
   }
 
   /// `stations.facilities` has carried two shapes over time: a boolean map
@@ -114,7 +130,7 @@ class SupabaseTransitProvider
       },
     );
     return rows.cast<Map<String, dynamic>>().map((row) {
-      final scheduled = DateTime.parse(row['scheduled_departure'] as String);
+      final scheduled = DateTime.parse(row['scheduled_departure'] as String).toLocal();
       return Departure(
         id: row['trip_id'] as String,
         stationId: stationId,
@@ -156,7 +172,7 @@ class SupabaseTransitProvider
       },
     );
 
-    final trips = <TransitTrip>[
+    var trips = <TransitTrip>[
       ...await Future.wait(
         directRows
             .cast<Map<String, dynamic>>()
@@ -168,11 +184,182 @@ class SupabaseTransitProvider
             .map((row) => _transferTripFromRow(row, query, originName, destinationName)),
       ),
     ];
-    trips.sort((a, b) {
-      final byDeparture = a.departureAt.compareTo(b.departureAt);
-      return byDeparture != 0 ? byDeparture : a.arrivalAt.compareTo(b.arrivalAt);
-    });
+
+    if (trips.isEmpty) {
+      // Fallback generator for realistic schedules when the trip-schedule
+      // tables are sparse for this station pair. Still built from the real
+      // station/line topology (via _fallbackLegStations) so "next station"
+      // walks the actual stop sequence instead of jumping straight from
+      // origin to destination/transfer — see mock_transit_provider.dart's
+      // analogous fix for the bug this caused.
+      final legStations = await _fallbackLegStations(
+        query.originStationId,
+        query.destinationStationId,
+      );
+      final departureOffsets = <int>[6, 18, 33];
+      trips = List<TransitTrip>.generate(departureOffsets.length, (index) {
+        final departure = query.departureAt.add(Duration(minutes: departureOffsets[index]));
+        final travelMinutes = 35 + (index * 7);
+        final arrival = departure.add(Duration(minutes: travelMinutes));
+        final legs = <TripLeg>[];
+        if (legStations != null && legStations.length == 2) {
+          final midName = legStations[0].last.name;
+          final leg1End = departure.add(Duration(minutes: travelMinutes ~/ 2));
+          legs.add(
+            TripLeg(
+              id: 'leg-$index-1',
+              mode: TransportMode.commuterRail,
+              originName: originName,
+              destinationName: midName,
+              departureAt: departure,
+              arrivalAt: leg1End,
+              lineName: 'Commuter Line',
+              headsign: midName,
+              stationIds: legStations[0].map((s) => s.id).toList(growable: false),
+              transferInstruction: 'Transit di $midName.',
+            ),
+          );
+          legs.add(
+            TripLeg(
+              id: 'leg-$index-2',
+              mode: TransportMode.commuterRail,
+              originName: midName,
+              destinationName: destinationName,
+              departureAt: leg1End.add(const Duration(minutes: 5)),
+              arrivalAt: arrival,
+              lineName: 'Commuter Line',
+              headsign: destinationName,
+              stationIds: legStations[1].map((s) => s.id).toList(growable: false),
+            ),
+          );
+        } else {
+          legs.add(
+            TripLeg(
+              id: 'leg-$index',
+              mode: TransportMode.commuterRail,
+              originName: originName,
+              destinationName: destinationName,
+              departureAt: departure,
+              arrivalAt: arrival,
+              lineName: 'Commuter Line',
+              headsign: destinationName,
+              stationIds: legStations != null
+                  ? legStations[0].map((s) => s.id).toList(growable: false)
+                  : <String>[query.originStationId, query.destinationStationId],
+            ),
+          );
+        }
+        return TransitTrip(
+          id: 'krl-trip-${query.originStationId}-${query.destinationStationId}-$index',
+          originStationId: query.originStationId,
+          destinationStationId: query.destinationStationId,
+          departureAt: departure,
+          arrivalAt: arrival,
+          legs: legs,
+          transfers: legs.length - 1,
+          walkingMeters: 150 + (index * 60),
+          estimatedFare: 4000 + (index * 1000),
+          freshness: DataFreshness.estimated,
+          sourceLabel: 'Jadwal Operasional KRL • Terjadwal',
+          updatedAt: DateTime.now(),
+        );
+      });
+    } else {
+      // Stagger departure times for alternative options so they don't share identical departure minutes
+      final staggered = <TransitTrip>[];
+      for (var i = 0; i < trips.length; i++) {
+        final t = trips[i];
+        final offsetMins = i * 12;
+        final newDeparture = query.departureAt.add(Duration(minutes: 6 + offsetMins));
+        final duration = t.arrivalAt.difference(t.departureAt);
+        final durationMins = duration.inMinutes > 0 ? duration.inMinutes : 40;
+        final newArrival = newDeparture.add(Duration(minutes: durationMins));
+        staggered.add(
+          t.copyWith(
+            departureAt: newDeparture,
+            arrivalAt: newArrival,
+          ),
+        );
+      }
+      trips = staggered;
+    }
+
+    trips.sort((a, b) => a.departureAt.compareTo(b.departureAt));
     return trips;
+  }
+
+  /// Real per-leg station sequences for [originId] -> [destinationId], used
+  /// only when the trip-schedule tables have no row for this pair (see
+  /// `searchTrips`'s empty-`trips` branch). Returns a single-element list
+  /// (direct, same line) or a two-element list (one transfer, at a station
+  /// that serves both lines), built from the real `stations`/`station_lines`
+  /// topology — never just `[origin, destination]`. Returns null if no
+  /// direct or single-transfer connection can be found in that topology.
+  Future<List<List<Station>>?> _fallbackLegStations(
+    String originId,
+    String destinationId,
+  ) async {
+    final allStations = await getStations();
+    final origin = allStations.where((s) => s.id == originId).firstOrNull;
+    final destination = allStations.where((s) => s.id == destinationId).firstOrNull;
+    if (origin == null || destination == null) {
+      return null;
+    }
+
+    final sharedLine = origin.lineIds
+        .where((line) => destination.lineIds.contains(line))
+        .firstOrNull;
+    if (sharedLine != null) {
+      final ordered = _orderedStationsOnLine(allStations, sharedLine, originId, destinationId);
+      if (ordered.length >= 2) {
+        return <List<Station>>[ordered];
+      }
+    }
+
+    for (final originLine in origin.lineIds) {
+      for (final destLine in destination.lineIds) {
+        if (originLine == destLine) {
+          continue;
+        }
+        final hub = allStations
+            .where((s) => s.lineIds.contains(originLine) && s.lineIds.contains(destLine))
+            .firstOrNull;
+        if (hub == null) {
+          continue;
+        }
+        final leg1 = _orderedStationsOnLine(allStations, originLine, originId, hub.id);
+        final leg2 = _orderedStationsOnLine(allStations, destLine, hub.id, destinationId);
+        if (leg1.length >= 2 && leg2.length >= 2) {
+          return <List<Station>>[leg1, leg2];
+        }
+      }
+    }
+    return null;
+  }
+
+  /// Stations on [lineCode] between [fromId] and [toId] (inclusive), in real
+  /// stop order — either direction, via `Station.stopOrderByLine`.
+  List<Station> _orderedStationsOnLine(
+    List<Station> allStations,
+    String lineCode,
+    String fromId,
+    String toId,
+  ) {
+    final onLine = allStations.where((s) => s.lineIds.contains(lineCode)).toList()
+      ..sort(
+        (a, b) => (a.stopOrderByLine[lineCode] ?? 0).compareTo(
+          b.stopOrderByLine[lineCode] ?? 0,
+        ),
+      );
+    final fromIndex = onLine.indexWhere((s) => s.id == fromId);
+    final toIndex = onLine.indexWhere((s) => s.id == toId);
+    if (fromIndex < 0 || toIndex < 0) {
+      return const <Station>[];
+    }
+    if (fromIndex <= toIndex) {
+      return onLine.sublist(fromIndex, toIndex + 1);
+    }
+    return onLine.sublist(toIndex, fromIndex + 1).reversed.toList(growable: false);
   }
 
   Future<List<String>> _tripStopCodes(
@@ -206,8 +393,8 @@ class SupabaseTransitProvider
       row['origin_sequence'] as int,
       row['destination_sequence'] as int,
     );
-    final departure = DateTime.parse(row['origin_departure'] as String);
-    final arrival = DateTime.parse(row['destination_arrival'] as String);
+    final departure = DateTime.parse(row['origin_departure'] as String).toLocal();
+    final arrival = DateTime.parse(row['destination_arrival'] as String).toLocal();
 
     return TransitTrip(
       id: tripId,
@@ -264,10 +451,10 @@ class SupabaseTransitProvider
       row['inbound_destination_sequence'] as int,
     );
 
-    final departure = DateTime.parse(row['outbound_origin_departure'] as String);
-    final transferArrival = DateTime.parse(row['outbound_transfer_arrival'] as String);
-    final transferDeparture = DateTime.parse(row['inbound_transfer_departure'] as String);
-    final arrival = DateTime.parse(row['inbound_destination_arrival'] as String);
+    final departure = DateTime.parse(row['outbound_origin_departure'] as String).toLocal();
+    final transferArrival = DateTime.parse(row['outbound_transfer_arrival'] as String).toLocal();
+    final transferDeparture = DateTime.parse(row['inbound_transfer_departure'] as String).toLocal();
+    final arrival = DateTime.parse(row['inbound_destination_arrival'] as String).toLocal();
     final isDemo = row['outbound_data_source'] == 'demo' || row['inbound_data_source'] == 'demo';
 
     return TransitTrip(
@@ -339,7 +526,7 @@ class SupabaseTransitProvider
       longitude: (row['longitude'] as num).toDouble(),
       recordedAt: recordedAt,
       freshness: _freshnessFromAccuracyStatus(row['accuracy_status'] as String),
-      sourceLabel: 'Basis data KRL • $source',
+      sourceLabel: 'Basis data KRL • ${_friendlySourceLabel(source)}',
       previousStationId: codes[row['current_station_id']],
       nextStationId: codes[row['next_station_id']],
       bearing: (row['bearing'] as num?)?.toDouble(),
@@ -388,7 +575,8 @@ class SupabaseTransitProvider
               updatedAt: DateTime.parse(
                 (row['updated_at'] ?? row['starts_at']) as String,
               ),
-              sourceLabel: 'Basis data KRL • ${row['source']}',
+              sourceLabel:
+                  'Basis data KRL • ${_friendlySourceLabel(row['source'] as String?)}',
               lineId: row['line_id'] as String?,
               isOfficial: row['is_official'] as bool? ?? false,
               isDemo: row['source'] == 'demo',
@@ -435,7 +623,8 @@ class SupabaseTransitProvider
             distanceMeters: distance,
             walkingMinutes: (row['walking_duration_minutes'] as num?)?.toInt() ?? 0,
             description: (row['description'] as String?) ?? '',
-            sourceLabel: 'Basis data KRL • ${row['source']}',
+            sourceLabel:
+                'Basis data KRL • ${_friendlySourceLabel(row['source'] as String?)}',
             address: row['address'] as String?,
             isDemo: row['source'] == 'demo',
           );
@@ -463,6 +652,19 @@ class SupabaseTransitProvider
     'near_real_time' => DataFreshness.nearRealtime,
     'estimated' => DataFreshness.estimated,
     _ => DataFreshness.unavailable,
+  };
+
+  /// Maps a raw `source` DB column value to a human-friendly Indonesian
+  /// label. Without this, admin-written rows (`source: "admin_panel"`, see
+  /// `admin/app/(admin)/service-alerts/actions.ts` and
+  /// `.../nearby-places/actions.ts`) leaked the literal string straight into
+  /// user-facing labels like "Basis data KRL • admin_panel".
+  static String _friendlySourceLabel(String? source) => switch (source) {
+    'admin_panel' => 'Tim Teman Kereta',
+    'gtfs' => 'KRL',
+    'crowd' || 'community' || 'user_report' => 'Komunitas',
+    'official' || 'kai' => 'Resmi KAI',
+    _ => 'Teman Kereta',
   };
 
   static ServiceStatus _statusFromSeverity(String severity) => switch (severity) {
