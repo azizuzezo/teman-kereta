@@ -1,318 +1,307 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_map/flutter_map.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:go_router/go_router.dart';
+import 'package:latlong2/latlong.dart';
 
-import '../../../app/config/app_environment.dart';
 import '../../../app/theme/app_theme.dart';
-import '../../../core/widgets/data_badges.dart';
 import '../../../core/widgets/empty_state.dart';
 import '../../../data/providers/provider_registry.dart';
+import '../../../data/providers/rail_line_shapes.dart';
 import '../../../domain/entities/transit_models.dart';
+import 'live_trip_position_controller.dart';
 
-/// Picks up to [count] entries evenly spaced across [items] (always
-/// including the first and last), rather than truncating to a prefix —
-/// so a sampled real line still visually spans its whole real length.
-List<Station> _evenSample(List<Station> items, int count) {
-  if (items.length <= count) return items;
-  final step = (items.length - 1) / (count - 1);
-  return <Station>[
-    for (var i = 0; i < count; i += 1) items[(i * step).round()],
-  ];
-}
-
-class LiveMapPage extends ConsumerWidget {
+/// Real geographic live map: OpenStreetMap tiles with each KRL line drawn as
+/// a polyline through its real stations (in real per-line stop order, via
+/// `Station.stopOrderByLine`) plus station markers and, while an Active Trip
+/// is on board, the rider's own approximate live position — see
+/// `LiveTripPositionController`. Deliberately carries NO live-train-position
+/// markers of any kind (that used to be a raster KAI map image and a
+/// hand-drawn schematic with vehicle badges; both are gone).
+class LiveMapPage extends ConsumerStatefulWidget {
   const LiveMapPage({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<LiveMapPage> createState() => _LiveMapPageState();
+}
+
+class _LiveMapPageState extends ConsumerState<LiveMapPage> {
+  final MapController _mapController = MapController();
+
+  static const Map<String, String> _lineLabels = {
+    'BOGOR': 'Lintas Bogor',
+    'NAMBO': 'Lintas Bogor - Nambo (Cabang)',
+    'CIKARANG': 'Lintas Cikarang',
+    'RANGKASBITUNG': 'Lintas Rangkasbitung',
+    'TANGERANG': 'Lintas Tangerang',
+    'TANJUNG_PRIOK': 'Lintas Tanjung Priok',
+    'BEKASI': 'Lintas Bekasi',
+    'SERPONG': 'Lintas Serpong',
+  };
+
+  /// Used only when a line code has no matching row in `public.lines` (via
+  /// [lineColorsProvider]) — should not normally happen since every real
+  /// line is seeded there with its correct KAI Commuterline brand color.
+  static const Color _fallbackLineColor = Color(0xFF9CA3AF);
+
+  // Central Jakarta — a sensible default center before real station data
+  // has loaded.
+  static const LatLng _defaultCenter = LatLng(-6.2088, 106.8456);
+
+  @override
+  Widget build(BuildContext context) {
     final stations = ref.watch(stationListProvider);
-    final vehicles = ref.watch(vehiclePositionsProvider);
+    final youAreHere = ref.watch(liveTripPositionControllerProvider);
+    final lineColors =
+        ref.watch(lineColorsProvider).asData?.value ?? const <String, Color>{};
 
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Peta perjalanan'),
-        actions: const <Widget>[
-          Padding(
-            padding: EdgeInsets.only(right: 16),
-            child: Center(
-              child: DataFreshnessBadge(
-                freshness: DataFreshness.estimated,
-                compact: true,
-              ),
-            ),
-          ),
-        ],
-      ),
+      appBar: AppBar(title: const Text('Peta perjalanan')),
       body: SafeArea(
         child: stations.when(
           loading: () => const Center(child: CircularProgressIndicator()),
-          error: (error, stack) => const AppEmptyState(
+          error: (e, _) => const AppEmptyState(
             icon: Icons.map_outlined,
             title: 'Peta belum tersedia',
-            message: 'Data jalur lokal tidak dapat dimuat.',
+            message: 'Data jalur tidak dapat dimuat.',
           ),
           data: (items) {
             if (items.isEmpty) {
               return const AppEmptyState(
                 icon: Icons.map_outlined,
                 title: 'Peta belum tersedia',
-                message: 'Belum ada data stasiun untuk ditampilkan.',
+                message: 'Belum ada data stasiun.',
               );
             }
-            final visible = List<Station>.of(items)
-              ..sort((a, b) => a.name.compareTo(b.name));
-            final isDemo = AppEnvironment.provider == TransitProviderKind.mock;
-            return ListView(
-              padding: const EdgeInsets.fromLTRB(16, 8, 16, 28),
-              children: <Widget>[
-                if (isDemo) const DemoDataBanner(),
-                if (isDemo) const SizedBox(height: 16),
-                Card(
-                  clipBehavior: Clip.antiAlias,
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: <Widget>[
-                      Container(
-                        color: AppColors.navy,
-                        padding: const EdgeInsets.fromLTRB(18, 18, 18, 12),
-                        child: const Row(
-                          children: <Widget>[
-                            Icon(
-                              Icons.alt_route_rounded,
-                              color: AppColors.softBlue,
-                            ),
-                            SizedBox(width: 10),
-                            Expanded(
-                              child: Text(
-                                'Skema rel lokal',
-                                style: TextStyle(
-                                  color: AppColors.surfaceLight,
-                                  fontWeight: FontWeight.w700,
-                                ),
-                              ),
-                            ),
-                            Text(
-                              'bukan GPS langsung',
-                              style: TextStyle(
-                                color: AppColors.textSecondaryDark,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                      Builder(
-                        builder: (context) {
-                          // Real per-line membership + real geographic order
-                          // (station_lines/coordinates, both populated by
-                          // the KRL GTFS import) — a genuine line's actual
-                          // stations south-to-north, not an arbitrary
-                          // alphabetical subset. Falls back to a plain
-                          // alphabetical sample only if no line membership
-                          // data exists yet (e.g. `gtfs`/`mock` providers).
-                          final bogorLine = List<Station>.of(
-                            items.where((s) => s.lineIds.contains('BOGOR')),
-                          )..sort((a, b) => a.latitude.compareTo(b.latitude));
-                          final source = bogorLine.isNotEmpty ? bogorLine : visible;
-                          final mainLine = _evenSample(source, 8);
-                          final branch = items.firstWhere(
-                            (s) => s.code == 'SUD',
-                            orElse: () => visible.length > 8
-                                ? visible[8]
-                                : mainLine.last,
-                          );
-                          final isRealTopology = bogorLine.isNotEmpty;
-                          return Semantics(
-                            image: true,
-                            label: isDemo
-                                ? 'Diagram jalur demo dari ${mainLine.first.name} menuju ${mainLine.last.name}, dengan percabangan ke ${branch.name}.'
-                                : isRealTopology
-                                ? 'Skema Lintas Bogor dari ${mainLine.first.name} menuju ${mainLine.last.name}, dengan sebagian stasiun ditampilkan dan percabangan transit ke ${branch.name}.'
-                                : 'Skema ilustratif memakai nama stasiun asli dari ${mainLine.first.name} menuju ${mainLine.last.name}, dengan percabangan ke ${branch.name}. Bukan urutan jalur sebenarnya — lihat daftar stasiun di bawah untuk data lengkap.',
-                            child: SizedBox(
-                              height: 360,
-                              width: double.infinity,
-                              child: CustomPaint(
-                                painter: _RailDiagramPainter(
-                                  brightness: Theme.of(context).brightness,
-                                  hasEstimatedVehicle:
-                                      vehicles.value?.isNotEmpty ?? false,
-                                  stationLabels: mainLine
-                                      .map((s) => s.name)
-                                      .toList(growable: false),
-                                  branchLabel: branch.name,
-                                ),
-                              ),
-                            ),
-                          );
-                        },
-                      ),
-                    ],
-                  ),
-                ),
-                const SizedBox(height: 16),
-                Card(
-                  child: Padding(
-                    padding: const EdgeInsets.all(16),
-                    child: Row(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: <Widget>[
-                        const Icon(Icons.info_outline_rounded),
-                        const SizedBox(width: 12),
-                        Expanded(
-                          child: Text(
-                            'Posisi kereta adalah simulasi berbasis jadwal. Aplikasi tidak mengklaim data operasional real-time.',
-                            style: Theme.of(context).textTheme.bodyMedium,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-                const SizedBox(height: 24),
-                Text(
-                  'Stasiun pada skema',
-                  style: Theme.of(context).textTheme.titleLarge,
-                ),
-                const SizedBox(height: 10),
-                for (final station in visible)
-                  Card(
-                    margin: const EdgeInsets.only(bottom: 8),
-                    child: ListTile(
-                      leading: CircleAvatar(child: Text(station.code)),
-                      title: Text(station.name),
-                      subtitle: Text(
-                        station.lineIds.map((line) => 'Lintas $line').join(' • '),
-                      ),
-                      trailing: const Icon(Icons.chevron_right_rounded),
-                      onTap: () => context.push('/station/${station.id}'),
-                    ),
-                  ),
-              ],
-            );
+            return _buildMap(items, youAreHere, lineColors);
           },
         ),
       ),
     );
   }
-}
 
-class _RailDiagramPainter extends CustomPainter {
-  const _RailDiagramPainter({
-    required this.brightness,
-    required this.hasEstimatedVehicle,
-    required this.stationLabels,
-    required this.branchLabel,
-  });
+  Widget _buildMap(
+    List<Station> stations,
+    LatLng? youAreHere,
+    Map<String, Color> lineColors,
+  ) {
+    final allLineIds = stations.expand((s) => s.lineIds).toSet().toList()
+      ..sort();
 
-  final Brightness brightness;
-  final bool hasEstimatedVehicle;
-  final List<String> stationLabels;
-  final String branchLabel;
+    final polylines = <Polyline<Object>>[
+      for (var i = 0; i < allLineIds.length; i += 1)
+        if (_lineTrackPoints(stations, allLineIds[i]) case final points
+            when points.length >= 2)
+          Polyline<Object>(
+            points: points,
+            color: lineColors[allLineIds[i]] ?? _fallbackLineColor,
+            strokeWidth: 4,
+          ),
+    ];
 
-  @override
-  void paint(Canvas canvas, Size size) {
-    final muted = brightness == Brightness.dark
-        ? AppColors.textSecondaryDark
-        : AppColors.textSecondary;
-    final origin = Offset(size.width * 0.28, 32);
-    final end = Offset(size.width * 0.28, size.height - 34);
-    final rail = Paint()
-      ..color = AppColors.blue
-      ..strokeWidth = 7
-      ..strokeCap = StrokeCap.round;
-    final branch = Paint()
-      ..color = AppColors.coral
-      ..strokeWidth = 7
-      ..strokeCap = StrokeCap.round;
-    final node = Paint()..color = AppColors.surfaceLight;
-    final nodeBorder = Paint()
-      ..color = AppColors.navy
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = 3;
+    final center = stations.isNotEmpty
+        ? LatLng(stations.first.latitude, stations.first.longitude)
+        : _defaultCenter;
 
-    canvas.drawLine(origin, end, rail);
-    final branchStart = Offset(size.width * 0.28, size.height * 0.62);
-    final branchEnd = Offset(size.width * 0.74, size.height * 0.76);
-    final path = Path()
-      ..moveTo(branchStart.dx, branchStart.dy)
-      ..cubicTo(
-        size.width * 0.46,
-        size.height * 0.62,
-        size.width * 0.54,
-        size.height * 0.76,
-        branchEnd.dx,
-        branchEnd.dy,
-      );
-    canvas.drawPath(path, branch);
-
-    final labels = stationLabels;
-    final divisor = labels.length > 1 ? labels.length - 1 : 1;
-    for (var index = 0; index < labels.length; index += 1) {
-      final ratio = index / divisor;
-      final point = Offset(
-        origin.dx,
-        origin.dy + ((end.dy - origin.dy) * ratio),
-      );
-      canvas
-        ..drawCircle(point, 8, node)
-        ..drawCircle(point, 8, nodeBorder);
-      final text = TextPainter(
-        text: TextSpan(
-          text: labels[index],
-          style: TextStyle(
-            color: muted,
-            fontSize: 12,
-            fontWeight: index == 0 || index == labels.length - 1
-                ? FontWeight.w700
-                : FontWeight.w500,
+    return Stack(
+      children: <Widget>[
+        FlutterMap(
+          mapController: _mapController,
+          options: MapOptions(
+            initialCenter: center,
+            initialZoom: 11,
+            minZoom: 9,
+            maxZoom: 18,
+          ),
+          children: <Widget>[
+            TileLayer(
+              urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+              userAgentPackageName: 'id.temankereta.teman_kereta',
+            ),
+            PolylineLayer<Object>(polylines: polylines),
+            MarkerLayer(
+              markers: <Marker>[
+                for (final station in stations)
+                  Marker(
+                    point: LatLng(station.latitude, station.longitude),
+                    width: 110,
+                    height: 14,
+                    alignment: Alignment.centerLeft,
+                    child: GestureDetector(
+                      onTap: () => _showStationName(station),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: <Widget>[
+                          Container(
+                            width: 10,
+                            height: 10,
+                            decoration: BoxDecoration(
+                              color: AppColors.navy,
+                              shape: BoxShape.circle,
+                              border: Border.all(color: Colors.white, width: 2),
+                            ),
+                          ),
+                          const SizedBox(width: 4),
+                          Flexible(
+                            child: Text(
+                              station.name,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: const TextStyle(
+                                fontSize: 9,
+                                fontWeight: FontWeight.w600,
+                                shadows: <Shadow>[
+                                  Shadow(
+                                    color: Colors.white,
+                                    offset: Offset(0.5, 0.5),
+                                    blurRadius: 1,
+                                  ),
+                                  Shadow(
+                                    color: Colors.white,
+                                    offset: Offset(-0.5, -0.5),
+                                    blurRadius: 1,
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                if (youAreHere != null)
+                  Marker(
+                    point: youAreHere,
+                    width: 22,
+                    height: 22,
+                    child: const _YouAreHereMarker(),
+                  ),
+              ],
+            ),
+          ],
+        ),
+        Positioned(
+          left: 12,
+          right: 12,
+          bottom: 12,
+          child: _LineLegend(
+            lineIds: allLineIds,
+            labels: _lineLabels,
+            colors: lineColors,
+            fallbackColor: _fallbackLineColor,
           ),
         ),
-        textDirection: TextDirection.ltr,
-      )..layout(maxWidth: size.width * 0.55);
-      text.paint(canvas, point + const Offset(18, -8));
-    }
-
-    canvas
-      ..drawCircle(branchEnd, 8, node)
-      ..drawCircle(branchEnd, 8, nodeBorder);
-    final branchText = TextPainter(
-      text: TextSpan(
-        text: branchLabel,
-        style: TextStyle(
-          color: muted,
-          fontSize: 12,
-          fontWeight: FontWeight.w700,
-        ),
-      ),
-      textDirection: TextDirection.ltr,
-    )..layout();
-    branchText.paint(canvas, branchEnd + const Offset(-22, 15));
-
-    if (hasEstimatedVehicle) {
-      final trainPoint = Offset(
-        origin.dx,
-        origin.dy + ((end.dy - origin.dy) * 0.44),
-      );
-      canvas.drawCircle(trainPoint, 15, Paint()..color = AppColors.coral);
-      final icon = TextPainter(
-        text: const TextSpan(
-          text: '●',
-          style: TextStyle(color: AppColors.surfaceLight, fontSize: 13),
-        ),
-        textDirection: TextDirection.ltr,
-      )..layout();
-      icon.paint(
-        canvas,
-        trainPoint - Offset(icon.width / 2, icon.height / 2),
-      );
-    }
+      ],
+    );
   }
 
+  /// The polyline to draw for [lineId]: the real track geometry from
+  /// [railLineShapes] (sourced from OpenStreetMap route relations) when
+  /// available, otherwise a straight-segment fallback through
+  /// [_orderedLineStations] for lines OSM data hasn't been fetched for yet.
+  List<LatLng> _lineTrackPoints(List<Station> stations, String lineId) {
+    final shape = railLineShapes[lineId];
+    if (shape != null) {
+      return shape
+          .map((point) => LatLng(point[0], point[1]))
+          .toList(growable: false);
+    }
+    return _orderedLineStations(stations, lineId)
+        .map((s) => LatLng(s.latitude, s.longitude))
+        .toList(growable: false);
+  }
+
+  /// Real stations on [lineId], ordered by `Station.stopOrderByLine[lineId]`
+  /// — used only as a fallback polyline (straight segments between
+  /// consecutive stations) for lines not covered by [railLineShapes].
+  List<Station> _orderedLineStations(List<Station> stations, String lineId) {
+    final onLine = stations
+        .where((s) => s.lineIds.contains(lineId))
+        .toList(growable: false);
+    onLine.sort((a, b) {
+      final orderA = a.stopOrderByLine[lineId];
+      final orderB = b.stopOrderByLine[lineId];
+      if (orderA != null && orderB != null) {
+        return orderA.compareTo(orderB);
+      }
+      // Stations missing stop-order data (non-Supabase providers) fall back
+      // to latitude so the line still draws something reasonable rather
+      // than nothing.
+      return a.latitude.compareTo(b.latitude);
+    });
+    return onLine;
+  }
+
+  void _showStationName(Station station) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(station.name), duration: const Duration(seconds: 2)),
+    );
+  }
+}
+
+class _YouAreHereMarker extends StatelessWidget {
+  const _YouAreHereMarker();
+
   @override
-  bool shouldRepaint(covariant _RailDiagramPainter oldDelegate) {
-    return oldDelegate.brightness != brightness ||
-        oldDelegate.hasEstimatedVehicle != hasEstimatedVehicle ||
-        oldDelegate.stationLabels != stationLabels ||
-        oldDelegate.branchLabel != branchLabel;
+  Widget build(BuildContext context) {
+    return Container(
+      decoration: BoxDecoration(
+        color: AppColors.coral,
+        shape: BoxShape.circle,
+        border: Border.all(color: Colors.white, width: 3),
+        boxShadow: const <BoxShadow>[
+          BoxShadow(color: Colors.black26, blurRadius: 4),
+        ],
+      ),
+      child: const Icon(Icons.person_pin_circle, size: 14, color: Colors.white),
+    );
+  }
+}
+
+class _LineLegend extends StatelessWidget {
+  const _LineLegend({
+    required this.lineIds,
+    required this.labels,
+    required this.colors,
+    required this.fallbackColor,
+  });
+
+  final List<String> lineIds;
+  final Map<String, String> labels;
+  final Map<String, Color> colors;
+  final Color fallbackColor;
+
+  @override
+  Widget build(BuildContext context) {
+    if (lineIds.isEmpty) {
+      return const SizedBox.shrink();
+    }
+    return Card(
+      color: Theme.of(context).colorScheme.surface.withValues(alpha: 0.95),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+        child: Wrap(
+          spacing: 12,
+          runSpacing: 4,
+          children: <Widget>[
+            for (final lineId in lineIds)
+              Row(
+                mainAxisSize: MainAxisSize.min,
+                children: <Widget>[
+                  Container(
+                    width: 12,
+                    height: 4,
+                    color: colors[lineId] ?? fallbackColor,
+                  ),
+                  const SizedBox(width: 6),
+                  Text(
+                    labels[lineId] ?? lineId,
+                    style: const TextStyle(fontSize: 11),
+                  ),
+                ],
+              ),
+          ],
+        ),
+      ),
+    );
   }
 }
