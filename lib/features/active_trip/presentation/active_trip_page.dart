@@ -1,13 +1,19 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 
 import '../../../app/theme/app_theme.dart';
+import '../../../core/utils/geo.dart';
+import '../../../core/utils/map_launcher.dart';
 import '../../../core/widgets/data_badges.dart';
 import '../../../core/widgets/empty_state.dart';
 import '../../../data/providers/demo_data.dart';
+import '../../../data/providers/provider_registry.dart';
 import '../../../domain/entities/active_trip.dart';
+import '../../../domain/entities/transit_models.dart';
 import '../../schedule/presentation/trip_search_controller.dart';
 import 'active_trip_controller.dart';
 
@@ -82,7 +88,6 @@ class ActiveTripPage extends ConsumerWidget {
                 children: <Widget>[
                   Row(
                     children: <Widget>[
-                      const DemoDataBanner(compact: true),
                       const Spacer(),
                       DataFreshnessBadge(
                         freshness: session.trip.freshness,
@@ -158,6 +163,8 @@ class ActiveTripPage extends ConsumerWidget {
                       ),
                     ],
                   ),
+                  const SizedBox(height: 18),
+                  _TripStatsRow(session: session),
                 ],
               ),
             ),
@@ -365,6 +372,115 @@ class _StationProgressRow extends StatelessWidget {
   }
 }
 
+/// Live-ticking waktu perjalanan (elapsed since [ActiveTripSession.startedAt])
+/// alongside the jarak tempuh / kecepatan carried on the session itself,
+/// which only change when a new hop or GPS fix arrives.
+class _TripStatsRow extends ConsumerStatefulWidget {
+  const _TripStatsRow({required this.session});
+
+  final ActiveTripSession session;
+
+  @override
+  ConsumerState<_TripStatsRow> createState() => _TripStatsRowState();
+}
+
+class _TripStatsRowState extends ConsumerState<_TripStatsRow> {
+  Timer? _ticker;
+
+  @override
+  void initState() {
+    super.initState();
+    _ticker = Timer.periodic(const Duration(seconds: 1), (_) {
+      if (mounted) setState(() {});
+    });
+  }
+
+  @override
+  void dispose() {
+    _ticker?.cancel();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final session = widget.session;
+    final elapsed = DateTime.now().difference(session.startedAt);
+    return Row(
+      children: <Widget>[
+        Expanded(
+          child: _TripStatChip(
+            icon: Icons.timer_outlined,
+            label: 'Waktu perjalanan',
+            value: formatDuration(elapsed),
+          ),
+        ),
+        const SizedBox(width: 12),
+        Expanded(
+          child: _TripStatChip(
+            icon: Icons.route_outlined,
+            label: 'Jarak tempuh',
+            value: formatDistanceMeters(session.distanceMeters),
+          ),
+        ),
+        const SizedBox(width: 12),
+        Expanded(
+          child: _TripStatChip(
+            icon: Icons.speed_outlined,
+            label: 'Kecepatan',
+            value: formatSpeedKmh(session.currentSpeedKmh),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _TripStatChip extends StatelessWidget {
+  const _TripStatChip({
+    required this.icon,
+    required this.label,
+    required this.value,
+  });
+
+  final IconData icon;
+  final String label;
+  final String value;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: <Widget>[
+        Row(
+          children: <Widget>[
+            Icon(icon, size: 14, color: AppColors.textSecondaryDark),
+            const SizedBox(width: 4),
+            Flexible(
+              child: Text(
+                label,
+                overflow: TextOverflow.ellipsis,
+                maxLines: 1,
+                style: const TextStyle(
+                  color: AppColors.textSecondaryDark,
+                  fontSize: 12,
+                ),
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 2),
+        Text(
+          value,
+          style: const TextStyle(
+            color: AppColors.surfaceLight,
+            fontWeight: FontWeight.w700,
+          ),
+        ),
+      ],
+    );
+  }
+}
+
 class _MissedDestinationView extends ConsumerWidget {
   const _MissedDestinationView({required this.session});
 
@@ -450,6 +566,13 @@ class TripCompletePage extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final session = ref.watch(activeTripControllerProvider);
+    final finalDestinationQuery = session?.finalDestinationQuery;
+    final destinationStation = session == null
+        ? null
+        : (ref.watch(stationListProvider).value ?? const <Station>[])
+            .where((s) => s.id == session.trip.destinationStationId)
+            .firstOrNull;
+
     return Scaffold(
       body: SafeArea(
         child: Center(
@@ -480,8 +603,28 @@ class TripCompletePage extends ConsumerWidget {
                       : 'Kamu tiba di ${_name(session.trip.destinationStationId)}. Riwayat cloud tidak dibuat pada mode lokal.',
                   textAlign: TextAlign.center,
                 ),
+                if (session != null) ...<Widget>[
+                  const SizedBox(height: 20),
+                  _TripSummaryStats(session: session),
+                ],
+                if (finalDestinationQuery != null && destinationStation != null) ...<Widget>[
+                  const SizedBox(height: 16),
+                  SizedBox(
+                    width: double.infinity,
+                    child: OutlinedButton.icon(
+                      onPressed: () => unawaited(
+                        launchMapDirectionsToQuery(
+                          destinationStation.latitude,
+                          destinationStation.longitude,
+                          finalDestinationQuery,
+                        ),
+                      ),
+                      icon: const Icon(Icons.map_outlined),
+                      label: Text('Buka di Google Maps ke $finalDestinationQuery'),
+                    ),
+                  ),
+                ],
                 const SizedBox(height: 20),
-                const DemoDataBanner(),
                 const SizedBox(height: 24),
                 SizedBox(
                   width: double.infinity,
@@ -506,5 +649,90 @@ class TripCompletePage extends ConsumerWidget {
   String _name(String id) {
     return demoStations.where((station) => station.id == id).firstOrNull?.name ??
         id;
+  }
+}
+
+/// Waktu tempuh / jarak / rata-rata kecepatan for the just-finished trip —
+/// `session` is still populated with its final [ActiveTripSession.distanceMeters]
+/// and `updatedAt` (stamped at arrival, by `ActiveTripController.complete()`)
+/// at this point, since `dismissCompleted()` hasn't been called yet.
+class _TripSummaryStats extends StatelessWidget {
+  const _TripSummaryStats({required this.session});
+
+  final ActiveTripSession session;
+
+  @override
+  Widget build(BuildContext context) {
+    final duration = session.updatedAt.difference(session.startedAt);
+    final distanceMeters = session.distanceMeters;
+    final averageSpeedKmh = duration.inSeconds > 0
+        ? (distanceMeters / 1000) / (duration.inSeconds / 3600)
+        : null;
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+      decoration: BoxDecoration(
+        color: Theme.of(context).colorScheme.surfaceContainerHighest,
+        borderRadius: BorderRadius.circular(16),
+      ),
+      child: Row(
+        children: <Widget>[
+          Expanded(
+            child: _SummaryStatItem(
+              icon: Icons.timer_outlined,
+              label: 'Waktu tempuh',
+              value: formatDuration(duration),
+            ),
+          ),
+          Expanded(
+            child: _SummaryStatItem(
+              icon: Icons.route_outlined,
+              label: 'Jarak',
+              value: formatDistanceMeters(distanceMeters),
+            ),
+          ),
+          Expanded(
+            child: _SummaryStatItem(
+              icon: Icons.speed_outlined,
+              label: 'Rata-rata',
+              value: formatSpeedKmh(averageSpeedKmh),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _SummaryStatItem extends StatelessWidget {
+  const _SummaryStatItem({
+    required this.icon,
+    required this.label,
+    required this.value,
+  });
+
+  final IconData icon;
+  final String label;
+  final String value;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      children: <Widget>[
+        Icon(icon, size: 20, color: Theme.of(context).colorScheme.primary),
+        const SizedBox(height: 6),
+        Text(
+          value,
+          style: Theme.of(
+            context,
+          ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700),
+        ),
+        const SizedBox(height: 2),
+        Text(
+          label,
+          textAlign: TextAlign.center,
+          style: Theme.of(context).textTheme.bodySmall,
+        ),
+      ],
+    );
   }
 }
