@@ -12,6 +12,16 @@
 -- `is_active` flip below.
 -- ============================================================================
 
+-- CATATAN (6 September 2026): versi pertama migrasi ini disalin dari definisi
+-- 20260805090000 dan tanpa sengaja membuang kolom yang ditambahkan
+-- 20260806093000_trip_search_external_ids.sql — external_trip_id/service_date
+-- pada search_direct_trips, dan keempat padanannya pada
+-- search_one_transfer_trips. Postgres menolaknya ("cannot change return type of
+-- existing function"), yang untungnya menahan regresi: keenam kolom itu dibaca
+-- SupabaseTransitProvider (lib/data/providers/supabase_transit_provider.dart)
+-- untuk melaporkan posisi kereta dari GPS penumpang. Kolomnya sudah
+-- dikembalikan di bawah; jangan dihapus lagi saat menyunting fungsi-fungsi ini.
+
 update public.stations set is_active = false where code = 'KAT';
 
 create or replace function public.search_direct_trips(
@@ -22,6 +32,8 @@ create or replace function public.search_direct_trips(
 )
 returns table (
   trip_id uuid,
+  external_trip_id text,
+  service_date date,
   line_name text,
   line_color text,
   headsign text,
@@ -37,6 +49,8 @@ stable
 as $$
   select
     t.id as trip_id,
+    t.external_trip_id,
+    t.service_date,
     l.name as line_name,
     l.color as line_color,
     t.headsign,
@@ -100,6 +114,8 @@ create or replace function public.search_one_transfer_trips(
 )
 returns table (
   outbound_trip_id uuid,
+  outbound_external_trip_id text,
+  outbound_service_date date,
   outbound_line_name text,
   outbound_line_color text,
   outbound_headsign text,
@@ -111,6 +127,8 @@ returns table (
   outbound_transfer_arrival timestamptz,
   transfer_station_code text,
   inbound_trip_id uuid,
+  inbound_external_trip_id text,
+  inbound_service_date date,
   inbound_line_name text,
   inbound_line_color text,
   inbound_headsign text,
@@ -127,6 +145,8 @@ as $$
   with outbound as (
     select
       t.id as trip_id,
+      t.external_trip_id,
+      t.service_date,
       l.name as line_name,
       l.color as line_color,
       t.headsign,
@@ -156,6 +176,8 @@ as $$
   inbound as (
     select
       t.id as trip_id,
+      t.external_trip_id,
+      t.service_date,
       l.name as line_name,
       l.color as line_color,
       t.headsign,
@@ -179,6 +201,8 @@ as $$
   )
   select
     ob.trip_id,
+    ob.external_trip_id,
+    ob.service_date,
     ob.line_name,
     ob.line_color,
     ob.headsign,
@@ -190,6 +214,8 @@ as $$
     ob.transfer_arrival,
     ob.transfer_station_code,
     ib.trip_id,
+    ib.external_trip_id,
+    ib.service_date,
     ib.line_name,
     ib.line_color,
     ib.headsign,

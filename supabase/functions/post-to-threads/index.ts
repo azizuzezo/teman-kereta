@@ -60,6 +60,17 @@ const FORUM_MAX_AGE_HOURS = 48;
 // sudah ditangani, jadi kejadian itu tidak bisa terulang.
 const RELEASE_MAX_AGE_HOURS = 72;
 
+// Paling banyak sekian balasan lanjutan untuk satu pengumuman. Changelog
+// terpanjang sejauh ini 1.111 karakter; dengan ~440 karakter per potongan,
+// tiga balasan sudah lebih dari cukup. Batas ini menjaga changelog yang tak
+// wajar panjang tidak berubah jadi rentetan post.
+const MAX_FOLLOW_UPS = 3;
+const FOLLOW_UP_CHARS = 440;
+
+// Potongan ekor yang lebih pendek dari ini dianggap yatim — balasan berisi
+// "pakai." saja terbaca sebagai kesalahan, bukan sambungan.
+const MIN_TAIL_CHARS = 80;
+
 // Sesudah 3 kali gagal, satu konten didiamkan. Tanpa ini, satu baris rusak
 // akan dicoba ulang tiap 15 menit selamanya dan menghabiskan kuota harian.
 const MAX_ATTEMPTS = 3;
@@ -81,6 +92,10 @@ interface Candidate {
   sourceTable: "app_releases" | "forum_posts";
   sourceId: string;
   text: string;
+  // Potongan lanjutan yang diposting sebagai balasan berantai di bawah post
+  // utama. Threads membatasi 500 karakter per post, sementara changelog di
+  // app_releases rutin 400-1100 karakter — tanpa ini isinya terpotong.
+  followUps?: string[];
 }
 
 Deno.serve(async (req) => {
@@ -134,8 +149,37 @@ Deno.serve(async (req) => {
           token,
           candidate.text,
         );
+
+        // Rantai balasan menempel ke balasan sebelumnya, bukan semuanya ke
+        // post utama — itu yang membuat Threads menampilkannya sebagai satu
+        // utas berurutan alih-alih beberapa balasan sejajar.
+        let parentId = externalId;
+        let chained = 0;
+
+        for (const followUp of candidate.followUps ?? []) {
+          try {
+            parentId = await publishToThreads(
+              account.external_user_id,
+              token,
+              followUp,
+              parentId,
+            );
+            chained += 1;
+          } catch (err) {
+            // Post utama sudah terbit dan itu yang terpenting. Rantai yang
+            // putus dicatat, tapi tidak membatalkan apa pun.
+            console.error("Balasan lanjutan gagal:", err);
+            break;
+          }
+        }
+
         await recordResult(admin, candidate, "posted", externalId, null);
-        results.push({ ...candidate, status: "posted", external_post_id: externalId });
+        results.push({
+          ...candidate,
+          status: "posted",
+          external_post_id: externalId,
+          follow_ups_posted: chained,
+        });
       } catch (err) {
         const message = err instanceof Error ? err.message : String(err);
         await recordResult(admin, candidate, "failed", null, message);
@@ -262,10 +306,12 @@ async function collectCandidates(
 
   for (const release of releases ?? []) {
     if (handled.has(`app_releases:${release.id}`)) continue;
+    const composed = composeRelease(release);
     candidates.push({
       sourceTable: "app_releases",
       sourceId: release.id,
-      text: composeReleaseText(release),
+      text: composed.text,
+      followUps: composed.followUps,
     });
   }
 
@@ -310,15 +356,96 @@ async function loadHandled(
 }
 
 // deno-lint-ignore no-explicit-any
-function composeReleaseText(release: any): string {
-  const lines = [`🚆 Teman Kereta ${release.version_name} sudah rilis.`];
+function composeRelease(release: any): { text: string; followUps: string[] } {
+  const header = `🚆 Teman Kereta ${release.version_name} sudah rilis.`;
+  const footer = `Unduh: ${PUBLIC_SITE_URL}`;
+  const changelog = (release.changelog ?? "").trim();
 
-  if (release.changelog?.trim()) {
-    lines.push("", truncate(release.changelog.trim(), 260));
+  if (!changelog) {
+    return { text: [header, "", footer].join("\n"), followUps: [] };
   }
 
-  lines.push("", `Unduh: ${PUBLIC_SITE_URL}`);
-  return truncate(lines.join("\n"), MAX_POST_CHARS);
+  // Ruang yang tersisa di post utama sesudah header, footer, dan baris kosong
+  // pemisahnya diperhitungkan — bukan angka tetap, supaya nomor versi yang
+  // panjang tidak diam-diam memakan jatah changelog.
+  const overhead = header.length + footer.length + 4;
+  const chunks = splitForThreads(changelog, MAX_POST_CHARS - overhead);
+
+  const text = [header, "", chunks[0] ?? "", "", footer].join("\n");
+  const followUps = chunks.slice(1, 1 + MAX_FOLLOW_UPS);
+
+  // Kalau changelog masih tersisa sesudah batas rantai, arahkan ke halaman
+  // rilis daripada memotong diam-diam di tengah kalimat.
+  if (chunks.length > 1 + MAX_FOLLOW_UPS) {
+    followUps.push(`Selengkapnya di ${PUBLIC_SITE_URL}`);
+  }
+
+  return { text, followUps };
+}
+
+// Memecah teks panjang di batas yang wajar dibaca: utamakan pergantian baris
+// (changelog di proyek ini ditulis sebagai daftar berbutir), lalu akhir
+// kalimat, dan baru spasi sebagai upaya terakhir. Memotong tepat di karakter
+// ke-N akan membelah kata dan butir di tempat sembarangan.
+function splitForThreads(text: string, firstLimit: number): string[] {
+  const chunks: string[] = [];
+  const limitFirst = Math.max(80, firstLimit);
+  let rest = text;
+  let limit = limitFirst;
+
+  while (rest.length > 0) {
+    if (rest.length <= limit) {
+      chunks.push(rest);
+      break;
+    }
+
+    const window = rest.slice(0, limit);
+    const cut = Math.max(
+      window.lastIndexOf("\n"),
+      window.lastIndexOf(". "),
+      window.lastIndexOf(" "),
+    );
+
+    const at = cut > limit * 0.5 ? cut : limit;
+    chunks.push(rest.slice(0, at).trim());
+    rest = rest.slice(at).trim();
+    limit = FOLLOW_UP_CHARS;
+  }
+
+  return rebalanceTail(chunks.filter((c) => c.length > 0), limitFirst);
+}
+
+// Membagi ulang dua potongan terakhir kalau yang paling ujung terlalu pendek,
+// supaya rantainya tidak berakhir dengan balasan sepanjang dua kata.
+function rebalanceTail(chunks: string[], firstLimit: number): string[] {
+  if (chunks.length < 2) return chunks;
+
+  const last = chunks[chunks.length - 1];
+  if (last.length >= MIN_TAIL_CHARS) return chunks;
+
+  const merged = `${chunks[chunks.length - 2]} ${last}`.replace(/\s+\n/g, "\n")
+    .trim();
+
+  // Potongan kedua-dari-akhir bisa jadi potongan pertama, yang jatahnya lebih
+  // sempit karena berbagi post dengan header dan tautan unduh. Memakai
+  // FOLLOW_UP_CHARS di situ akan membuat post utama melampaui batas Threads.
+  const mergeLimit = chunks.length === 2 ? firstLimit : FOLLOW_UP_CHARS;
+
+  // Kalau gabungannya masih muat, ekornya tidak perlu ada sama sekali.
+  if (merged.length <= mergeLimit) {
+    return [...chunks.slice(0, -2), merged];
+  }
+
+  const half = Math.min(Math.ceil(merged.length / 2), mergeLimit);
+  const window = merged.slice(0, half);
+  const cut = Math.max(window.lastIndexOf("\n"), window.lastIndexOf(" "));
+  const at = cut > half * 0.5 ? cut : half;
+
+  return [
+    ...chunks.slice(0, -2),
+    merged.slice(0, at).trim(),
+    merged.slice(at).trim(),
+  ];
 }
 
 // deno-lint-ignore no-explicit-any
@@ -364,11 +491,15 @@ async function publishToThreads(
   userId: string,
   token: string,
   text: string,
+  replyToId?: string,
 ): Promise<string> {
   const createUrl = new URL(`${THREADS_API}/${userId}/threads`);
   createUrl.searchParams.set("media_type", "TEXT");
   createUrl.searchParams.set("text", text);
   createUrl.searchParams.set("access_token", token);
+  // Tanpa reply_to_id, Threads memperlakukannya sebagai post berdiri sendiri
+  // di feed — bukan balasan di bawah pengumuman rilisnya.
+  if (replyToId) createUrl.searchParams.set("reply_to_id", replyToId);
 
   const createRes = await fetch(createUrl, { method: "POST" });
   const created = await createRes.json().catch(() => ({}));
