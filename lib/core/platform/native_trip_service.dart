@@ -24,30 +24,87 @@ class NativeTripService {
     }
   }
 
-  Future<void> start(ActiveTripSession session) async {
-    await _invoke('startActiveTrip', _payload(session));
+  Future<void> start(
+    ActiveTripSession session, {
+    required List<Station> stations,
+    required int stopAlertThreshold,
+    required bool vibrationEnabled,
+    required bool soundEnabled,
+  }) async {
+    await _invoke(
+      'startActiveTrip',
+      _payload(
+        session,
+        stations: stations,
+        stopAlertThreshold: stopAlertThreshold,
+        vibrationEnabled: vibrationEnabled,
+        soundEnabled: soundEnabled,
+      ),
+    );
   }
 
   Future<void> stop() async {
     await _invoke('stopActiveTrip');
   }
 
-  Future<void> update(ActiveTripSession session) async {
-    await _invoke('updateActiveTrip', _payload(session));
-    await _invoke('updateWidget', _payload(session));
+  /// Rider-initiated "Perbarui lokasi": tells the foreground service to
+  /// rebuild its location subscription and fetch one immediate
+  /// high-accuracy fix. The result of that fix arrives through the normal
+  /// [getActiveTripFullState] poll like any other, so this deliberately
+  /// returns nothing — the manual button can only ever make automatic
+  /// tracking conclude sooner, never assert progress by itself.
+  Future<void> refreshLocation() async {
+    await _invoke('refreshActiveTripLocation');
   }
 
-  Future<void> registerStationGeofences(
-    List<Map<String, Object?>> stations,
-  ) async {
-    await _invoke(
-      'registerStationGeofences',
-      <String, Object?>{'stations': stations},
+  /// Clears the pending signal-gap prompt after the rider has answered it
+  /// — or dismissed it, which clears it just the same. The trip stays
+  /// active regardless; see [ActiveTripController.acknowledgeLocationGap].
+  Future<void> acknowledgeLocationGap() async {
+    await _invoke('acknowledgeLocationGap');
+  }
+
+  Future<void> update(
+    ActiveTripSession session, {
+    required List<Station> stations,
+    required int stopAlertThreshold,
+    required bool vibrationEnabled,
+    required bool soundEnabled,
+  }) async {
+    final payload = _payload(
+      session,
+      stations: stations,
+      stopAlertThreshold: stopAlertThreshold,
+      vibrationEnabled: vibrationEnabled,
+      soundEnabled: soundEnabled,
     );
+    await _invoke('updateActiveTrip', payload);
+    await _invoke('updateWidget', payload);
   }
 
-  Future<void> unregisterStationGeofences() async {
-    await _invoke('unregisterStationGeofences');
+  /// Pushes just the live alert-preference fields to native, without a full
+  /// trip-state update — used when the user changes a notification setting
+  /// mid-trip, so `TripProgressEngine` (native) picks it up on its very next
+  /// decision even though the Dart side of the trip hasn't otherwise changed.
+  Future<void> updateSettings({
+    required int stopAlertThreshold,
+    required bool vibrationEnabled,
+    required bool soundEnabled,
+  }) async {
+    await _invoke('updateSettings', <String, Object?>{
+      'stopAlertThreshold': stopAlertThreshold,
+      'vibrationEnabled': vibrationEnabled,
+      'soundEnabled': soundEnabled,
+    });
+  }
+
+  /// The continuously-tracked trip state `TripProgressEngine` (native) owns
+  /// once a trip starts — station index/state, cumulative distance/speed,
+  /// and the latest raw GPS fix. Polled by `ActiveTripController` to keep
+  /// the Dart-side session and the live map in sync with whatever native
+  /// has already decided (including while the app was backgrounded).
+  Future<Map<String, Object?>> getActiveTripFullState() async {
+    return await _invokeMap('getActiveTripFullState') ?? <String, Object?>{};
   }
 
   Future<void> updateNextDepartureWidget(Departure departure) async {
@@ -146,21 +203,6 @@ class NativeTripService {
     return await _invokeMap('getPermissionStatus') ?? <String, Object?>{};
   }
 
-  Future<GeofenceEvent?> getLastGeofenceEvent() async {
-    final map = await _invokeMap('getLastGeofenceEvent');
-    final occurredAtMs = map?['occurredAtEpochMs'] as int?;
-    if (map == null || occurredAtMs == null) {
-      return null;
-    }
-    return GeofenceEvent(
-      stationIds: (map['stationIds'] as List<Object?>? ?? const <Object?>[])
-          .whereType<String>()
-          .toList(growable: false),
-      transition: _parseTransition(map['transition'] as String?),
-      occurredAt: DateTime.fromMillisecondsSinceEpoch(occurredAtMs),
-    );
-  }
-
   Future<ActivityEvent?> getLastActivityEvent() async {
     final map = await _invokeMap('getLastActivityEvent');
     final occurredAtMs = map?['occurredAtEpochMs'] as int?;
@@ -173,13 +215,6 @@ class NativeTripService {
       occurredAt: DateTime.fromMillisecondsSinceEpoch(occurredAtMs),
     );
   }
-
-  GeofenceTransition _parseTransition(String? value) => switch (value) {
-    'enter' => GeofenceTransition.enter,
-    'exit' => GeofenceTransition.exit,
-    'dwell' => GeofenceTransition.dwell,
-    _ => GeofenceTransition.unknown,
-  };
 
   RideActivityType _parseActivityType(String? value) => switch (value) {
     'in_vehicle' => RideActivityType.inVehicle,
@@ -214,30 +249,67 @@ class NativeTripService {
     }
   }
 
-  Map<String, Object?> _payload(ActiveTripSession session) {
+  Map<String, Object?> _payload(
+    ActiveTripSession session, {
+    required List<Station> stations,
+    required int stopAlertThreshold,
+    required bool vibrationEnabled,
+    required bool soundEnabled,
+  }) {
     final stationIds = session.trip.stationIds;
     final lineName = session.trip.legs
         .where((leg) => leg.mode == TransportMode.commuterRail)
         .map((leg) => leg.lineName)
         .whereType<String>()
         .firstOrNull;
+    final stationsById = {for (final station in stations) station.id: station};
+    // Prefer the real (Supabase) station list passed in from the caller —
+    // demoStations alone doesn't know real codes like 'KLDB'/'CUK', so a
+    // real trip's notification/widget text would otherwise show the raw
+    // station code instead of its name.
+    String? resolvedName(String? id) =>
+        id == null ? null : stationsById[id]?.name ?? _stationName(id);
     return <String, Object?>{
       'sessionId': session.id,
+      'startedAtEpochMs': session.startedAt.millisecondsSinceEpoch,
       'tripId': session.trip.id,
       'state': session.state.name,
       'currentStationId': session.currentStationId,
       'nextStationId': session.nextStationId,
       'destinationStationId': session.trip.destinationStationId,
-      'currentStation': _stationName(session.currentStationId),
-      'nextStation': _stationName(session.nextStationId),
-      'destinationName': _stationName(session.trip.destinationStationId),
+      'currentStation': resolvedName(session.currentStationId),
+      'nextStation': resolvedName(session.nextStationId),
+      'destinationName': resolvedName(session.trip.destinationStationId),
       'lineName': lineName ?? 'Commuter Line',
       'remainingStops': session.remainingStops,
       'stationIds': stationIds,
+      'currentStationIndex': session.currentStationIndex,
       'etaEpochMillis': session.trip.arrivalAt.millisecondsSinceEpoch,
       'eta': session.trip.arrivalAt.toIso8601String(),
       'isDemo': session.trip.isDemo,
       'sourceLabel': session.trip.sourceLabel,
+      'lowBatteryMode': session.lowBatteryMode,
+      'distanceMeters': session.distanceMeters,
+      'stopAlertThreshold': stopAlertThreshold,
+      'vibrationEnabled': vibrationEnabled,
+      'soundEnabled': soundEnabled,
+      'stations': <Map<String, Object?>>[
+        for (final id in stationIds)
+          if (stationsById[id] case final station?)
+            <String, Object?>{
+              'id': station.id,
+              'name': station.name,
+              'latitude': station.latitude,
+              'longitude': station.longitude,
+            },
+      ],
+      'transferBoundaries': <Map<String, Object?>>[
+        for (final boundary in session.trip.transferBoundaries)
+          <String, Object?>{
+            'index': boundary.index,
+            'instruction': boundary.instruction,
+          },
+      ],
     };
   }
 

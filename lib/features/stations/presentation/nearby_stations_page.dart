@@ -2,7 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../../core/utils/map_launcher.dart';
 import '../../../core/widgets/empty_state.dart';
+import '../../../core/widgets/facility_icon_chip.dart';
 import '../../../domain/usecases/nearest_station_finder.dart';
 import 'nearest_station_controller.dart';
 
@@ -125,11 +127,7 @@ class _NearbyStationCard extends StatelessWidget {
                 runSpacing: 6,
                 children: <Widget>[
                   for (final facility in station.facilities)
-                    Chip(
-                      label: Text(facility),
-                      visualDensity: VisualDensity.compact,
-                      materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                    ),
+                    FacilityIconChip(label: facility),
                 ],
               ),
             ],
@@ -143,15 +141,11 @@ class _NearbyStationCard extends StatelessWidget {
                   child: const Text('Lihat kereta'),
                 ),
                 OutlinedButton(
-                  onPressed: () {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(
-                        content: Text(
-                          'Navigasi eksternal belum dibuka pada mode demo lokal.',
-                        ),
-                      ),
-                    );
-                  },
+                  onPressed: () => launchMapDirections(
+                    station.latitude,
+                    station.longitude,
+                    label: station.name,
+                  ),
                   child: const Text('Arah ke stasiun'),
                 ),
               ],

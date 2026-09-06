@@ -1,0 +1,65 @@
+  <!-- ================= HERO SECTION ================= -->
+  <section id="beranda" class="pt-20 pb-10 sm:pt-24 lg:pt-24 lg:pb-16 overflow-hidden relative bg-mesh-glow">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+      <div class="grid lg:grid-cols-12 gap-6 lg:gap-10 items-center">
+        
+        <!-- Hero Visuals / Person Image (On Mobile: Displays FIRST on top with order-1, Desktop: order-2 on right, shifted up closer to header) -->
+        <div class="lg:col-span-5 order-1 lg:order-2 relative flex justify-center items-center my-0 lg:-mt-8 xl:-mt-12">
+          
+          <!-- Decorative subtle ambient glow based on logo colors -->
+          <div class="absolute w-64 h-64 sm:w-80 sm:h-80 rounded-full bg-blue-400/15 blur-3xl -z-10"></div>
+          <div class="absolute w-52 h-52 rounded-full bg-red-400/10 blur-2xl -z-10 -right-4 -bottom-4"></div>
+
+          <!-- Main Hero Container (Unmasked so floating badges can overflow cleanly without clipping) -->
+          <div class="relative z-10 w-full max-w-[260px] sm:max-w-[340px] lg:max-w-[420px] xl:max-w-[450px] flex items-center justify-center">
+            
+            <!-- Masked Image Container (Bottom Gradient Feather applies ONLY to the person photos) -->
+            <div class="relative w-full flex items-center justify-center [mask-image:linear-gradient(to_bottom,black_78%,transparent_100%)] [-webkit-mask-image:linear-gradient(to_bottom,black_78%,transparent_100%)]">
+              <img 
+                id="hero-img-1"
+                src="assets/screenshots/hero.webp" 
+                alt="Pengguna Teman Kereta Pria" 
+                class="w-full h-auto object-contain drop-shadow-2xl transition-opacity duration-1000 opacity-100 relative z-10 scale-[0.88] origin-bottom"
+                onerror="this.onerror=null; this.src='assets/screenshots/hero mockup.webp';"
+              >
+              <img 
+                id="hero-img-2"
+                src="assets/screenshots/women hero.webp" 
+                alt="Pengguna Teman Kereta Wanita" 
+                class="w-full h-full object-contain drop-shadow-2xl transition-opacity duration-1000 opacity-0 absolute inset-0 z-10"
+                onerror="this.onerror=null; this.src='assets/screenshots/hero mockup.webp';"
+              >
+            </div>
+
+            <!-- Floating Badge 1: SISA STASIUN (For Hero Man - Fully Unmasked, Floating Snugly Beside Phone) -->
+            <div id="hero-badge-1" class="absolute bottom-5 left-1 sm:bottom-auto sm:top-[31%] sm:-left-24 lg:-left-30 sm:-translate-y-1/2 z-30 bg-white/95 backdrop-blur-md px-2.5 py-1.5 rounded-xl shadow-lg border border-slate-200/90 flex items-center gap-2 animate-float scale-[0.76] sm:scale-[0.82] lg:scale-[0.88] origin-bottom-left sm:origin-right transition-opacity duration-1000 opacity-100">
+              <div class="w-5 h-5 rounded-lg bg-blue-600 text-white flex items-center justify-center shadow-sm shrink-0">
+                <i data-lucide="navigation-2" class="w-3 h-3"></i>
+              </div>
+              <div class="leading-none text-left">
+                <div class="text-[7.5px] sm:text-[8px] font-bold text-blue-600 uppercase tracking-wider mb-0.5">Perjalanan Aktif</div>
+                <div class="text-[9.5px] sm:text-[10.5px] font-extrabold text-slate-900 whitespace-nowrap">Sisa 3 Stasiun ➔ Tebet</div>
+                <div class="text-[7px] sm:text-[8px] text-slate-500 whitespace-nowrap mt-0.5">Estimasi 4 mnt lagi</div>
+              </div>
+            </div>
+
+            <!-- Floating Badge 2: FORUM INFO (For Hero Woman - Fully Unmasked, Floating Snugly Beside Phone) -->
+            <div id="hero-badge-2" class="absolute bottom-5 left-1 sm:bottom-auto sm:top-[33%] sm:-left-28 lg:-left-36 sm:-translate-y-1/2 z-30 bg-white/95 backdrop-blur-md px-2.5 py-1.5 rounded-xl shadow-lg border border-red-200/90 flex items-center gap-2 animate-float scale-[0.74] sm:scale-[0.78] lg:scale-[0.84] origin-bottom-left sm:origin-right transition-opacity duration-1000 opacity-0 pointer-events-none">
+              <div class="w-5 h-5 rounded-lg bg-red-600 text-white flex items-center justify-center shadow-sm shrink-0">
+                <i data-lucide="messages-square" class="w-3 h-3"></i>
+              </div>
+              <div class="leading-none text-left">
+                <div class="text-[7.5px] sm:text-[8px] font-bold text-red-600 uppercase tracking-wider mb-0.5">Forum Komunitas</div>
+                <div class="text-[9.5px] sm:text-[10.5px] font-extrabold text-slate-900 whitespace-nowrap">di Sudirman padet banget guys</div>
+                <div class="text-[7px] sm:text-[8px] text-slate-500 whitespace-nowrap mt-0.5">Baru saja • Jalur 3 &amp; 4</div>
+              </div>
+            </div>
+          </div>
+
+        </div>
+
+        <!-- Left Hero Content / Text, Buttons & Marquee (On Mobile: Displays SECOND below image with order-2, Desktop: order-1 on left, shifted slightly up) -->
+        <div class="lg:col-span-7 order-2 lg:order-1 text-center lg:text-left space-y-4 sm:space-y-5 mt-1 lg:-mt-8 xl:-mt-12">
+          
+          <!-- Main Heading (Spacious, Bold, Impactful Typography) -->
+          <h1 class="text-2xl sm:text-4xl lg:text-[42px] xl:text-[48px] font-extrabold text-slate-950 tracking-[-0.02em] leading-[1.24] sm:leading-[1.26]">

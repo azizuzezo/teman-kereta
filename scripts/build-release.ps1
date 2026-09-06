@@ -63,13 +63,19 @@ if ($LASTEXITCODE -ne 0) {
 }
 
 New-Item -ItemType Directory -Force -Path "dist" | Out-Null
-Copy-Item -Path "build\app\outputs\flutter-apk\app-release.apk" -Destination "dist\app-release.apk" -Force
 $pubspecVersionFull = (Select-String -Path "pubspec.yaml" -Pattern "^version:\s*(.+)$").Matches[0].Groups[1].Value.Trim()
 $versionParts = $pubspecVersionFull -split "\+"
 $versionName = $versionParts[0]
 $versionCode = [int]$versionParts[1]
-$sizeMb = [math]::Round((Get-Item "dist\app-release.apk").Length / 1MB, 1)
-Write-Host "[OK] APK created at dist\app-release.apk ($sizeMb MB, version $versionName+$versionCode)" -ForegroundColor Green
+# Gradle's own output stays `app-release.apk` because `flutter build apk`
+# looks that filename up by hand and fails if it is renamed (see the
+# matching comment in android/app/build.gradle.kts). Everything a human
+# ever sees -- the local dist copy, the R2 object, the download link -- is
+# named for the app and its version instead.
+$apkFileName = "Teman-Kereta.$versionName.apk"
+Copy-Item -Path "build\app\outputs\flutter-apk\app-release.apk" -Destination "dist\$apkFileName" -Force
+$sizeMb = [math]::Round((Get-Item "dist\$apkFileName").Length / 1MB, 1)
+Write-Host "[OK] APK created at dist\$apkFileName ($sizeMb MB, version $versionName+$versionCode)" -ForegroundColor Green
 
 if ($SkipPublish) {
     Write-Host "`n-SkipPublish set: APK built but not uploaded/published. Use the admin panel's /releases page if you want to publish it by hand." -ForegroundColor Cyan
@@ -94,11 +100,11 @@ $serviceRoleKey = $serviceRoleLine.Matches[0].Groups[1].Value.Trim()
 # custom domain matters too -- R2's own shared `*.r2.dev` public URLs were
 # confirmed unreachable for real users (ISP-level blocking), while a
 # domain under temankereta.web.id (already proven reachable) is not.
-$objectPath = "app-release-$versionName.apk"
+$objectPath = $apkFileName
 Write-Host "Uploading to Cloudflare R2 (temankereta-releases/$objectPath)..." -ForegroundColor Yellow
 Push-Location admin
 npx wrangler r2 object put "temankereta-releases/$objectPath" `
-    --file "..\dist\app-release.apk" `
+    --file "..\dist\$apkFileName" `
     --content-type "application/vnd.android.package-archive" `
     --remote
 $uploadExitCode = $LASTEXITCODE

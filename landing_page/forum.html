@@ -1,0 +1,1881 @@
+<!DOCTYPE html>
+<html lang="id" class="scroll-smooth">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  
+  <!-- Primary Meta Tags -->
+  <title>Forum Komunitas Teman Kereta — Kabar & Info KRL Real-Time</title>
+  <meta name="title" content="Forum Komunitas Teman Kereta — Kabar & Info KRL Real-Time">
+  <meta name="description" content="Forum diskusi dan kabar real-time sesama pejuang komuter KRL Jabodetabek. Pantau situasi kereta, transit Manggarai, info kepadatan stasiun, dan tips perjalanan.">
+  <meta name="theme-color" content="#2563eb">
+  <link rel="canonical" href="https://temankereta.web.id/forum">
+
+  <!-- Open Graph / Meta Sosial -->
+  <meta property="og:type" content="website">
+  <meta property="og:url" content="https://temankereta.web.id/forum">
+  <meta property="og:site_name" content="Teman Kereta">
+  <meta property="og:title" content="Forum Komunitas Teman Kereta — Info & Kabar KRL Terkini">
+  <meta property="og:description" content="Pantau situasi stasiun, kepadatan kereta, dan info transit langsung dari sesama komuter KRL Jabodetabek.">
+  <meta property="og:image" content="https://temankereta.web.id/assets/branding/og-image.png">
+
+  <!-- Favicon -->
+  <link rel="icon" type="image/png" href="assets/branding/tk_icon.png">
+
+  <!-- Tailwind CSS CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            brand: {
+              50: '#eff6ff',
+              100: '#dbeafe',
+              500: '#3b82f6',
+              600: '#2563eb',
+              700: '#1d4ed8',
+              800: '#1e40af',
+              900: '#1e3a8a',
+            }
+          },
+          fontFamily: {
+            sans: ['Plus Jakarta Sans', '-apple-system', 'BlinkMacSystemFont', 'system-ui', 'sans-serif'],
+          }
+        }
+      }
+    }
+  </script>
+
+  <!-- Google Fonts, Lucide Icons & Supabase JS SDK -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <script src="https://unpkg.com/lucide@latest"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+
+  <style>
+    /* Custom Scrollbar */
+    ::-webkit-scrollbar {
+      width: 6px;
+      height: 6px;
+    }
+    ::-webkit-scrollbar-track {
+      background: transparent;
+    }
+    ::-webkit-scrollbar-thumb {
+      background: #cbd5e1;
+      border-radius: 9999px;
+    }
+    ::-webkit-scrollbar-thumb:hover {
+      background: #94a3b8;
+    }
+    .hide-scrollbar::-webkit-scrollbar {
+      display: none;
+    }
+    .hide-scrollbar {
+      -ms-overflow-style: none;
+      scrollbar-width: none;
+    }
+    @keyframes pulseSoft {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.4; }
+    }
+    .pulse-live {
+      animation: pulseSoft 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+    }
+  </style>
+</head>
+
+<body class="bg-slate-100/70 text-slate-900 font-sans antialiased min-h-screen pb-20 md:pb-10 relative">
+
+  <!-- ================= IN-SCREEN FLOATING POPUP TOAST (NOTIFIKASI SELAMAT DATANG) ================= -->
+  <div id="toast-container" class="fixed top-5 left-1/2 -translate-x-1/2 z-50 pointer-events-none transition-all duration-300 transform -translate-y-12 opacity-0 flex flex-col items-center">
+    <div class="bg-slate-900 text-white rounded-2xl shadow-2xl border border-slate-800 p-4 flex items-center gap-3.5 max-w-sm sm:max-w-md pointer-events-auto backdrop-blur-md">
+      <div class="w-10 h-10 rounded-xl bg-emerald-600 flex items-center justify-center text-white shrink-0 shadow-sm" id="toast-icon-box">
+        <i data-lucide="check-circle-2" class="w-5 h-5" id="toast-icon"></i>
+      </div>
+      <div class="flex-1 min-w-0 pr-2">
+        <div class="text-xs sm:text-sm font-bold text-white truncate" id="toast-title">Selamat datang kembali!</div>
+        <div class="text-[11px] sm:text-xs text-slate-300 truncate" id="toast-message">Akun kamu berhasil terhubung.</div>
+      </div>
+      <button onclick="hideToast()" class="text-slate-400 hover:text-white p-1 rounded-lg">
+        <i data-lucide="x" class="w-4 h-4"></i>
+      </button>
+    </div>
+  </div>
+
+  <!-- ================= TOP HEADER ================= -->
+  <header class="sticky top-0 z-40 bg-white/95 backdrop-blur-md border-b border-slate-200/90 shadow-sm">
+    <div class="max-w-6xl mx-auto px-4 sm:px-6 h-14 sm:h-16 flex items-center justify-between gap-4">
+      
+      <!-- Brand Logo & Back to Home -->
+      <div class="flex items-center gap-3">
+        <a href="/" class="flex items-center gap-2.5 group" title="Kembali ke Beranda Teman Kereta">
+          <div class="w-8 h-8 sm:w-9 sm:h-9 rounded-xl bg-blue-600 p-0.5 shadow-sm shadow-blue-600/20 group-hover:scale-105 transition-transform flex items-center justify-center">
+            <img src="assets/branding/tk_icon.png" alt="Logo Teman Kereta" class="w-full h-full object-contain rounded-lg bg-white p-0.5">
+          </div>
+          <div class="flex flex-col">
+            <div class="flex items-center gap-1.5">
+              <span class="text-sm sm:text-base font-bold tracking-tight text-slate-950">Teman Kereta</span>
+              <span class="px-1.5 py-0.5 text-[10px] font-bold rounded-md bg-blue-50 text-blue-600 border border-blue-200/60 flex items-center gap-1">
+                <span class="w-1.5 h-1.5 rounded-full bg-emerald-500 pulse-live"></span>
+                <span>Forum</span>
+              </span>
+            </div>
+            <span class="text-[10px] sm:text-[11px] text-slate-500 hidden sm:inline">Kabar Komuter Real-Time</span>
+          </div>
+        </a>
+      </div>
+
+      <!-- Center Search Bar (Live Post Filter) -->
+      <div class="flex-1 max-w-md hidden sm:block">
+        <div class="relative">
+          <i data-lucide="search" class="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2"></i>
+          <input 
+            type="text" 
+            id="search-input"
+            placeholder="Cari stasiun, kabar kereta, atau kendala..." 
+            class="w-full pl-9 pr-4 py-2 text-xs sm:text-sm bg-slate-100 hover:bg-slate-100/80 focus:bg-white focus:ring-2 focus:ring-blue-600/20 focus:border-blue-600 border border-slate-200 rounded-xl transition-all outline-none"
+          >
+        </div>
+      </div>
+
+      <!-- Header Actions & User Auth State -->
+      <div class="flex items-center gap-2 sm:gap-3">
+        
+        <!-- Not Logged In Button -->
+        <div id="header-guest-box" class="flex items-center gap-2">
+          <button 
+            type="button"
+            onclick="openAuthModal('login')"
+            class="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold text-slate-700 hover:text-blue-600 hover:bg-slate-50 rounded-xl border border-slate-200 transition-all"
+          >
+            <i data-lucide="log-in" class="w-3.5 h-3.5"></i>
+            <span>Masuk</span>
+          </button>
+          <button 
+            type="button"
+            onclick="openAuthModal('register')"
+            class="inline-flex items-center gap-1.5 px-3.5 py-1.5 text-xs font-bold text-white bg-blue-600 hover:bg-blue-700 rounded-xl shadow-sm shadow-blue-600/20 transition-all"
+          >
+            <i data-lucide="user-plus" class="w-3.5 h-3.5"></i>
+            <span>Daftar Akun</span>
+          </button>
+        </div>
+
+        <!-- Logged In User Profile Dropdown -->
+        <div id="header-user-box" class="hidden relative">
+          <button 
+            type="button"
+            id="btn-user-menu"
+            class="flex items-center gap-2 p-1 pl-2 bg-slate-50 hover:bg-slate-100 border border-slate-200 rounded-xl transition-colors"
+          >
+            <div class="w-7 h-7 rounded-full bg-blue-600 text-white font-bold text-xs flex items-center justify-center shadow-sm" id="header-user-avatar">
+              U
+            </div>
+            <span class="text-xs font-bold text-slate-800 max-w-[110px] truncate" id="header-user-name">Pengguna</span>
+            <i data-lucide="chevron-down" class="w-3.5 h-3.5 text-slate-400"></i>
+          </button>
+
+          <!-- Dropdown Menu -->
+          <div id="user-dropdown-menu" class="hidden absolute right-0 mt-2 w-52 bg-white border border-slate-200 rounded-2xl shadow-xl py-1.5 z-50">
+            <div class="px-3.5 py-2 border-b border-slate-100">
+              <div class="text-xs font-bold text-slate-900 truncate" id="dropdown-display-name">Nama</div>
+              <div class="text-[11px] text-slate-500 truncate" id="dropdown-username">@username</div>
+            </div>
+            <a href="/" class="flex items-center gap-2 px-3.5 py-2 text-xs text-slate-700 hover:bg-slate-50">
+              <i data-lucide="home" class="w-3.5 h-3.5 text-slate-400"></i>
+              <span>Beranda Web</span>
+            </a>
+            <a href="/#unduh" class="flex items-center gap-2 px-3.5 py-2 text-xs text-slate-700 hover:bg-slate-50">
+              <i data-lucide="smartphone" class="w-3.5 h-3.5 text-slate-400"></i>
+              <span>Unduh Aplikasi</span>
+            </a>
+            <button onclick="handleLogout()" class="w-full flex items-center gap-2 px-3.5 py-2 text-xs text-red-600 hover:bg-red-50 text-left border-t border-slate-100">
+              <i data-lucide="log-out" class="w-3.5 h-3.5"></i>
+              <span>Keluar (Logout)</span>
+            </button>
+          </div>
+        </div>
+
+      </div>
+
+    </div>
+
+    <!-- Mobile Search Bar (Only on extra small screens) -->
+    <div class="px-4 pb-2.5 sm:hidden">
+      <div class="relative">
+        <i data-lucide="search" class="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2"></i>
+        <input 
+          type="text" 
+          id="search-input-mobile"
+          placeholder="Cari kabar stasiun atau jalur..." 
+          class="w-full pl-8 pr-3 py-1.5 text-xs bg-slate-100 focus:bg-white focus:ring-2 focus:ring-blue-600/20 focus:border-blue-600 border border-slate-200 rounded-lg outline-none"
+        >
+      </div>
+    </div>
+
+    <!-- ONLY 2 TABS: "Semua Kabar" & "Info Gangguan" (Line tabs removed per user request) -->
+    <div class="border-t border-slate-100 bg-white">
+      <div class="max-w-6xl mx-auto px-4 sm:px-6 py-2 flex items-center justify-between gap-2">
+        <div class="flex items-center gap-2">
+          <button class="filter-tab active px-4 py-1.5 rounded-full text-xs font-bold transition-all bg-slate-900 text-white shrink-0 shadow-sm flex items-center gap-1.5" data-category="all">
+            <i data-lucide="messages-square" class="w-3.5 h-3.5"></i>
+            <span>Semua Kabar</span>
+          </button>
+          <button class="filter-tab px-4 py-1.5 rounded-full text-xs font-semibold text-slate-600 bg-slate-100 hover:bg-slate-200 transition-all shrink-0 flex items-center gap-1.5" data-category="gangguan">
+            <span class="inline-block w-2 h-2 rounded-full bg-red-500"></span>
+            <span>Info Gangguan &amp; Keterlambatan</span>
+          </button>
+        </div>
+
+        <!-- Realtime Live Indicator -->
+        <div class="hidden sm:flex items-center gap-1.5 text-[11px] font-medium text-slate-500 bg-slate-50 border border-slate-200/80 px-2.5 py-1 rounded-full">
+          <span class="w-2 h-2 rounded-full bg-emerald-500 pulse-live"></span>
+          <span>Feed Real-Time Aktif</span>
+        </div>
+      </div>
+    </div>
+  </header>
+
+  <!-- ================= MAIN LAYOUT (FEED + SIDEBAR) ================= -->
+  <main class="max-w-6xl mx-auto px-4 sm:px-6 pt-4 sm:pt-6">
+    <div class="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
+      
+      <!-- ================= LEFT / CENTER FEED COLUMN (8 Cols on Desktop) ================= -->
+      <div class="lg:col-span-8 space-y-4">
+        
+        <!-- Post Composer Box (Threads / Facebook Style with Real Image Attachment) -->
+        <div class="bg-white rounded-2xl border border-slate-200/90 shadow-sm p-4 sm:p-5 transition-all">
+          <div class="flex items-start gap-3">
+            <div class="w-10 h-10 rounded-full bg-blue-600 text-white font-bold text-sm flex items-center justify-center shrink-0 shadow-sm" id="composer-user-avatar">
+              TK
+            </div>
+            
+            <div class="flex-1 min-w-0">
+              <!-- Author Display & Tag Selector -->
+              <div class="flex flex-wrap items-center gap-2 mb-2">
+                <div class="text-xs font-bold text-slate-900 bg-slate-100 px-2.5 py-1 rounded-lg cursor-pointer hover:bg-slate-200 transition-colors" id="composer-user-label" onclick="if(!currentUser) openAuthModal('login')">
+                  Tamu (Klik untuk Masuk)
+                </div>
+                <select id="composer-category" class="text-xs font-semibold text-slate-700 bg-slate-50 border border-slate-200 px-2.5 py-1 rounded-lg outline-none focus:ring-1 focus:ring-blue-600 cursor-pointer">
+                  <option value="kabar">Kabar Perjalanan</option>
+                  <option value="gangguan">Info Gangguan / Kendala</option>
+                  <option value="tips">Tips &amp; Transit</option>
+                </select>
+                <select id="composer-crowd" class="text-xs font-semibold text-slate-700 bg-slate-50 border border-slate-200 px-2 py-1 rounded-lg outline-none focus:ring-1 focus:ring-blue-600 cursor-pointer">
+                  <option value="Lancar">Lancar / Lengang</option>
+                  <option value="Ramai">Ramai Lancar</option>
+                  <option value="Padat">Padat Merayap</option>
+                </select>
+              </div>
+
+              <!-- Textarea Body -->
+              <textarea 
+                id="composer-body"
+                rows="2" 
+                placeholder="Ada kabar apa di stasiun atau keretamu saat ini, Pejuang KRL?" 
+                class="w-full text-sm text-slate-800 placeholder-slate-400 bg-transparent border-0 focus:ring-0 p-0 resize-none outline-none leading-relaxed"
+              ></textarea>
+
+              <!-- Image Attachment Preview Box -->
+              <div id="composer-image-preview-box" class="hidden mt-2 relative inline-block">
+                <img id="composer-image-preview" src="" alt="Lampiran Foto" class="max-h-48 rounded-xl object-cover border border-slate-200 shadow-sm">
+                <button type="button" onclick="removeAttachedImage()" class="absolute top-1.5 right-1.5 w-6 h-6 bg-slate-900/80 hover:bg-slate-900 text-white rounded-full flex items-center justify-center shadow">
+                  <i data-lucide="x" class="w-3.5 h-3.5"></i>
+                </button>
+              </div>
+
+              <!-- Hidden File Input for Real Image Upload -->
+              <input type="file" id="composer-file-input" accept="image/*" class="hidden" onchange="handleImagePicked(event)">
+
+              <!-- Attachment Triggers & Post Button -->
+              <div class="pt-3 mt-2 border-t border-slate-100 flex items-center justify-between gap-2">
+                <div class="flex items-center gap-2 text-slate-500">
+                  <!-- Real Image Attach Button -->
+                  <button 
+                    type="button" 
+                    onclick="document.getElementById('composer-file-input').click()"
+                    class="inline-flex items-center gap-1 text-xs px-2.5 py-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold transition-colors"
+                  >
+                    <i data-lucide="image" class="w-3.5 h-3.5 text-blue-600"></i>
+                    <span>Foto</span>
+                  </button>
+
+                  <span class="inline-flex items-center gap-1 text-[11px] text-slate-400 hidden sm:inline-flex">
+                    <i data-lucide="shield-check" class="w-3.5 h-3.5 text-blue-600"></i>
+                    <span>Tersinkron Real-Time</span>
+                  </span>
+                </div>
+
+                <button 
+                  type="button" 
+                  id="btn-submit-post"
+                  class="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 active:bg-blue-800 text-white font-bold text-xs sm:text-sm shadow-sm shadow-blue-600/25 transition-all hover:-translate-y-0.5"
+                >
+                  <i data-lucide="send" class="w-3.5 h-3.5"></i>
+                  <span>Kirim Kabar</span>
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- ================= POST FEED CONTAINER ================= -->
+        <div id="posts-container" class="space-y-3 sm:space-y-4">
+          <!-- Live posts rendered here dynamically -->
+        </div>
+
+        <!-- Load More Indicator -->
+        <div class="py-6 text-center">
+          <button id="btn-load-more" onclick="loadMorePosts()" class="px-5 py-2.5 rounded-xl bg-white border border-slate-200 text-slate-700 text-xs sm:text-sm font-semibold hover:bg-slate-50 shadow-sm transition-all">
+            Muat Postingan Lainnya
+          </button>
+        </div>
+
+      </div>
+
+      <!-- ================= RIGHT SIDEBAR (4 Cols on Desktop) ================= -->
+      <aside class="hidden lg:block lg:col-span-4 space-y-4 sticky top-24">
+        
+        <!-- Live Stasiun Kepadatan Status (CROWDSOURCED REAL 30 MENIT TERAKHIR) -->
+        <div class="bg-white rounded-2xl border border-slate-200/90 shadow-sm p-5 space-y-4">
+          <div class="flex items-center justify-between">
+            <div class="flex items-center gap-2">
+              <span class="w-2 h-2 rounded-full bg-emerald-500 pulse-live"></span>
+              <h3 class="font-bold text-sm text-slate-900">Situasi Stasiun Terkini</h3>
+            </div>
+            <span class="text-[10px] font-semibold text-blue-600 bg-blue-50 px-2 py-0.5 rounded-md border border-blue-200/60">30 Menit Terakhir</span>
+          </div>
+
+          <!-- Dynamic Station Reports List -->
+          <div id="station-reports-container" class="space-y-2.5 text-xs">
+            <!-- Rendered by JavaScript from actual 30-minute reports -->
+          </div>
+
+          <!-- Button to Report Live Station Condition -->
+          <button 
+            type="button" 
+            onclick="openStationReportModal()"
+            class="w-full py-2.5 px-3 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-800 font-bold text-xs flex items-center justify-center gap-1.5 transition-colors"
+          >
+            <i data-lucide="map-pin" class="w-3.5 h-3.5 text-blue-600"></i>
+            <span>Laporkan Situasi Stasiun Saat Ini</span>
+          </button>
+        </div>
+
+        <!-- Trending Topics KRL (Dihitung Real dari Postingan & Hashtag Pengguna) -->
+        <div class="bg-white rounded-2xl border border-slate-200/90 shadow-sm p-5 space-y-3.5">
+          <div class="flex items-center justify-between">
+            <h3 class="font-bold text-sm text-slate-900 flex items-center gap-1.5">
+              <i data-lucide="trending-up" class="w-4 h-4 text-blue-600"></i>
+              <span>Topik Ramai Hari Ini</span>
+            </h3>
+            <span class="text-[10px] font-semibold text-slate-400 bg-slate-100 px-2 py-0.5 rounded-md">Real-Time</span>
+          </div>
+
+          <div id="trending-topics-container" class="space-y-2 text-xs">
+            <!-- Rendered dynamically from real post content & hashtags -->
+          </div>
+        </div>
+
+        <!-- Download App Promo Card -->
+        <div class="bg-white border border-slate-200/90 rounded-2xl p-5 shadow-sm space-y-3.5">
+          <div class="flex items-center gap-3">
+            <div class="w-10 h-10 rounded-xl bg-blue-600 p-0.5 shadow-sm shrink-0 flex items-center justify-center">
+              <img src="assets/branding/tk_icon.png" alt="Logo Teman Kereta" class="w-full h-full object-contain rounded-lg bg-white p-0.5">
+            </div>
+            <div>
+              <div class="font-bold text-sm text-slate-900 leading-tight">Aplikasi Teman Kereta</div>
+              <div class="text-xs text-slate-500">Alarm KRL &amp; Pelacak Stasiun</div>
+            </div>
+          </div>
+          
+          <p class="text-xs text-slate-600 leading-relaxed">
+            Aktifkan alarm getar otomatis saat tidur di kereta agar tidak kebablasan. 100% Gratis &amp; Bebas Iklan.
+          </p>
+
+          <a href="/#unduh" class="flex items-center justify-center gap-2 w-full py-2.5 px-4 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs transition-colors shadow-sm shadow-blue-600/20">
+            <i data-lucide="download" class="w-3.5 h-3.5"></i>
+            <span>Unduh APK Android (v1.0)</span>
+          </a>
+        </div>
+
+        <!-- Mini Footer -->
+        <div class="px-2 text-[11px] text-slate-400 leading-relaxed space-y-1">
+          <div class="flex flex-wrap gap-x-3 gap-y-1">
+            <a href="/" class="hover:text-blue-600">Beranda</a>
+            <a href="/#fitur" class="hover:text-blue-600">Fitur</a>
+            <a href="/#faq" class="hover:text-blue-600">FAQ</a>
+            <a href="https://temankereta.web.id" class="hover:text-blue-600">temankereta.web.id</a>
+          </div>
+          <div>&copy; 2026 Teman Kereta. Aplikasi independen pejuang komuter.</div>
+        </div>
+
+      </aside>
+
+    </div>
+  </main>
+
+  <!-- ================= STATION REPORT MODAL (CROWDSOURCED 30 MENIT) ================= -->
+  <div id="station-report-modal" class="fixed inset-0 z-50 hidden bg-slate-950/60 backdrop-blur-sm flex items-center justify-center p-4">
+    <div class="bg-white rounded-3xl border border-slate-200 shadow-2xl w-full max-w-md overflow-hidden relative animate-in fade-in zoom-in-95 duration-200">
+      <button onclick="closeStationReportModal()" class="absolute top-4 right-4 p-2 text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded-full transition-colors">
+        <i data-lucide="x" class="w-5 h-5"></i>
+      </button>
+
+      <div class="pt-6 pb-4 px-6 text-center space-y-2 border-b border-slate-100 bg-slate-50/50">
+        <div class="w-12 h-12 rounded-2xl bg-blue-50 text-blue-600 mx-auto flex items-center justify-center">
+          <i data-lucide="map-pin" class="w-6 h-6"></i>
+        </div>
+        <h3 class="text-lg font-bold text-slate-950">Laporkan Situasi Stasiun</h3>
+        <p class="text-xs text-slate-500">Laporan kamu ditampilkan kepada sesama komuter selama 30 menit ke depan.</p>
+      </div>
+
+      <form id="station-report-form" onsubmit="handleStationReportSubmit(event)" class="p-6 space-y-4 text-xs">
+        <div>
+          <label class="block font-bold text-slate-700 mb-1">Pilih Stasiun</label>
+          <select id="report-station-name" required class="w-full py-2.5 px-3 bg-slate-50 focus:bg-white border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-blue-600/20 focus:border-blue-600 text-xs sm:text-sm font-semibold text-slate-800">
+            <option value="Stasiun Manggarai">Stasiun Manggarai (Transit Utama)</option>
+            <option value="Stasiun Tanah Abang">Stasiun Tanah Abang (Transit Utama)</option>
+            <option value="Stasiun Duri">Stasiun Duri (Transit Utama)</option>
+            <option value="Stasiun Jakarta Kota">Stasiun Jakarta Kota (Terminus)</option>
+            <option value="Stasiun Bogor">Stasiun Bogor (Terminus)</option>
+            <option value="Stasiun Cikarang">Stasiun Cikarang (Terminus)</option>
+            <option value="Stasiun Rangkasbitung">Stasiun Rangkasbitung (Terminus)</option>
+            <option value="Stasiun Tangerang">Stasiun Tangerang (Terminus)</option>
+            <option disabled class="text-slate-400 font-bold bg-slate-100">─── Semua Stasiun KRL (A-Z) ───</option>
+            <option value="Stasiun Ancol">Stasiun Ancol</option>
+            <option value="Stasiun Angke">Stasiun Angke</option>
+            <option value="Stasiun Batu Ceper">Stasiun Batu Ceper</option>
+            <option value="Stasiun Bekasi">Stasiun Bekasi</option>
+            <option value="Stasiun Bekasi Timur">Stasiun Bekasi Timur</option>
+            <option value="Stasiun BNI City">Stasiun BNI City</option>
+            <option value="Stasiun Bogor">Stasiun Bogor</option>
+            <option value="Stasiun Bojong Indah">Stasiun Bojong Indah</option>
+            <option value="Stasiun Bojonggede">Stasiun Bojonggede</option>
+            <option value="Stasiun Buaran">Stasiun Buaran</option>
+            <option value="Stasiun Cakung">Stasiun Cakung</option>
+            <option value="Stasiun Cawang">Stasiun Cawang</option>
+            <option value="Stasiun Cibinong">Stasiun Cibinong</option>
+            <option value="Stasiun Cibitung">Stasiun Cibitung</option>
+            <option value="Stasiun Cicayur">Stasiun Cicayur</option>
+            <option value="Stasiun Cikarang">Stasiun Cikarang</option>
+            <option value="Stasiun Cikini">Stasiun Cikini</option>
+            <option value="Stasiun Cikoya">Stasiun Cikoya</option>
+            <option value="Stasiun Cilebut">Stasiun Cilebut</option>
+            <option value="Stasiun Cilejit">Stasiun Cilejit</option>
+            <option value="Stasiun Cisauk">Stasiun Cisauk</option>
+            <option value="Stasiun Citayam">Stasiun Citayam</option>
+            <option value="Stasiun Citeras">Stasiun Citeras</option>
+            <option value="Stasiun Daru">Stasiun Daru</option>
+            <option value="Stasiun Depok">Stasiun Depok</option>
+            <option value="Stasiun Depok Baru">Stasiun Depok Baru</option>
+            <option value="Stasiun Duren Kalibata">Stasiun Duren Kalibata</option>
+            <option value="Stasiun Duri">Stasiun Duri</option>
+            <option value="Stasiun Gambir">Stasiun Gambir</option>
+            <option value="Stasiun Gang Sentiong">Stasiun Gang Sentiong</option>
+            <option value="Stasiun Gondangdia">Stasiun Gondangdia</option>
+            <option value="Stasiun Grogol">Stasiun Grogol</option>
+            <option value="Stasiun Jakarta International Stadium">Stasiun Jakarta International Stadium (JIS)</option>
+            <option value="Stasiun Jakarta Kota">Stasiun Jakarta Kota</option>
+            <option value="Stasiun Jatake">Stasiun Jatake</option>
+            <option value="Stasiun Jatinegara">Stasiun Jatinegara</option>
+            <option value="Stasiun Jayakarta">Stasiun Jayakarta</option>
+            <option value="Stasiun Juanda">Stasiun Juanda</option>
+            <option value="Stasiun Jurangmangu">Stasiun Jurangmangu</option>
+            <option value="Stasiun Kalideres">Stasiun Kalideres</option>
+            <option value="Stasiun Kampung Bandan">Stasiun Kampung Bandan</option>
+            <option value="Stasiun Karet">Stasiun Karet</option>
+            <option value="Stasiun Kebayoran">Stasiun Kebayoran</option>
+            <option value="Stasiun Kemayoran">Stasiun Kemayoran</option>
+            <option value="Stasiun Klender">Stasiun Klender</option>
+            <option value="Stasiun Klender Baru">Stasiun Klender Baru</option>
+            <option value="Stasiun Kramat">Stasiun Kramat</option>
+            <option value="Stasiun Kranji">Stasiun Kranji</option>
+            <option value="Stasiun Lenteng Agung">Stasiun Lenteng Agung</option>
+            <option value="Stasiun Maja">Stasiun Maja</option>
+            <option value="Stasiun Mangga Besar">Stasiun Mangga Besar</option>
+            <option value="Stasiun Manggarai">Stasiun Manggarai</option>
+            <option value="Stasiun Matraman">Stasiun Matraman</option>
+            <option value="Stasiun Metland Telagamurni">Stasiun Metland Telagamurni</option>
+            <option value="Stasiun Nambo">Stasiun Nambo</option>
+            <option value="Stasiun Palmerah">Stasiun Palmerah</option>
+            <option value="Stasiun Parung Panjang">Stasiun Parung Panjang</option>
+            <option value="Stasiun Pasar Minggu">Stasiun Pasar Minggu</option>
+            <option value="Stasiun Pasar Minggu Baru">Stasiun Pasar Minggu Baru</option>
+            <option value="Stasiun Pasar Senen">Stasiun Pasar Senen</option>
+            <option value="Stasiun Pesing">Stasiun Pesing</option>
+            <option value="Stasiun Pondok Cina">Stasiun Pondok Cina</option>
+            <option value="Stasiun Pondok Jati">Stasiun Pondok Jati</option>
+            <option value="Stasiun Pondok Rajeg">Stasiun Pondok Rajeg</option>
+            <option value="Stasiun Pondok Ranji">Stasiun Pondok Ranji</option>
+            <option value="Stasiun Poris">Stasiun Poris</option>
+            <option value="Stasiun Rajawali">Stasiun Rajawali</option>
+            <option value="Stasiun Rangkasbitung">Stasiun Rangkasbitung</option>
+            <option value="Stasiun Rawa Buaya">Stasiun Rawa Buaya</option>
+            <option value="Stasiun Rawa Buntu">Stasiun Rawa Buntu</option>
+            <option value="Stasiun Sawah Besar">Stasiun Sawah Besar</option>
+            <option value="Stasiun Serpong">Stasiun Serpong</option>
+            <option value="Stasiun Sudimara">Stasiun Sudimara</option>
+            <option value="Stasiun Sudirman">Stasiun Sudirman</option>
+            <option value="Stasiun Taman Kota">Stasiun Taman Kota</option>
+            <option value="Stasiun Tambun">Stasiun Tambun</option>
+            <option value="Stasiun Tanah Abang">Stasiun Tanah Abang</option>
+            <option value="Stasiun Tanah Tinggi">Stasiun Tanah Tinggi</option>
+            <option value="Stasiun Tangerang">Stasiun Tangerang</option>
+            <option value="Stasiun Tanjung Barat">Stasiun Tanjung Barat</option>
+            <option value="Stasiun Tanjung Priok">Stasiun Tanjung Priok</option>
+            <option value="Stasiun Tebet">Stasiun Tebet</option>
+            <option value="Stasiun Tenjo">Stasiun Tenjo</option>
+            <option value="Stasiun Tigaraksa">Stasiun Tigaraksa</option>
+            <option value="Stasiun Universitas Indonesia">Stasiun Universitas Indonesia (UI)</option>
+            <option value="Stasiun Universitas Pancasila">Stasiun Universitas Pancasila (UP)</option>
+          </select>
+        </div>
+
+        <div>
+          <label class="block font-bold text-slate-700 mb-1">Kondisi Kepadatan</label>
+          <div class="grid grid-cols-3 gap-2">
+            <label class="flex flex-col items-center justify-center p-2.5 rounded-xl border border-slate-200 cursor-pointer hover:bg-slate-50 has-[:checked]:border-emerald-500 has-[:checked]:bg-emerald-50 text-center">
+              <input type="radio" name="report_condition" value="Lancar" checked class="hidden">
+              <span class="w-2.5 h-2.5 rounded-full bg-emerald-500 mb-1"></span>
+              <span class="font-bold text-slate-900 text-[11px]">Lancar</span>
+              <span class="text-[9px] text-slate-500">Lengang</span>
+            </label>
+            <label class="flex flex-col items-center justify-center p-2.5 rounded-xl border border-slate-200 cursor-pointer hover:bg-slate-50 has-[:checked]:border-amber-500 has-[:checked]:bg-amber-50 text-center">
+              <input type="radio" name="report_condition" value="Ramai Lancar" class="hidden">
+              <span class="w-2.5 h-2.5 rounded-full bg-amber-500 mb-1"></span>
+              <span class="font-bold text-slate-900 text-[11px]">Ramai</span>
+              <span class="text-[9px] text-slate-500">Ramai Lancar</span>
+            </label>
+            <label class="flex flex-col items-center justify-center p-2.5 rounded-xl border border-slate-200 cursor-pointer hover:bg-slate-50 has-[:checked]:border-red-500 has-[:checked]:bg-red-50 text-center">
+              <input type="radio" name="report_condition" value="Padat" class="hidden">
+              <span class="w-2.5 h-2.5 rounded-full bg-red-500 mb-1"></span>
+              <span class="font-bold text-slate-900 text-[11px]">Padat</span>
+              <span class="text-[9px] text-slate-500">Antre Panjang</span>
+            </label>
+          </div>
+        </div>
+
+        <div>
+          <label class="block font-bold text-slate-700 mb-1">Catatan Tambahan (Opsional)</label>
+          <input 
+            type="text" 
+            id="report-station-note" 
+            placeholder="Contoh: Peron 11-12 arah Bogor, antre eskalator" 
+            class="w-full py-2.5 px-3 bg-slate-50 focus:bg-white border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-blue-600/20 focus:border-blue-600 text-xs text-slate-800"
+          >
+        </div>
+
+        <button 
+          type="submit" 
+          class="w-full py-3 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs sm:text-sm shadow-md shadow-blue-600/25 transition-all"
+        >
+          Kirim Laporan Situasi
+        </button>
+      </form>
+    </div>
+  </div>
+
+  <!-- ================= AUTH MODAL (LOGIN & DAFTAR) ================= -->
+  <div id="auth-modal" class="fixed inset-0 z-50 hidden bg-slate-950/60 backdrop-blur-sm flex items-center justify-center p-4">
+    <div class="bg-white rounded-3xl border border-slate-200 shadow-2xl w-full max-w-md overflow-hidden relative animate-in fade-in zoom-in-95 duration-200">
+      
+      <!-- Close Modal Button -->
+      <button onclick="closeAuthModal()" class="absolute top-4 right-4 p-2 text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded-full transition-colors">
+        <i data-lucide="x" class="w-5 h-5"></i>
+      </button>
+
+      <!-- Modal Header with Official Logo -->
+      <div class="pt-8 pb-5 px-6 text-center space-y-3 border-b border-slate-100 bg-slate-50/50">
+        <div class="w-14 h-14 rounded-2xl bg-blue-600 p-0.5 mx-auto shadow-md shadow-blue-600/25 flex items-center justify-center">
+          <img src="assets/branding/tk_icon.png" alt="Logo Teman Kereta" class="w-full h-full object-contain rounded-xl bg-white p-1">
+        </div>
+        <div>
+          <h3 class="text-xl font-extrabold text-slate-950 tracking-tight" id="auth-modal-title">Masuk ke Forum Teman Kereta</h3>
+          <p class="text-xs text-slate-500 mt-1" id="auth-modal-subtitle">Gunakan akun yang sama dengan aplikasi Teman Kereta kamu.</p>
+        </div>
+
+        <!-- Auth Tabs: Masuk vs Daftar -->
+        <div class="flex items-center p-1 bg-slate-200/70 rounded-xl text-xs font-bold mt-3">
+          <button id="tab-login-btn" onclick="switchAuthTab('login')" class="flex-1 py-2 rounded-lg bg-white text-slate-900 shadow-sm transition-all">
+            Masuk Akun
+          </button>
+          <button id="tab-register-btn" onclick="switchAuthTab('register')" class="flex-1 py-2 rounded-lg text-slate-600 hover:text-slate-900 transition-all">
+            Daftar Baru
+          </button>
+        </div>
+      </div>
+
+      <!-- Auth Form Body -->
+      <div class="p-6 space-y-4">
+        
+        <!-- Error Alert -->
+        <div id="auth-error-box" class="hidden p-3 rounded-xl bg-red-50 border border-red-200 text-xs text-red-700 flex items-start gap-2">
+          <i data-lucide="alert-circle" class="w-4 h-4 text-red-600 shrink-0 mt-0.5"></i>
+          <span id="auth-error-msg">Terjadi kesalahan. Silakan coba lagi.</span>
+        </div>
+
+        <form id="auth-form" onsubmit="handleAuthSubmit(event)" class="space-y-3.5">
+          
+          <!-- Register Only: Full Name & Username -->
+          <div id="register-fields" class="hidden space-y-3.5">
+            <div>
+              <label class="block text-xs font-bold text-slate-700 mb-1">Nama Lengkap</label>
+              <div class="relative">
+                <i data-lucide="user" class="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2"></i>
+                <input 
+                  type="text" 
+                  id="auth-fullname"
+                  placeholder="Contoh: Aziz"
+                  class="w-full pl-9 pr-3.5 py-2.5 text-xs sm:text-sm bg-slate-50 focus:bg-white border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-blue-600/20 focus:border-blue-600 transition-all"
+                >
+              </div>
+            </div>
+
+            <div>
+              <label class="block text-xs font-bold text-slate-700 mb-1">Username</label>
+              <div class="relative">
+                <i data-lucide="at-sign" class="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2"></i>
+                <input 
+                  type="text" 
+                  id="auth-username"
+                  placeholder="aziz"
+                  class="w-full pl-9 pr-3.5 py-2.5 text-xs sm:text-sm bg-slate-50 focus:bg-white border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-blue-600/20 focus:border-blue-600 transition-all"
+                >
+              </div>
+            </div>
+          </div>
+
+          <!-- Email Input -->
+          <div>
+            <label class="block text-xs font-bold text-slate-700 mb-1">Alamat Email</label>
+            <div class="relative">
+              <i data-lucide="mail" class="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2"></i>
+              <input 
+                type="email" 
+                id="auth-email"
+                required
+                placeholder="nama@email.com"
+                class="w-full pl-9 pr-3.5 py-2.5 text-xs sm:text-sm bg-slate-50 focus:bg-white border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-blue-600/20 focus:border-blue-600 transition-all"
+              >
+            </div>
+          </div>
+
+          <!-- Password Input (With Hide & Seek Toggle) -->
+          <div>
+            <div class="flex items-center justify-between mb-1">
+              <label class="text-xs font-bold text-slate-700">Kata Sandi (Password)</label>
+              <span id="auth-forgot-link" class="text-[11px] text-blue-600 hover:underline cursor-pointer">Lupa sandi?</span>
+            </div>
+            <div class="relative">
+              <i data-lucide="lock" class="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2"></i>
+              <input 
+                type="password" 
+                id="auth-password"
+                required
+                placeholder="Minimal 6 karakter"
+                class="w-full pl-9 pr-10 py-2.5 text-xs sm:text-sm bg-slate-50 focus:bg-white border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-blue-600/20 focus:border-blue-600 transition-all"
+              >
+              <!-- Hide and Seek Password Button -->
+              <button 
+                type="button" 
+                onclick="togglePasswordVisibility('auth-password', 'eye-icon-1')"
+                class="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-700 focus:outline-none p-1"
+                title="Tampilkan / Sembunyikan Kata Sandi"
+              >
+                <i data-lucide="eye" id="eye-icon-1" class="w-4 h-4"></i>
+              </button>
+            </div>
+          </div>
+
+          <!-- Submit Button -->
+          <div class="pt-2">
+            <button 
+              type="submit" 
+              id="auth-submit-btn"
+              class="w-full py-3 px-4 rounded-xl bg-blue-600 hover:bg-blue-700 active:bg-blue-800 text-white font-bold text-sm shadow-md shadow-blue-600/25 transition-all flex items-center justify-center gap-2"
+            >
+              <i data-lucide="log-in" id="auth-btn-icon" class="w-4 h-4"></i>
+              <span id="auth-btn-label">Masuk ke Forum</span>
+            </button>
+          </div>
+
+        </form>
+
+        <div class="pt-2 text-center text-xs text-slate-500">
+          Belum punya akun di aplikasi? 
+          <button type="button" onclick="switchAuthTab('register')" class="font-bold text-blue-600 hover:underline">Daftar sekarang</button>
+        </div>
+
+      </div>
+
+    </div>
+  </div>
+
+  <!-- ================= MOBILE BOTTOM NAVIGATION ================= -->
+  <nav class="md:hidden fixed bottom-0 left-0 right-0 z-40 bg-white/95 backdrop-blur-md border-t border-slate-200/90 px-6 py-2 flex items-center justify-around">
+    <a href="/" class="flex flex-col items-center gap-0.5 text-slate-500 hover:text-blue-600">
+      <i data-lucide="home" class="w-5 h-5"></i>
+      <span class="text-[10px] font-medium">Beranda</span>
+    </a>
+    <button onclick="scrollToComposer()" class="flex flex-col items-center gap-0.5 text-blue-600 font-bold">
+      <i data-lucide="messages-square" class="w-5 h-5"></i>
+      <span class="text-[10px]">Forum</span>
+    </button>
+    <button onclick="focusComposer()" class="w-10 h-10 -mt-4 rounded-full bg-blue-600 text-white flex items-center justify-center shadow-md shadow-blue-600/30 hover:scale-105 active:scale-95 transition-transform">
+      <i data-lucide="plus" class="w-5 h-5"></i>
+    </button>
+    <button onclick="openStationReportModal()" class="flex flex-col items-center gap-0.5 text-slate-500 hover:text-blue-600">
+      <i data-lucide="map-pin" class="w-5 h-5"></i>
+      <span class="text-[10px] font-medium">Stasiun</span>
+    </button>
+    <button onclick="if(!currentUser) openAuthModal('login'); else document.getElementById('user-dropdown-menu')?.classList.toggle('hidden');" class="flex flex-col items-center gap-0.5 text-slate-500 hover:text-blue-600">
+      <i data-lucide="user" class="w-5 h-5"></i>
+      <span class="text-[10px] font-medium" id="mobile-nav-user-label">Akun</span>
+    </button>
+  </nav>
+
+  <!-- ================= JAVASCRIPT APP, REALTIME & CROWDSOURCING LOGIC ================= -->
+  <script>
+    // 1. Supabase Initialization
+    const SUPABASE_URL = "https://slcttxbxcdrsavgugzdy.supabase.co";
+    const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InNsY3R0eGJ4Y2Ryc2F2Z3VnemR5Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODU4NDM5NjksImV4cCI6MjEwMTQxOTk2OX0.o-N_03nF0ZmlurmHM3_ogRDupnXLOPY2ztAU8zU0kbE";
+    
+    let supabaseClient = null;
+    try {
+      if (window.supabase) {
+        supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+      }
+    } catch(e) {
+      console.warn("Supabase client init:", e);
+    }
+
+    // 2. Active User State
+    let currentUser = null;
+    let attachedImageBase64 = null;
+
+    // Toast Notification
+    let toastTimeout = null;
+    function showToast(title, message, isSuccess = true) {
+      const toast = document.getElementById('toast-container');
+      const iconBox = document.getElementById('toast-icon-box');
+      const icon = document.getElementById('toast-icon');
+      
+      document.getElementById('toast-title').textContent = title;
+      document.getElementById('toast-message').textContent = message;
+
+      if (isSuccess) {
+        iconBox.className = "w-10 h-10 rounded-xl bg-emerald-600 flex items-center justify-center text-white shrink-0 shadow-sm";
+        icon.setAttribute('data-lucide', 'check-circle-2');
+      } else {
+        iconBox.className = "w-10 h-10 rounded-xl bg-red-600 flex items-center justify-center text-white shrink-0 shadow-sm";
+        icon.setAttribute('data-lucide', 'alert-circle');
+      }
+      lucide.createIcons();
+
+      toast.classList.remove('-translate-y-12', 'opacity-0');
+      toast.classList.add('translate-y-0', 'opacity-100');
+
+      if (toastTimeout) clearTimeout(toastTimeout);
+      toastTimeout = setTimeout(() => {
+        hideToast();
+      }, 4500);
+    }
+
+    function hideToast() {
+      const toast = document.getElementById('toast-container');
+      toast.classList.remove('translate-y-0', 'opacity-100');
+      toast.classList.add('-translate-y-12', 'opacity-0');
+    }
+
+    // Fetch user profile from public.users table
+    async function fetchUserProfile(userId, fallbackEmail, userMetadata = {}) {
+      let displayName = userMetadata.display_name || userMetadata.full_name || '';
+      let username = userMetadata.username || '';
+      let avatarUrl = userMetadata.avatar_url || null;
+
+      if (supabaseClient) {
+        try {
+          const { data, error } = await supabaseClient
+            .from('users')
+            .select('id, username, display_name, avatar_url')
+            .eq('id', userId)
+            .maybeSingle();
+
+          if (data && !error) {
+            if (data.display_name) displayName = data.display_name;
+            if (data.username) username = data.username;
+            if (data.avatar_url) avatarUrl = data.avatar_url;
+          }
+        } catch (e) {
+          console.warn("Could not fetch public.users profile:", e);
+        }
+      }
+
+      if (!displayName) {
+        displayName = fallbackEmail ? fallbackEmail.split('@')[0] : 'Pejuang KRL';
+      }
+      if (!username) {
+        username = displayName.toLowerCase().replace(/[^a-z0-9_]/g, '_');
+      }
+
+      const initials = displayName.substring(0, 2).toUpperCase();
+
+      return {
+        id: userId,
+        email: fallbackEmail,
+        displayName: displayName,
+        username: username,
+        avatarUrl: avatarUrl,
+        initials: initials
+      };
+    }
+
+    async function initUserSession() {
+      const localUser = localStorage.getItem('tk_current_user');
+      if (localUser) {
+        try {
+          currentUser = JSON.parse(localUser);
+        } catch(e) {}
+      }
+
+      if (supabaseClient) {
+        try {
+          const { data: { user } } = await supabaseClient.auth.getUser();
+          if (user) {
+            currentUser = await fetchUserProfile(user.id, user.email, user.user_metadata || {});
+            localStorage.setItem('tk_current_user', JSON.stringify(currentUser));
+          }
+        } catch (e) {
+          console.warn("Session check note:", e);
+        }
+      }
+
+      updateAuthUI();
+    }
+
+    function updateAuthUI() {
+      const guestBox = document.getElementById('header-guest-box');
+      const userBox = document.getElementById('header-user-box');
+      const composerLabel = document.getElementById('composer-user-label');
+      const composerAvatar = document.getElementById('composer-user-avatar');
+      const mobileNavLabel = document.getElementById('mobile-nav-user-label');
+
+      if (currentUser) {
+        if (guestBox) guestBox.classList.add('hidden');
+        if (userBox) userBox.classList.remove('hidden');
+        
+        document.getElementById('header-user-name').textContent = currentUser.displayName;
+        document.getElementById('header-user-avatar').textContent = currentUser.initials;
+        document.getElementById('dropdown-display-name').textContent = currentUser.displayName;
+        document.getElementById('dropdown-username').textContent = '@' + currentUser.username;
+        
+        if (composerLabel) composerLabel.textContent = currentUser.displayName + ' (@' + currentUser.username + ')';
+        if (composerAvatar) composerAvatar.textContent = currentUser.initials;
+        if (mobileNavLabel) mobileNavLabel.textContent = currentUser.displayName.split(' ')[0];
+      } else {
+        if (guestBox) guestBox.classList.remove('hidden');
+        if (userBox) userBox.classList.add('hidden');
+        if (composerLabel) composerLabel.textContent = 'Tamu (Klik untuk Masuk)';
+        if (composerAvatar) composerAvatar.textContent = 'TK';
+        if (mobileNavLabel) mobileNavLabel.textContent = 'Akun';
+      }
+      lucide.createIcons();
+    }
+
+    // Toggle Dropdown Menu
+    document.getElementById('btn-user-menu')?.addEventListener('click', () => {
+      const menu = document.getElementById('user-dropdown-menu');
+      menu.classList.toggle('hidden');
+    });
+
+    document.addEventListener('click', (e) => {
+      const userBox = document.getElementById('header-user-box');
+      const menu = document.getElementById('user-dropdown-menu');
+      if (userBox && !userBox.contains(e.target) && menu) {
+        menu.classList.add('hidden');
+      }
+    });
+
+    // 3. Image Attachment Handler (Compress & WebP preview)
+    function handleImagePicked(e) {
+      const file = e.target.files[0];
+      if (!file) return;
+
+      const reader = new FileReader();
+      reader.onload = function(event) {
+        const img = new Image();
+        img.onload = function() {
+          const canvas = document.createElement('canvas');
+          const maxDim = 1200;
+          let w = img.width;
+          let h = img.height;
+          if (w > maxDim || h > maxDim) {
+            if (w > h) {
+              h = Math.round((h * maxDim) / w);
+              w = maxDim;
+            } else {
+              w = Math.round((w * maxDim) / h);
+              h = maxDim;
+            }
+          }
+          canvas.width = w;
+          canvas.height = h;
+          const ctx = canvas.getContext('2d');
+          ctx.drawImage(img, 0, 0, w, h);
+          attachedImageBase64 = canvas.toDataURL('image/webp', 0.85);
+
+          document.getElementById('composer-image-preview').src = attachedImageBase64;
+          document.getElementById('composer-image-preview-box').classList.remove('hidden');
+        };
+        img.src = event.target.result;
+      };
+      reader.readAsDataURL(file);
+    }
+
+    function removeAttachedImage() {
+      attachedImageBase64 = null;
+      document.getElementById('composer-file-input').value = '';
+      document.getElementById('composer-image-preview').src = '';
+      document.getElementById('composer-image-preview-box').classList.add('hidden');
+    }
+
+    // 4. REAL CROWDSOURCED STATION STATUS (VALID ONLY FOR 30 MINUTES)
+    const STATION_STORAGE_KEY = 'tk_station_crowd_reports';
+
+    function getValidStationReports() {
+      const thirtyMinutesAgo = Date.now() - (30 * 60 * 1000);
+      let reports = [];
+      try {
+        const stored = localStorage.getItem(STATION_STORAGE_KEY);
+        if (stored) reports = JSON.parse(stored);
+      } catch(e) {}
+
+      // Filter out reports older than 30 minutes
+      const validReports = reports.filter(r => r.timestamp >= thirtyMinutesAgo);
+      if (validReports.length !== reports.length) {
+        localStorage.setItem(STATION_STORAGE_KEY, JSON.stringify(validReports));
+      }
+      return validReports;
+    }
+
+    function renderStationReports() {
+      const container = document.getElementById('station-reports-container');
+      if (!container) return;
+
+      const validReports = getValidStationReports();
+
+      if (validReports.length === 0) {
+        container.innerHTML = `
+          <div class="p-3 rounded-xl bg-slate-50 border border-slate-100 text-center space-y-1.5">
+            <div class="text-slate-400 text-[11px]">Belum ada laporan dalam 30 menit terakhir.</div>
+            <div class="text-[10px] text-slate-500 font-medium">Jadilah yang pertama melaporkan situasi stasiun saat ini!</div>
+          </div>
+        `;
+        return;
+      }
+
+      // Group reports by station name, taking latest report
+      const latestMap = {};
+      validReports.forEach(r => {
+        if (!latestMap[r.station] || r.timestamp > latestMap[r.station].timestamp) {
+          latestMap[r.station] = r;
+        }
+      });
+
+      const stations = Object.values(latestMap).sort((a, b) => b.timestamp - a.timestamp);
+
+      container.innerHTML = stations.map(item => {
+        const elapsedMins = Math.max(1, Math.round((Date.now() - item.timestamp) / 60000));
+        let badgeColor = 'bg-emerald-100 text-emerald-800 border-emerald-200';
+        if (item.condition === 'Ramai Lancar') badgeColor = 'bg-amber-100 text-amber-800 border-amber-200';
+        if (item.condition === 'Padat') badgeColor = 'bg-red-100 text-red-800 border-red-200';
+
+        return `
+          <div class="flex items-center justify-between p-2.5 rounded-xl bg-slate-50 border border-slate-100 hover:bg-slate-100/70 transition-colors">
+            <div>
+              <div class="font-bold text-slate-800 text-xs">${item.station}</div>
+              <div class="text-[10px] text-slate-400">
+                ${elapsedMins}m lalu oleh <span class="font-semibold text-slate-600">${item.author}</span>
+                ${item.note ? `&bull; ${item.note}` : ''}
+              </div>
+            </div>
+            <span class="px-2 py-0.5 rounded-md font-bold text-[10px] border ${badgeColor}">
+              ${item.condition}
+            </span>
+          </div>
+        `;
+      }).join('');
+    }
+
+    function openStationReportModal() {
+      if (!currentUser) {
+        requireLogin('melaporkan situasi stasiun');
+        return;
+      }
+      document.getElementById('station-report-modal').classList.remove('hidden');
+    }
+
+    function closeStationReportModal() {
+      document.getElementById('station-report-modal').classList.add('hidden');
+    }
+
+    function handleStationReportSubmit(e) {
+      e.preventDefault();
+      const station = document.getElementById('report-station-name').value;
+      const condition = document.querySelector('input[name="report_condition"]:checked').value;
+      const note = document.getElementById('report-station-note').value.trim();
+
+      const newReport = {
+        id: "st-" + Date.now(),
+        station: station,
+        condition: condition,
+        note: note,
+        author: currentUser ? currentUser.displayName : 'Pejuang KRL',
+        timestamp: Date.now()
+      };
+
+      const existing = getValidStationReports();
+      existing.unshift(newReport);
+      localStorage.setItem(STATION_STORAGE_KEY, JSON.stringify(existing));
+
+      closeStationReportModal();
+      renderStationReports();
+      showToast('Laporan Terkirim!', `Situasi ${station} (${condition}) berhasil diperbarui untuk 30 menit ke depan.`);
+    }
+
+    // Auto-refresh station status countdown every minute
+    setInterval(renderStationReports, 60000);
+
+    // 5. AUTH MODAL (LOGIN & REGISTER) & LOGIN REQUIRED PROMPTS
+    let currentAuthMode = 'login';
+
+    function requireLogin(actionText = 'melanjutkan') {
+      showToast('Kamu Belum Masuk', `Silakan masuk ke akun Teman Kereta terlebih dahulu untuk ${actionText}.`, false);
+      openAuthModal('login', `Kamu belum masuk. Silakan masuk terlebih dahulu untuk ${actionText}.`);
+    }
+
+    function openAuthModal(mode = 'login', customSubtitle = null) {
+      currentAuthMode = mode;
+      document.getElementById('auth-modal').classList.remove('hidden');
+      document.getElementById('auth-error-box').classList.add('hidden');
+      switchAuthTab(mode, customSubtitle);
+    }
+
+    function closeAuthModal() {
+      document.getElementById('auth-modal').classList.add('hidden');
+    }
+
+    function switchAuthTab(mode, customSubtitle = null) {
+      currentAuthMode = mode;
+      const title = document.getElementById('auth-modal-title');
+      const subtitle = document.getElementById('auth-modal-subtitle');
+      const regFields = document.getElementById('register-fields');
+      const tabLogin = document.getElementById('tab-login-btn');
+      const tabReg = document.getElementById('tab-register-btn');
+      const btnLabel = document.getElementById('auth-btn-label');
+      const forgotLink = document.getElementById('auth-forgot-link');
+
+      if (mode === 'login') {
+        title.textContent = 'Masuk ke Forum Teman Kereta';
+        subtitle.textContent = customSubtitle || 'Gunakan akun yang sama dengan aplikasi Teman Kereta kamu.';
+        regFields.classList.add('hidden');
+        tabLogin.className = 'flex-1 py-2 rounded-lg bg-white text-slate-900 shadow-sm transition-all';
+        tabReg.className = 'flex-1 py-2 rounded-lg text-slate-600 hover:text-slate-900 transition-all';
+        btnLabel.textContent = 'Masuk ke Forum';
+        forgotLink.classList.remove('hidden');
+      } else {
+        title.textContent = 'Daftar Akun Teman Kereta';
+        subtitle.textContent = 'Akun akan langsung tersinkron di web dan aplikasi Android / iOS.';
+        regFields.classList.remove('hidden');
+        tabReg.className = 'flex-1 py-2 rounded-lg bg-white text-slate-900 shadow-sm transition-all';
+        tabLogin.className = 'flex-1 py-2 rounded-lg text-slate-600 hover:text-slate-900 transition-all';
+        btnLabel.textContent = 'Daftar Akun Baru';
+        forgotLink.classList.add('hidden');
+      }
+      lucide.createIcons();
+    }
+
+    function togglePasswordVisibility(inputId, iconId) {
+      const input = document.getElementById(inputId);
+      const icon = document.getElementById(iconId);
+      if (!input) return;
+
+      if (input.type === 'password') {
+        input.type = 'text';
+        icon.setAttribute('data-lucide', 'eye-off');
+      } else {
+        input.type = 'password';
+        icon.setAttribute('data-lucide', 'eye');
+      }
+      lucide.createIcons();
+    }
+
+    async function handleAuthSubmit(e) {
+      e.preventDefault();
+      const email = document.getElementById('auth-email').value.trim();
+      const password = document.getElementById('auth-password').value;
+      const errorBox = document.getElementById('auth-error-box');
+      const errorMsg = document.getElementById('auth-error-msg');
+      const submitBtn = document.getElementById('auth-submit-btn');
+
+      errorBox.classList.add('hidden');
+      submitBtn.disabled = true;
+      submitBtn.classList.add('opacity-75');
+
+      try {
+        if (currentAuthMode === 'login') {
+          if (supabaseClient) {
+            const { data, error } = await supabaseClient.auth.signInWithPassword({
+              email: email,
+              password: password
+            });
+            if (error) throw error;
+            currentUser = await fetchUserProfile(data.user.id, data.user.email, data.user.user_metadata || {});
+          } else {
+            currentUser = {
+              id: "usr-" + Date.now(),
+              email: email,
+              displayName: email.split('@')[0],
+              username: email.split('@')[0],
+              initials: email.substring(0, 2).toUpperCase()
+            };
+          }
+
+          localStorage.setItem('tk_current_user', JSON.stringify(currentUser));
+          updateAuthUI();
+          closeAuthModal();
+          showToast('Selamat datang kembali, ' + currentUser.displayName + '!', 'Akun kamu (@' + currentUser.username + ') berhasil terhubung.');
+
+        } else {
+          const fullName = document.getElementById('auth-fullname').value.trim() || email.split('@')[0];
+          const username = document.getElementById('auth-username').value.trim().toLowerCase() || email.split('@')[0];
+
+          if (supabaseClient) {
+            const { data, error } = await supabaseClient.auth.signUp({
+              email: email,
+              password: password,
+              options: {
+                data: {
+                  full_name: fullName,
+                  display_name: fullName,
+                  username: username
+                }
+              }
+            });
+            if (error) throw error;
+
+            currentUser = await fetchUserProfile(data.user?.id || ("usr-" + Date.now()), email, {
+              display_name: fullName,
+              full_name: fullName,
+              username: username
+            });
+          } else {
+            currentUser = {
+              id: "usr-" + Date.now(),
+              email: email,
+              displayName: fullName,
+              username: username,
+              initials: fullName.substring(0, 2).toUpperCase()
+            };
+          }
+
+          localStorage.setItem('tk_current_user', JSON.stringify(currentUser));
+          updateAuthUI();
+          closeAuthModal();
+          showToast('Pendaftaran Berhasil!', 'Selamat bergabung di Forum Teman Kereta, ' + currentUser.displayName + ' (@' + currentUser.username + ').');
+        }
+
+      } catch (err) {
+        errorBox.classList.remove('hidden');
+        errorMsg.textContent = err.message || 'Gagal memproses autentikasi. Periksa kembali email dan kata sandi kamu.';
+      } finally {
+        submitBtn.disabled = false;
+        submitBtn.classList.remove('opacity-75');
+      }
+    }
+
+    function handleLogout() {
+      if (supabaseClient) {
+        supabaseClient.auth.signOut().catch(() => {});
+      }
+      currentUser = null;
+      localStorage.removeItem('tk_current_user');
+      updateAuthUI();
+      document.getElementById('user-dropdown-menu')?.classList.add('hidden');
+      showToast('Sampai Jumpa!', 'Kamu telah keluar dari akun.');
+    }
+
+    // 6. REALTIME POST FEED & SUPABASE DATA
+    let posts = [];
+    let activeCategory = 'all'; // 'all' | 'gangguan'
+    let searchQuery = '';
+
+    // Relative Time Helper
+    function formatRelativeTime(dateStr) {
+      if (!dateStr) return 'Baru saja';
+      const d = new Date(dateStr);
+      const diffSecs = Math.floor((Date.now() - d.getTime()) / 1000);
+      if (diffSecs < 60) return 'Baru saja';
+      const diffMins = Math.floor(diffSecs / 60);
+      if (diffMins < 60) return diffMins + 'm lalu';
+      const diffHours = Math.floor(diffMins / 60);
+      if (diffHours < 24) return diffHours + 'j lalu';
+      const diffDays = Math.floor(diffHours / 24);
+      return diffDays + 'h lalu';
+    }
+
+    async function loadLivePosts() {
+      if (supabaseClient) {
+        try {
+          const { data, error } = await supabaseClient
+            .from('forum_posts')
+            .select('id, user_id, body, image_url, like_count, comment_count, created_at, users:users!forum_posts_user_id_fkey(id, username, display_name, avatar_url)')
+            .order('created_at', { ascending: false })
+            .limit(30);
+
+          if (data && !error && data.length > 0) {
+            posts = data.map(item => {
+              const u = item.users || {};
+              const dName = u.display_name || u.username || 'Pejuang KRL';
+              const uName = u.username || dName.toLowerCase().replace(/[^a-z0-9_]/g, '_');
+              const isDisruption = item.body.toLowerCase().includes('gangguan') || 
+                                   item.body.toLowerCase().includes('kendala') || 
+                                   item.body.toLowerCase().includes('terlambat') || 
+                                   item.body.toLowerCase().includes('anjlok') || 
+                                   item.body.toLowerCase().includes('padat merayap');
+              return {
+                id: item.id,
+                author: dName,
+                handle: "@" + uName,
+                badge: "Komuter KRL",
+                avatarBg: "bg-blue-600",
+                initials: dName.substring(0, 2).toUpperCase(),
+                category: isDisruption ? 'gangguan' : 'kabar',
+                time: formatRelativeTime(item.created_at),
+                body: item.body,
+                imageUrl: item.image_url,
+                likes: item.like_count || 0,
+                liked: false,
+                comments: []
+              };
+            });
+            renderPosts();
+            return;
+          }
+        } catch (e) {
+          console.warn("Supabase live posts query note:", e);
+        }
+      }
+
+      // Fallback Seed Posts
+      posts = [
+        {
+          id: "p-1",
+          author: "Rian Pratama",
+          handle: "@rian_anker",
+          badge: "Pejuang Bogor",
+          avatarBg: "bg-blue-600",
+          initials: "RP",
+          category: "kabar",
+          time: "5m lalu",
+          body: "Stasiun Manggarai lantai 2 peron 11-12 arah Bogor lumayan padat merayap jam pulang kantor ini. Headway kereta tiap 4-5 menit masuk lancar. Yang mau transit siapkan kartu e-money dan hati-hati saat naik eskalator ya teman-teman!",
+          imageUrl: null,
+          likes: 24,
+          liked: false,
+          comments: []
+        },
+        {
+          id: "p-2",
+          author: "Siti Rahma",
+          handle: "@siti_commuter",
+          badge: "Komuter Cikarang",
+          avatarBg: "bg-emerald-600",
+          initials: "SR",
+          category: "kabar",
+          time: "18m lalu",
+          body: "Kereta arah Cikarang via Pasar Senen baru masuk Stasiun Juanda. AC kereta 4 dingin dan kondisi tempat duduk masih ada beberapa yang kosong. Yang arah Bekasi dan Cikarang silakan merapat.",
+          imageUrl: null,
+          likes: 19,
+          liked: false,
+          comments: []
+        },
+        {
+          id: "p-3",
+          author: "Budi Santoso",
+          handle: "@budi_rangkas",
+          badge: "Pejuang Rangkas",
+          avatarBg: "bg-red-600",
+          initials: "BS",
+          category: "gangguan",
+          time: "30m lalu",
+          body: "Info Lintas Serpong-Rangkas: Ada pergantian rangkaian di Stasiun Sudimara, kereta agak tertahan 10 menit. Mohon bersabar rekan-rekan.",
+          imageUrl: null,
+          likes: 15,
+          liked: false,
+          comments: []
+        }
+      ];
+      renderPosts();
+    }
+
+    // Supabase Realtime Subscription
+    function initRealtimeSubscription() {
+      if (!supabaseClient) return;
+
+      supabaseClient
+        .channel('public_forum_posts_realtime')
+        .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'forum_posts' }, async (payload) => {
+          const newRow = payload.new;
+          if (!newRow) return;
+
+          // Check if post is already in feed
+          if (posts.some(p => p.id === newRow.id)) return;
+
+          // Fetch author profile
+          let dName = 'Pejuang KRL';
+          let uName = 'pejuang_krl';
+          try {
+            const { data: userRow } = await supabaseClient
+              .from('users')
+              .select('id, username, display_name')
+              .eq('id', newRow.user_id)
+              .maybeSingle();
+            if (userRow) {
+              dName = userRow.display_name || userRow.username || dName;
+              uName = userRow.username || dName.toLowerCase().replace(/[^a-z0-9_]/g, '_');
+            }
+          } catch(e) {}
+
+          const isDisruption = (newRow.body || '').toLowerCase().includes('gangguan') || 
+                               (newRow.body || '').toLowerCase().includes('kendala') || 
+                               (newRow.body || '').toLowerCase().includes('terlambat');
+
+          const realtimePost = {
+            id: newRow.id,
+            author: dName,
+            handle: "@" + uName,
+            badge: "Komuter KRL",
+            avatarBg: "bg-blue-600",
+            initials: dName.substring(0, 2).toUpperCase(),
+            category: isDisruption ? 'gangguan' : 'kabar',
+            time: 'Baru saja',
+            body: newRow.body,
+            imageUrl: newRow.image_url,
+            likes: newRow.like_count || 0,
+            liked: false,
+            comments: []
+          };
+
+          posts.unshift(realtimePost);
+          renderPosts();
+          showToast('Kabar Baru Masuk!', `${dName}: "${newRow.body.substring(0, 50)}..."`);
+        })
+        .subscribe();
+    }
+
+    // Render Posts Feed
+    function renderPosts() {
+      const container = document.getElementById('posts-container');
+      container.innerHTML = '';
+
+      let filtered = posts.filter(p => {
+        const matchesCategory = activeCategory === 'all' || p.category === 'gangguan';
+        const query = searchQuery.toLowerCase().trim();
+        const matchesSearch = !query || 
+          p.body.toLowerCase().includes(query) || 
+          p.author.toLowerCase().includes(query);
+        return matchesCategory && matchesSearch;
+      });
+
+      if (filtered.length === 0) {
+        container.innerHTML = `
+          <div class="bg-white rounded-2xl border border-slate-200/90 p-8 text-center space-y-3">
+            <div class="w-12 h-12 rounded-full bg-slate-100 text-slate-400 mx-auto flex items-center justify-center">
+              <i data-lucide="message-square" class="w-6 h-6"></i>
+            </div>
+            <div class="font-bold text-slate-800 text-sm">Belum ada kabar di kategori ini</div>
+            <p class="text-xs text-slate-500 max-w-sm mx-auto">Jadilah yang pertama membagikan kabar situasi kereta atau stasiun KRL kepada sesama komuter.</p>
+          </div>
+        `;
+        lucide.createIcons();
+        return;
+      }
+
+      filtered.forEach(post => {
+        const postCard = document.createElement('article');
+        postCard.className = "bg-white rounded-2xl border border-slate-200/90 shadow-sm p-4 sm:p-5 space-y-3 transition-all hover:border-slate-300";
+        postCard.id = `post-${post.id}`;
+
+        const isGangguan = post.category === 'gangguan';
+        const categoryBadge = isGangguan ? `
+          <span class="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-lg text-[10px] font-bold bg-red-100 text-red-800 border border-red-200">
+            <span class="w-1.5 h-1.5 rounded-full bg-red-600"></span>
+            <span>Info Gangguan</span>
+          </span>
+        ` : '';
+
+        // Image Attachment HTML
+        const imageHtml = post.imageUrl ? `
+          <div class="mt-2 rounded-2xl overflow-hidden border border-slate-100 bg-slate-50 max-h-96">
+            <img src="${post.imageUrl}" alt="Lampiran Kabar KRL" class="w-full h-auto max-h-96 object-cover hover:scale-[1.01] transition-transform cursor-pointer" onclick="window.open('${post.imageUrl}', '_blank')">
+          </div>
+        ` : '';
+
+        postCard.innerHTML = `
+          <!-- Post Author Header -->
+          <div class="flex items-center justify-between">
+            <div class="flex items-center gap-2.5 sm:gap-3">
+              <div class="w-9 h-9 sm:w-10 sm:h-10 rounded-full ${post.avatarBg} text-white font-bold text-xs sm:text-sm flex items-center justify-center shrink-0 shadow-sm">
+                ${post.initials}
+              </div>
+              <div>
+                <div class="flex items-center gap-1.5">
+                  <span class="font-bold text-xs sm:text-sm text-slate-950">${post.author}</span>
+                  <span class="text-[11px] text-slate-400">${post.handle}</span>
+                </div>
+                <div class="flex items-center gap-2 mt-0.5">
+                  <span class="px-1.5 py-0.5 rounded text-[10px] font-medium bg-slate-100 text-slate-600">${post.badge}</span>
+                  <span class="text-[10px] text-slate-400">&bull; ${post.time}</span>
+                </div>
+              </div>
+            </div>
+
+            <div class="flex items-center gap-1.5">
+              ${categoryBadge}
+              <button onclick="bookmarkPost('${post.id}')" class="text-slate-400 hover:text-blue-600 p-1.5 rounded-lg hover:bg-slate-50 transition-colors" title="Simpan Postingan">
+                <i data-lucide="bookmark" class="w-4 h-4"></i>
+              </button>
+            </div>
+          </div>
+
+          <!-- Post Body Text -->
+          <p class="text-xs sm:text-sm text-slate-800 leading-relaxed font-normal whitespace-pre-line pt-0.5">
+            ${post.body}
+          </p>
+
+          <!-- Image Attachment -->
+          ${imageHtml}
+
+          <!-- Actions Bar -->
+          <div class="pt-3 border-t border-slate-100 flex items-center justify-between text-xs text-slate-500">
+            <div class="flex items-center gap-4 sm:gap-6">
+              <button onclick="toggleLike('${post.id}')" class="flex items-center gap-1.5 hover:text-red-600 transition-colors group ${post.liked ? 'text-red-600 font-bold' : ''}">
+                <i data-lucide="heart" class="w-4 h-4 ${post.liked ? 'fill-red-600 text-red-600' : 'group-hover:scale-110'} transition-transform"></i>
+                <span id="like-count-${post.id}">${post.likes}</span>
+              </button>
+
+              <button onclick="toggleCommentBox('${post.id}')" class="flex items-center gap-1.5 hover:text-blue-600 transition-colors group">
+                <i data-lucide="message-circle" class="w-4 h-4 group-hover:scale-110 transition-transform"></i>
+                <span>${post.comments ? post.comments.length : 0} Balasan</span>
+              </button>
+
+              <button onclick="sharePost('${post.id}')" class="flex items-center gap-1.5 hover:text-emerald-600 transition-colors group">
+                <i data-lucide="share-2" class="w-4 h-4 group-hover:scale-110 transition-transform"></i>
+                <span class="hidden sm:inline">Bagikan</span>
+              </button>
+            </div>
+
+            <span class="text-[11px] text-slate-400">Teman Kereta Feed</span>
+          </div>
+
+          <!-- Slide-down Comments Section -->
+          <div id="comments-section-${post.id}" class="hidden pt-3 border-t border-slate-100 space-y-2.5">
+            <div class="space-y-2">
+              ${post.comments && post.comments.length > 0 ? post.comments.map(c => `
+                <div class="flex items-start gap-2 pt-2 border-t border-slate-100 text-xs">
+                  <div class="w-6 h-6 rounded-full bg-slate-200 text-slate-700 font-bold text-[10px] flex items-center justify-center shrink-0">
+                    ${c.author.substring(0, 2).toUpperCase()}
+                  </div>
+                  <div class="flex-1 bg-slate-50 rounded-xl p-2.5">
+                    <div class="flex items-center justify-between">
+                      <span class="font-bold text-slate-900">${c.author}</span>
+                      <span class="text-[10px] text-slate-400">${c.time}</span>
+                    </div>
+                    <p class="text-slate-700 mt-0.5 text-xs whitespace-pre-line leading-relaxed">${c.text}</p>
+                  </div>
+                </div>
+              `).join('') : ''}
+            </div>
+
+            <!-- Multiline Comment Box (Bisa Enter untuk Baris Baru) -->
+            <div class="flex items-start gap-2 pt-2">
+              <textarea 
+                id="comment-input-${post.id}"
+                rows="1"
+                placeholder="Tulis tanggapan atau info tambahan... (Tekan Enter untuk baris baru)" 
+                class="flex-1 text-xs bg-slate-50 focus:bg-white border border-slate-200 rounded-xl px-3 py-2.5 outline-none focus:ring-1 focus:ring-blue-600 resize-none min-h-[38px] leading-relaxed transition-all"
+                oninput="this.style.height = ''; this.style.height = Math.min(this.scrollHeight, 120) + 'px'"
+                onkeydown="if(event.ctrlKey && event.key === 'Enter') submitComment('${post.id}')"
+              ></textarea>
+              <button onclick="submitComment('${post.id}')" class="px-3.5 py-2.5 bg-blue-600 hover:bg-blue-700 active:bg-blue-800 text-white rounded-xl text-xs font-bold transition-all shadow-xs shrink-0 flex items-center gap-1">
+                <i data-lucide="send" class="w-3.5 h-3.5"></i>
+                <span>Kirim</span>
+              </button>
+            </div>
+          </div>
+        `;
+
+        container.appendChild(postCard);
+      });
+
+      renderTrendingTopics();
+      lucide.createIcons();
+    }
+
+    // 7. REAL DYNAMIC TRENDING TOPICS ENGINE (Calculated from Real Posts & Hashtags)
+    function renderTrendingTopics() {
+      const container = document.getElementById('trending-topics-container');
+      if (!container) return;
+
+      const topicCounts = {};
+
+      const KNOWN_KEYWORDS = [
+        { key: 'Manggarai', category: 'Stasiun Transit', tag: '#Manggarai' },
+        { key: 'Tanah Abang', category: 'Stasiun Transit', tag: '#TanahAbang' },
+        { key: 'Juanda', category: 'Stasiun Pusat', tag: '#StasiunJuanda' },
+        { key: 'Sudirman', category: 'Kawasan Bisnis', tag: '#Sudirman' },
+        { key: 'Duri', category: 'Stasiun Transit', tag: '#StasiunDuri' },
+        { key: 'Bogor', category: 'Lintas Bogor', tag: '#KRLBogor' },
+        { key: 'Cikarang', category: 'Lintas Cikarang', tag: '#KRLCikarang' },
+        { key: 'Bekasi', category: 'Lintas Cikarang', tag: '#KRLBekasi' },
+        { key: 'Rangkas', category: 'Lintas Rangkas', tag: '#Rangkasbitung' },
+        { key: 'Tangerang', category: 'Lintas Tangerang', tag: '#KRLTangerang' },
+        { key: 'Gangguan', category: 'Jalur & Sinyal', tag: '#InfoGangguan' },
+        { key: 'Tertahan', category: 'Jalur & Sinyal', tag: '#InfoKRLTerkini' },
+        { key: 'Eskalator', category: 'Fasilitas Stasiun', tag: '#EskalatorStasiun' },
+        { key: 'AC', category: 'Kenyamanan Kereta', tag: '#KondisiKereta' },
+        { key: 'Alarm', category: 'Fitur Aplikasi', tag: '#AlarmSisaStasiun' }
+      ];
+
+      posts.forEach(p => {
+        const text = (p.body || '');
+        const engagement = 1 + (p.likes || 0) + (p.comments ? p.comments.length : 0);
+
+        // 1. Extract explicit #hashtags from text
+        const hashtagMatches = text.match(/#[a-zA-Z0-9_]+/g);
+        if (hashtagMatches) {
+          hashtagMatches.forEach(tag => {
+            const cleanTag = tag.trim();
+            if (cleanTag.length > 2) {
+              if (!topicCounts[cleanTag]) {
+                topicCounts[cleanTag] = { 
+                  tag: cleanTag, 
+                  category: 'Tagar Komunitas', 
+                  count: 0, 
+                  query: cleanTag.replace('#', '') 
+                };
+              }
+              topicCounts[cleanTag].count += engagement;
+            }
+          });
+        }
+
+        // 2. Extract known commuter topics and station keywords
+        KNOWN_KEYWORDS.forEach(kw => {
+          if (text.toLowerCase().includes(kw.key.toLowerCase())) {
+            if (!topicCounts[kw.tag]) {
+              topicCounts[kw.tag] = { 
+                tag: kw.tag, 
+                category: kw.category, 
+                count: 0, 
+                query: kw.key 
+              };
+            }
+            topicCounts[kw.tag].count += engagement;
+          }
+        });
+      });
+
+      const sortedTopics = Object.values(topicCounts).sort((a, b) => b.count - a.count).slice(0, 4);
+
+      if (sortedTopics.length === 0) {
+        container.innerHTML = `
+          <div class="text-[11px] text-slate-400 py-2">
+            Belum ada topik pembicaraan. Tulis postingan untuk memulai topik baru!
+          </div>
+        `;
+        return;
+      }
+
+      container.innerHTML = sortedTopics.map(t => `
+        <div class="cursor-pointer hover:bg-slate-50 p-2 rounded-xl border border-transparent hover:border-slate-100 transition-all group" onclick="filterByTag('${t.query}')">
+          <div class="flex items-center justify-between text-[10px] text-slate-400">
+            <span>${t.category}</span>
+            <span class="text-blue-600 font-semibold opacity-0 group-hover:opacity-100 transition-opacity">Cari &rarr;</span>
+          </div>
+          <div class="font-bold text-slate-900 text-xs mt-0.5 group-hover:text-blue-600 transition-colors">${t.tag}</div>
+          <div class="text-[11px] text-slate-500 mt-0.5">${t.count} interaksi obrolan</div>
+        </div>
+      `).join('');
+    }
+
+    // Submit New Post (with Supabase sync & optimistic update)
+    document.getElementById('btn-submit-post').addEventListener('click', async () => {
+      if (!currentUser) {
+        requireLogin('membuat postingan baru');
+        return;
+      }
+
+      const bodyInput = document.getElementById('composer-body');
+      const categoryInput = document.getElementById('composer-category');
+      const submitBtn = document.getElementById('btn-submit-post');
+
+      const bodyText = bodyInput.value.trim();
+      if (!bodyText) {
+        showToast('Tuliskan Pesan', 'Silakan tuliskan kabar atau informasi sebelum mengirim.', false);
+        bodyInput.focus();
+        return;
+      }
+
+      const category = categoryInput.value;
+      const attachedImg = attachedImageBase64;
+      const isGangguan = category === 'gangguan';
+
+      submitBtn.disabled = true;
+      submitBtn.classList.add('opacity-75');
+
+      const newPost = {
+        id: "p-" + Date.now(),
+        author: currentUser.displayName,
+        handle: "@" + currentUser.username,
+        badge: "Komuter KRL",
+        avatarBg: "bg-blue-600",
+        initials: currentUser.initials,
+        category: category,
+        time: 'Baru saja',
+        body: bodyText,
+        imageUrl: attachedImg,
+        likes: 0,
+        liked: false,
+        comments: []
+      };
+
+      // Optimistic UI update
+      posts.unshift(newPost);
+      renderPosts();
+      bodyInput.value = '';
+      removeAttachedImage();
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+
+      // Insert into Supabase if authenticated
+      if (supabaseClient && currentUser.id && !currentUser.id.startsWith('usr-')) {
+        try {
+          await supabaseClient.from('forum_posts').insert({
+            user_id: currentUser.id,
+            body: bodyText,
+            image_url: attachedImg,
+            status: 'visible'
+          });
+        } catch (e) {
+          console.warn("Supabase insert note:", e);
+        }
+      }
+
+      submitBtn.disabled = false;
+      submitBtn.classList.remove('opacity-75');
+      showToast('Kabar Terkirim!', 'Postingan kamu telah dibagikan ke Forum Teman Kereta.');
+    });
+
+    function toggleLike(postId) {
+      if (!currentUser) {
+        requireLogin('menyukai postingan ini');
+        return;
+      }
+      const post = posts.find(p => p.id === postId);
+      if (post) {
+        post.liked = !post.liked;
+        post.likes += post.liked ? 1 : -1;
+        renderPosts();
+      }
+    }
+
+    function toggleCommentBox(postId) {
+      if (!currentUser) {
+        requireLogin('melihat dan membalas postingan');
+        return;
+      }
+      const box = document.getElementById(`comments-section-${postId}`);
+      if (box) {
+        box.classList.toggle('hidden');
+        if (!box.classList.contains('hidden')) {
+          document.getElementById(`comment-input-${postId}`)?.focus();
+        }
+      }
+    }
+
+    function submitComment(postId) {
+      if (!currentUser) {
+        requireLogin('mengirim balasan');
+        return;
+      }
+      const input = document.getElementById(`comment-input-${postId}`);
+      if (!input || !input.value.trim()) return;
+
+      const post = posts.find(p => p.id === postId);
+      if (post) {
+        if (!post.comments) post.comments = [];
+        post.comments.push({
+          author: currentUser.displayName,
+          time: 'Baru saja',
+          text: input.value.trim()
+        });
+        input.value = '';
+        renderPosts();
+        document.getElementById(`comments-section-${postId}`)?.classList.remove('hidden');
+      }
+    }
+
+    // 2 Tabs Filter Listener
+    document.querySelectorAll('.filter-tab').forEach(tab => {
+      tab.addEventListener('click', () => {
+        document.querySelectorAll('.filter-tab').forEach(t => {
+          t.classList.remove('active', 'bg-slate-900', 'text-white', 'shadow-sm');
+          t.classList.add('text-slate-600', 'bg-slate-100');
+        });
+        tab.classList.add('active', 'bg-slate-900', 'text-white', 'shadow-sm');
+        tab.classList.remove('text-slate-600', 'bg-slate-100');
+        
+        activeCategory = tab.getAttribute('data-category');
+        renderPosts();
+      });
+    });
+
+    // Live Search Handlers
+    const searchDesktop = document.getElementById('search-input');
+    const searchMobile = document.getElementById('search-input-mobile');
+
+    if (searchDesktop) {
+      searchDesktop.addEventListener('input', (e) => {
+        searchQuery = e.target.value;
+        renderPosts();
+      });
+    }
+    if (searchMobile) {
+      searchMobile.addEventListener('input', (e) => {
+        searchQuery = e.target.value;
+        renderPosts();
+      });
+    }
+
+    function filterByTag(tag) {
+      searchQuery = tag;
+      if (searchDesktop) searchDesktop.value = tag;
+      if (searchMobile) searchMobile.value = tag;
+      renderPosts();
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+
+    function sharePost(postId) {
+      const url = `${window.location.origin}/forum?post=${postId}`;
+      if (navigator.share) {
+        navigator.share({
+          title: 'Kabar Forum Teman Kereta',
+          text: 'Lihat kabar komuter KRL di Forum Teman Kereta:',
+          url: url
+        }).catch(() => {});
+      } else if (navigator.clipboard) {
+        navigator.clipboard.writeText(url);
+        showToast('Tautan Disalin!', 'Tautan postingan berhasil disalin ke clipboard.');
+      }
+    }
+
+    function bookmarkPost(postId) {
+      showToast('Tersimpan!', 'Postingan berhasil disimpan ke daftar favorit kamu.');
+    }
+
+    function scrollToComposer() {
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+      document.getElementById('composer-body').focus();
+    }
+
+    function focusComposer() {
+      if (!currentUser) {
+        requireLogin('membuat postingan baru');
+      } else {
+        scrollToComposer();
+      }
+    }
+
+    function loadMorePosts() {
+      showToast('Sudah Terkini', 'Semua kabar terbaru sudah ditampilkan.');
+    }
+
+    // 8. DEEP LINKING HANDLER (Scroll to and highlight shared post from URL ?post=ID or #post-ID)
+    async function handleDeepLinkedPost() {
+      const urlParams = new URLSearchParams(window.location.search);
+      let targetPostId = urlParams.get('post') || window.location.hash.replace('#post-', '').replace('#', '');
+      
+      if (!targetPostId) return;
+
+      // If post is not in initial list, try to fetch it directly from Supabase
+      if (!posts.some(p => p.id === targetPostId) && supabaseClient) {
+        try {
+          const { data, error } = await supabaseClient
+            .from('forum_posts')
+            .select('id, user_id, body, image_url, like_count, comment_count, created_at, users:users!forum_posts_user_id_fkey(id, username, display_name, avatar_url)')
+            .eq('id', targetPostId)
+            .maybeSingle();
+
+          if (data && !error) {
+            const u = data.users || {};
+            const dName = u.display_name || u.username || 'Pejuang KRL';
+            const uName = u.username || dName.toLowerCase().replace(/[^a-z0-9_]/g, '_');
+            const isDisruption = (data.body || '').toLowerCase().includes('gangguan') || 
+                                 (data.body || '').toLowerCase().includes('kendala') || 
+                                 (data.body || '').toLowerCase().includes('terlambat');
+
+            const singlePost = {
+              id: data.id,
+              author: dName,
+              handle: "@" + uName,
+              badge: "Komuter KRL",
+              avatarBg: "bg-blue-600",
+              initials: dName.substring(0, 2).toUpperCase(),
+              category: isDisruption ? 'gangguan' : 'kabar',
+              time: formatRelativeTime(data.created_at),
+              body: data.body,
+              imageUrl: data.image_url,
+              likes: data.like_count || 0,
+              liked: false,
+              comments: []
+            };
+
+            posts.unshift(singlePost);
+            renderPosts();
+          }
+        } catch(e) {
+          console.warn("Could not fetch deep linked post:", e);
+        }
+      }
+
+      // Smooth scroll to the post card and highlight it
+      setTimeout(() => {
+        const postElement = document.getElementById('post-' + targetPostId);
+        if (postElement) {
+          postElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
+          postElement.classList.add('ring-2', 'ring-blue-600', 'bg-blue-50/50', 'shadow-md', 'transition-all', 'duration-500');
+          showToast('Menampilkan Postingan', 'Postingan yang dibagikan telah disorot.');
+          setTimeout(() => {
+            postElement.classList.remove('bg-blue-50/50');
+          }, 4500);
+        }
+      }, 300);
+    }
+
+    // App Initialization
+    async function initApp() {
+      await initUserSession();
+      await loadLivePosts();
+      initRealtimeSubscription();
+      renderStationReports();
+      await handleDeepLinkedPost();
+    }
+
+    initApp();
+  </script>
+</body>
+</html>

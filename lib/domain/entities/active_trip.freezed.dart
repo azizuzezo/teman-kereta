@@ -15,7 +15,20 @@ T _$identity<T>(T value) => value;
 /// @nodoc
 mixin _$ActiveTripSession {
 
- String get id; TransitTrip get trip; ActiveTripState get state; int get currentStationIndex; DateTime get startedAt; DateTime get updatedAt; int get confidenceScore; bool get lowBatteryMode; bool get confirmedByUser;
+ String get id; TransitTrip get trip; ActiveTripState get state; int get currentStationIndex; DateTime get startedAt; DateTime get updatedAt; int get confidenceScore; bool get lowBatteryMode; bool get confirmedByUser;// Cumulative straight-line distance covered so far, summed hop-by-hop
+// from station coordinates as `currentStationIndex` advances — there's
+// no track-shape/polyline data to follow the rail curve exactly.
+ double get distanceMeters;// Best-known current speed in km/h: refreshed either from a real GPS fix
+// (see `CrowdPositionReporter`) or, lacking one, from the previous
+// hop's distance/time as a stand-in "train speed" reading. Null until
+// the first hop or GPS fix is available.
+ double? get currentSpeedKmh;// Optional free-text final destination (address/place name) beyond the
+// destination station itself, entered by the user before starting the
+// trip. Carried through to the arrived/complete screen so it can offer
+// a "Buka di Google Maps ke [tujuan]" button via
+// `launchMapDirectionsToQuery` — Google Maps' own geocoder resolves it,
+// this app never geocodes addresses itself.
+ String? get finalDestinationQuery;
 /// Create a copy of ActiveTripSession
 /// with the given fields replaced by the non-null parameter values.
 @JsonKey(includeFromJson: false, includeToJson: false)
@@ -28,16 +41,16 @@ $ActiveTripSessionCopyWith<ActiveTripSession> get copyWith => _$ActiveTripSessio
 
 @override
 bool operator ==(Object other) {
-  return identical(this, other) || (other.runtimeType == runtimeType&&other is ActiveTripSession&&(identical(other.id, id) || other.id == id)&&(identical(other.trip, trip) || other.trip == trip)&&(identical(other.state, state) || other.state == state)&&(identical(other.currentStationIndex, currentStationIndex) || other.currentStationIndex == currentStationIndex)&&(identical(other.startedAt, startedAt) || other.startedAt == startedAt)&&(identical(other.updatedAt, updatedAt) || other.updatedAt == updatedAt)&&(identical(other.confidenceScore, confidenceScore) || other.confidenceScore == confidenceScore)&&(identical(other.lowBatteryMode, lowBatteryMode) || other.lowBatteryMode == lowBatteryMode)&&(identical(other.confirmedByUser, confirmedByUser) || other.confirmedByUser == confirmedByUser));
+  return identical(this, other) || (other.runtimeType == runtimeType&&other is ActiveTripSession&&(identical(other.id, id) || other.id == id)&&(identical(other.trip, trip) || other.trip == trip)&&(identical(other.state, state) || other.state == state)&&(identical(other.currentStationIndex, currentStationIndex) || other.currentStationIndex == currentStationIndex)&&(identical(other.startedAt, startedAt) || other.startedAt == startedAt)&&(identical(other.updatedAt, updatedAt) || other.updatedAt == updatedAt)&&(identical(other.confidenceScore, confidenceScore) || other.confidenceScore == confidenceScore)&&(identical(other.lowBatteryMode, lowBatteryMode) || other.lowBatteryMode == lowBatteryMode)&&(identical(other.confirmedByUser, confirmedByUser) || other.confirmedByUser == confirmedByUser)&&(identical(other.distanceMeters, distanceMeters) || other.distanceMeters == distanceMeters)&&(identical(other.currentSpeedKmh, currentSpeedKmh) || other.currentSpeedKmh == currentSpeedKmh)&&(identical(other.finalDestinationQuery, finalDestinationQuery) || other.finalDestinationQuery == finalDestinationQuery));
 }
 
 @JsonKey(includeFromJson: false, includeToJson: false)
 @override
-int get hashCode => Object.hash(runtimeType,id,trip,state,currentStationIndex,startedAt,updatedAt,confidenceScore,lowBatteryMode,confirmedByUser);
+int get hashCode => Object.hash(runtimeType,id,trip,state,currentStationIndex,startedAt,updatedAt,confidenceScore,lowBatteryMode,confirmedByUser,distanceMeters,currentSpeedKmh,finalDestinationQuery);
 
 @override
 String toString() {
-  return 'ActiveTripSession(id: $id, trip: $trip, state: $state, currentStationIndex: $currentStationIndex, startedAt: $startedAt, updatedAt: $updatedAt, confidenceScore: $confidenceScore, lowBatteryMode: $lowBatteryMode, confirmedByUser: $confirmedByUser)';
+  return 'ActiveTripSession(id: $id, trip: $trip, state: $state, currentStationIndex: $currentStationIndex, startedAt: $startedAt, updatedAt: $updatedAt, confidenceScore: $confidenceScore, lowBatteryMode: $lowBatteryMode, confirmedByUser: $confirmedByUser, distanceMeters: $distanceMeters, currentSpeedKmh: $currentSpeedKmh, finalDestinationQuery: $finalDestinationQuery)';
 }
 
 
@@ -48,7 +61,7 @@ abstract mixin class $ActiveTripSessionCopyWith<$Res>  {
   factory $ActiveTripSessionCopyWith(ActiveTripSession value, $Res Function(ActiveTripSession) _then) = _$ActiveTripSessionCopyWithImpl;
 @useResult
 $Res call({
- String id, TransitTrip trip, ActiveTripState state, int currentStationIndex, DateTime startedAt, DateTime updatedAt, int confidenceScore, bool lowBatteryMode, bool confirmedByUser
+ String id, TransitTrip trip, ActiveTripState state, int currentStationIndex, DateTime startedAt, DateTime updatedAt, int confidenceScore, bool lowBatteryMode, bool confirmedByUser, double distanceMeters, double? currentSpeedKmh, String? finalDestinationQuery
 });
 
 
@@ -65,7 +78,7 @@ class _$ActiveTripSessionCopyWithImpl<$Res>
 
 /// Create a copy of ActiveTripSession
 /// with the given fields replaced by the non-null parameter values.
-@pragma('vm:prefer-inline') @override $Res call({Object? id = null,Object? trip = null,Object? state = null,Object? currentStationIndex = null,Object? startedAt = null,Object? updatedAt = null,Object? confidenceScore = null,Object? lowBatteryMode = null,Object? confirmedByUser = null,}) {
+@pragma('vm:prefer-inline') @override $Res call({Object? id = null,Object? trip = null,Object? state = null,Object? currentStationIndex = null,Object? startedAt = null,Object? updatedAt = null,Object? confidenceScore = null,Object? lowBatteryMode = null,Object? confirmedByUser = null,Object? distanceMeters = null,Object? currentSpeedKmh = freezed,Object? finalDestinationQuery = freezed,}) {
   return _then(_self.copyWith(
 id: null == id ? _self.id : id // ignore: cast_nullable_to_non_nullable
 as String,trip: null == trip ? _self.trip : trip // ignore: cast_nullable_to_non_nullable
@@ -76,7 +89,10 @@ as DateTime,updatedAt: null == updatedAt ? _self.updatedAt : updatedAt // ignore
 as DateTime,confidenceScore: null == confidenceScore ? _self.confidenceScore : confidenceScore // ignore: cast_nullable_to_non_nullable
 as int,lowBatteryMode: null == lowBatteryMode ? _self.lowBatteryMode : lowBatteryMode // ignore: cast_nullable_to_non_nullable
 as bool,confirmedByUser: null == confirmedByUser ? _self.confirmedByUser : confirmedByUser // ignore: cast_nullable_to_non_nullable
-as bool,
+as bool,distanceMeters: null == distanceMeters ? _self.distanceMeters : distanceMeters // ignore: cast_nullable_to_non_nullable
+as double,currentSpeedKmh: freezed == currentSpeedKmh ? _self.currentSpeedKmh : currentSpeedKmh // ignore: cast_nullable_to_non_nullable
+as double?,finalDestinationQuery: freezed == finalDestinationQuery ? _self.finalDestinationQuery : finalDestinationQuery // ignore: cast_nullable_to_non_nullable
+as String?,
   ));
 }
 /// Create a copy of ActiveTripSession
@@ -170,10 +186,10 @@ return $default(_that);case _:
 /// }
 /// ```
 
-@optionalTypeArgs TResult maybeWhen<TResult extends Object?>(TResult Function( String id,  TransitTrip trip,  ActiveTripState state,  int currentStationIndex,  DateTime startedAt,  DateTime updatedAt,  int confidenceScore,  bool lowBatteryMode,  bool confirmedByUser)?  $default,{required TResult orElse(),}) {final _that = this;
+@optionalTypeArgs TResult maybeWhen<TResult extends Object?>(TResult Function( String id,  TransitTrip trip,  ActiveTripState state,  int currentStationIndex,  DateTime startedAt,  DateTime updatedAt,  int confidenceScore,  bool lowBatteryMode,  bool confirmedByUser,  double distanceMeters,  double? currentSpeedKmh,  String? finalDestinationQuery)?  $default,{required TResult orElse(),}) {final _that = this;
 switch (_that) {
 case _ActiveTripSession() when $default != null:
-return $default(_that.id,_that.trip,_that.state,_that.currentStationIndex,_that.startedAt,_that.updatedAt,_that.confidenceScore,_that.lowBatteryMode,_that.confirmedByUser);case _:
+return $default(_that.id,_that.trip,_that.state,_that.currentStationIndex,_that.startedAt,_that.updatedAt,_that.confidenceScore,_that.lowBatteryMode,_that.confirmedByUser,_that.distanceMeters,_that.currentSpeedKmh,_that.finalDestinationQuery);case _:
   return orElse();
 
 }
@@ -191,10 +207,10 @@ return $default(_that.id,_that.trip,_that.state,_that.currentStationIndex,_that.
 /// }
 /// ```
 
-@optionalTypeArgs TResult when<TResult extends Object?>(TResult Function( String id,  TransitTrip trip,  ActiveTripState state,  int currentStationIndex,  DateTime startedAt,  DateTime updatedAt,  int confidenceScore,  bool lowBatteryMode,  bool confirmedByUser)  $default,) {final _that = this;
+@optionalTypeArgs TResult when<TResult extends Object?>(TResult Function( String id,  TransitTrip trip,  ActiveTripState state,  int currentStationIndex,  DateTime startedAt,  DateTime updatedAt,  int confidenceScore,  bool lowBatteryMode,  bool confirmedByUser,  double distanceMeters,  double? currentSpeedKmh,  String? finalDestinationQuery)  $default,) {final _that = this;
 switch (_that) {
 case _ActiveTripSession():
-return $default(_that.id,_that.trip,_that.state,_that.currentStationIndex,_that.startedAt,_that.updatedAt,_that.confidenceScore,_that.lowBatteryMode,_that.confirmedByUser);case _:
+return $default(_that.id,_that.trip,_that.state,_that.currentStationIndex,_that.startedAt,_that.updatedAt,_that.confidenceScore,_that.lowBatteryMode,_that.confirmedByUser,_that.distanceMeters,_that.currentSpeedKmh,_that.finalDestinationQuery);case _:
   throw StateError('Unexpected subclass');
 
 }
@@ -211,10 +227,10 @@ return $default(_that.id,_that.trip,_that.state,_that.currentStationIndex,_that.
 /// }
 /// ```
 
-@optionalTypeArgs TResult? whenOrNull<TResult extends Object?>(TResult? Function( String id,  TransitTrip trip,  ActiveTripState state,  int currentStationIndex,  DateTime startedAt,  DateTime updatedAt,  int confidenceScore,  bool lowBatteryMode,  bool confirmedByUser)?  $default,) {final _that = this;
+@optionalTypeArgs TResult? whenOrNull<TResult extends Object?>(TResult? Function( String id,  TransitTrip trip,  ActiveTripState state,  int currentStationIndex,  DateTime startedAt,  DateTime updatedAt,  int confidenceScore,  bool lowBatteryMode,  bool confirmedByUser,  double distanceMeters,  double? currentSpeedKmh,  String? finalDestinationQuery)?  $default,) {final _that = this;
 switch (_that) {
 case _ActiveTripSession() when $default != null:
-return $default(_that.id,_that.trip,_that.state,_that.currentStationIndex,_that.startedAt,_that.updatedAt,_that.confidenceScore,_that.lowBatteryMode,_that.confirmedByUser);case _:
+return $default(_that.id,_that.trip,_that.state,_that.currentStationIndex,_that.startedAt,_that.updatedAt,_that.confidenceScore,_that.lowBatteryMode,_that.confirmedByUser,_that.distanceMeters,_that.currentSpeedKmh,_that.finalDestinationQuery);case _:
   return null;
 
 }
@@ -226,7 +242,7 @@ return $default(_that.id,_that.trip,_that.state,_that.currentStationIndex,_that.
 @JsonSerializable()
 
 class _ActiveTripSession extends ActiveTripSession {
-  const _ActiveTripSession({required this.id, required this.trip, required this.state, required this.currentStationIndex, required this.startedAt, required this.updatedAt, this.confidenceScore = 100, this.lowBatteryMode = false, this.confirmedByUser = false}): super._();
+  const _ActiveTripSession({required this.id, required this.trip, required this.state, required this.currentStationIndex, required this.startedAt, required this.updatedAt, this.confidenceScore = 100, this.lowBatteryMode = false, this.confirmedByUser = false, this.distanceMeters = 0, this.currentSpeedKmh, this.finalDestinationQuery}): super._();
   factory _ActiveTripSession.fromJson(Map<String, dynamic> json) => _$ActiveTripSessionFromJson(json);
 
 @override final  String id;
@@ -238,6 +254,22 @@ class _ActiveTripSession extends ActiveTripSession {
 @override@JsonKey() final  int confidenceScore;
 @override@JsonKey() final  bool lowBatteryMode;
 @override@JsonKey() final  bool confirmedByUser;
+// Cumulative straight-line distance covered so far, summed hop-by-hop
+// from station coordinates as `currentStationIndex` advances — there's
+// no track-shape/polyline data to follow the rail curve exactly.
+@override@JsonKey() final  double distanceMeters;
+// Best-known current speed in km/h: refreshed either from a real GPS fix
+// (see `CrowdPositionReporter`) or, lacking one, from the previous
+// hop's distance/time as a stand-in "train speed" reading. Null until
+// the first hop or GPS fix is available.
+@override final  double? currentSpeedKmh;
+// Optional free-text final destination (address/place name) beyond the
+// destination station itself, entered by the user before starting the
+// trip. Carried through to the arrived/complete screen so it can offer
+// a "Buka di Google Maps ke [tujuan]" button via
+// `launchMapDirectionsToQuery` — Google Maps' own geocoder resolves it,
+// this app never geocodes addresses itself.
+@override final  String? finalDestinationQuery;
 
 /// Create a copy of ActiveTripSession
 /// with the given fields replaced by the non-null parameter values.
@@ -252,16 +284,16 @@ Map<String, dynamic> toJson() {
 
 @override
 bool operator ==(Object other) {
-  return identical(this, other) || (other.runtimeType == runtimeType&&other is _ActiveTripSession&&(identical(other.id, id) || other.id == id)&&(identical(other.trip, trip) || other.trip == trip)&&(identical(other.state, state) || other.state == state)&&(identical(other.currentStationIndex, currentStationIndex) || other.currentStationIndex == currentStationIndex)&&(identical(other.startedAt, startedAt) || other.startedAt == startedAt)&&(identical(other.updatedAt, updatedAt) || other.updatedAt == updatedAt)&&(identical(other.confidenceScore, confidenceScore) || other.confidenceScore == confidenceScore)&&(identical(other.lowBatteryMode, lowBatteryMode) || other.lowBatteryMode == lowBatteryMode)&&(identical(other.confirmedByUser, confirmedByUser) || other.confirmedByUser == confirmedByUser));
+  return identical(this, other) || (other.runtimeType == runtimeType&&other is _ActiveTripSession&&(identical(other.id, id) || other.id == id)&&(identical(other.trip, trip) || other.trip == trip)&&(identical(other.state, state) || other.state == state)&&(identical(other.currentStationIndex, currentStationIndex) || other.currentStationIndex == currentStationIndex)&&(identical(other.startedAt, startedAt) || other.startedAt == startedAt)&&(identical(other.updatedAt, updatedAt) || other.updatedAt == updatedAt)&&(identical(other.confidenceScore, confidenceScore) || other.confidenceScore == confidenceScore)&&(identical(other.lowBatteryMode, lowBatteryMode) || other.lowBatteryMode == lowBatteryMode)&&(identical(other.confirmedByUser, confirmedByUser) || other.confirmedByUser == confirmedByUser)&&(identical(other.distanceMeters, distanceMeters) || other.distanceMeters == distanceMeters)&&(identical(other.currentSpeedKmh, currentSpeedKmh) || other.currentSpeedKmh == currentSpeedKmh)&&(identical(other.finalDestinationQuery, finalDestinationQuery) || other.finalDestinationQuery == finalDestinationQuery));
 }
 
 @JsonKey(includeFromJson: false, includeToJson: false)
 @override
-int get hashCode => Object.hash(runtimeType,id,trip,state,currentStationIndex,startedAt,updatedAt,confidenceScore,lowBatteryMode,confirmedByUser);
+int get hashCode => Object.hash(runtimeType,id,trip,state,currentStationIndex,startedAt,updatedAt,confidenceScore,lowBatteryMode,confirmedByUser,distanceMeters,currentSpeedKmh,finalDestinationQuery);
 
 @override
 String toString() {
-  return 'ActiveTripSession(id: $id, trip: $trip, state: $state, currentStationIndex: $currentStationIndex, startedAt: $startedAt, updatedAt: $updatedAt, confidenceScore: $confidenceScore, lowBatteryMode: $lowBatteryMode, confirmedByUser: $confirmedByUser)';
+  return 'ActiveTripSession(id: $id, trip: $trip, state: $state, currentStationIndex: $currentStationIndex, startedAt: $startedAt, updatedAt: $updatedAt, confidenceScore: $confidenceScore, lowBatteryMode: $lowBatteryMode, confirmedByUser: $confirmedByUser, distanceMeters: $distanceMeters, currentSpeedKmh: $currentSpeedKmh, finalDestinationQuery: $finalDestinationQuery)';
 }
 
 
@@ -272,7 +304,7 @@ abstract mixin class _$ActiveTripSessionCopyWith<$Res> implements $ActiveTripSes
   factory _$ActiveTripSessionCopyWith(_ActiveTripSession value, $Res Function(_ActiveTripSession) _then) = __$ActiveTripSessionCopyWithImpl;
 @override @useResult
 $Res call({
- String id, TransitTrip trip, ActiveTripState state, int currentStationIndex, DateTime startedAt, DateTime updatedAt, int confidenceScore, bool lowBatteryMode, bool confirmedByUser
+ String id, TransitTrip trip, ActiveTripState state, int currentStationIndex, DateTime startedAt, DateTime updatedAt, int confidenceScore, bool lowBatteryMode, bool confirmedByUser, double distanceMeters, double? currentSpeedKmh, String? finalDestinationQuery
 });
 
 
@@ -289,7 +321,7 @@ class __$ActiveTripSessionCopyWithImpl<$Res>
 
 /// Create a copy of ActiveTripSession
 /// with the given fields replaced by the non-null parameter values.
-@override @pragma('vm:prefer-inline') $Res call({Object? id = null,Object? trip = null,Object? state = null,Object? currentStationIndex = null,Object? startedAt = null,Object? updatedAt = null,Object? confidenceScore = null,Object? lowBatteryMode = null,Object? confirmedByUser = null,}) {
+@override @pragma('vm:prefer-inline') $Res call({Object? id = null,Object? trip = null,Object? state = null,Object? currentStationIndex = null,Object? startedAt = null,Object? updatedAt = null,Object? confidenceScore = null,Object? lowBatteryMode = null,Object? confirmedByUser = null,Object? distanceMeters = null,Object? currentSpeedKmh = freezed,Object? finalDestinationQuery = freezed,}) {
   return _then(_ActiveTripSession(
 id: null == id ? _self.id : id // ignore: cast_nullable_to_non_nullable
 as String,trip: null == trip ? _self.trip : trip // ignore: cast_nullable_to_non_nullable
@@ -300,7 +332,10 @@ as DateTime,updatedAt: null == updatedAt ? _self.updatedAt : updatedAt // ignore
 as DateTime,confidenceScore: null == confidenceScore ? _self.confidenceScore : confidenceScore // ignore: cast_nullable_to_non_nullable
 as int,lowBatteryMode: null == lowBatteryMode ? _self.lowBatteryMode : lowBatteryMode // ignore: cast_nullable_to_non_nullable
 as bool,confirmedByUser: null == confirmedByUser ? _self.confirmedByUser : confirmedByUser // ignore: cast_nullable_to_non_nullable
-as bool,
+as bool,distanceMeters: null == distanceMeters ? _self.distanceMeters : distanceMeters // ignore: cast_nullable_to_non_nullable
+as double,currentSpeedKmh: freezed == currentSpeedKmh ? _self.currentSpeedKmh : currentSpeedKmh // ignore: cast_nullable_to_non_nullable
+as double?,finalDestinationQuery: freezed == finalDestinationQuery ? _self.finalDestinationQuery : finalDestinationQuery // ignore: cast_nullable_to_non_nullable
+as String?,
   ));
 }
 

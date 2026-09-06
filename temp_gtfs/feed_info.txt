@@ -1,0 +1,2 @@
+﻿feed_publisher_name,feed_publisher_url,feed_lang,default_lang,feed_start_date,feed_end_date,feed_version
+Teman Kereta,https://www.commuterline.id,id,id,20250201,20251231,community-conversion-2025-02-01-v1

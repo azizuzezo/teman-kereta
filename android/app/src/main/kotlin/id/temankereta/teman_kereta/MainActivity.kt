@@ -10,13 +10,11 @@ import io.flutter.plugin.common.MethodCall
 import io.flutter.plugin.common.MethodChannel
 
 class MainActivity : FlutterActivity() {
-    private lateinit var geofenceManager: StationGeofenceManager
     private lateinit var activityRecognitionManager: ActivityRecognitionManager
     private var pendingActivityPermissionResult: MethodChannel.Result? = null
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
-        geofenceManager = StationGeofenceManager(this)
         activityRecognitionManager = ActivityRecognitionManager(this)
         MethodChannel(flutterEngine.dartExecutor.binaryMessenger, NATIVE_CHANNEL)
             .setMethodCallHandler(::handleNativeMethod)
@@ -27,24 +25,17 @@ class MainActivity : FlutterActivity() {
             "getNativeCapabilities" -> result.success(nativeCapabilities())
             "getPermissionStatus" -> result.success(permissionStatus())
             "getActiveTripSnapshot" -> result.success(NativeStateStore.activeTripSnapshot(this))
-            "getLastGeofenceEvent" -> result.success(NativeStateStore.lastGeofenceEvent(this))
+            "getActiveTripFullState" -> result.success(NativeStateStore.activeTripFullState(this))
+            "updateSettings" -> updateSettings(call.argumentsMap(), result)
             "getLastActivityEvent" -> result.success(NativeStateStore.lastActivityEvent(this))
-            "getRegisteredStationGeofences" -> result.success(geofenceManager.registeredStationGeofences())
             "startActiveTrip" -> startActiveTrip(call.argumentsMap(), result)
             "updateActiveTrip" -> updateActiveTrip(call.argumentsMap(), result)
             "stopActiveTrip" -> stopActiveTrip(result)
+            "refreshActiveTripLocation" -> refreshActiveTripLocation(result)
+            "acknowledgeLocationGap" -> acknowledgeLocationGap(result)
             "updateWidget" -> updateWidget(call.argumentsMap(), result)
             "updateNextDepartureWidget" -> updateNextDepartureWidget(call.argumentsMap(), result)
             "updateActiveTripWidget" -> updateActiveTripWidget(call.argumentsMap(), result)
-            "registerStationGeofences" -> {
-                val arguments = call.argumentsMap()
-                if (arguments == null) {
-                    result.invalidArguments("registerStationGeofences memerlukan object arguments.")
-                } else {
-                    geofenceManager.register(arguments, result)
-                }
-            }
-            "unregisterStationGeofences" -> geofenceManager.unregister(call.argumentsMap(), result)
             "requestActivityRecognitionUpdates" -> requestActivityRecognitionUpdates(result)
             "stopActivityRecognitionUpdates" -> activityRecognitionManager.stopTransitionUpdates(result)
             else -> result.notImplemented()
@@ -172,6 +163,45 @@ class MainActivity : FlutterActivity() {
         }
     }
 
+    private fun updateSettings(arguments: Map<*, *>?, result: MethodChannel.Result) {
+        if (arguments == null) {
+            result.invalidArguments("updateSettings memerlukan object arguments.")
+            return
+        }
+        NativeStateStore.updateSettings(this, arguments)
+        result.success(mapOf("updated" to true))
+    }
+
+    /// Rider-initiated "Perbarui lokasi". Kicks the foreground service into
+    /// rebuilding its location subscription and fetching one immediate
+    /// high-accuracy fix; the answer arrives through the normal
+    /// `getActiveTripFullState` poll like every other fix, so this call
+    /// itself returns nothing but "the nudge was delivered".
+    private fun refreshActiveTripLocation(result: MethodChannel.Result) {
+        if (!NativeStateStore.preferences(this).getBoolean(NativeStateStore.ACTIVE, false)) {
+            result.error("NO_ACTIVE_TRIP", "Tidak ada perjalanan aktif untuk disegarkan.", null)
+            return
+        }
+        if (!hasForegroundLocationPermission()) {
+            result.error(
+                "MISSING_PERMISSION",
+                "Izin lokasi diperlukan untuk memperbarui posisi.",
+                permissionStatus(),
+            )
+            return
+        }
+        ActiveTripLocationService.refresh(this)
+        result.success(mapOf("refreshing" to true))
+    }
+
+    /// Clears the pending signal-gap prompt once the rider has answered it
+    /// (or dismissed it — dismissal clears it too; the trip stays active
+    /// either way, the prompt never gated it).
+    private fun acknowledgeLocationGap(result: MethodChannel.Result) {
+        NativeStateStore.clearLocationGap(this)
+        result.success(mapOf("acknowledged" to true))
+    }
+
     private fun stopActiveTrip(result: MethodChannel.Result) {
         NativeStateStore.clearActiveTrip(this)
         TemanKeretaWidgetUpdater.updateActiveTrip(this)
@@ -281,12 +311,8 @@ class MainActivity : FlutterActivity() {
     private fun nativeCapabilities(): Map<String, Any> = mapOf(
         "channel" to NATIVE_CHANNEL,
         "foregroundLocationService" to true,
+        "continuousGpsTracking" to true,
         "homeScreenWidgets" to listOf("nextDeparture", "activeTrip", "dailyRoute", "serviceStatus"),
-        "stationGeofences" to mapOf(
-            "providedStationsOnly" to true,
-            "maximumPerScope" to 20,
-            "defaultExpirationHours" to 24,
-        ),
         "activityRecognition" to mapOf(
             "monitoredTypes" to listOf("in_vehicle", "on_foot", "still"),
             "transitionApi" to true,
@@ -314,7 +340,6 @@ class MainActivity : FlutterActivity() {
             "notifications" to notifications,
             "activityRecognition" to activityRecognitionManager.hasPermission(),
             "canStartActiveTrip" to (fine || coarse),
-            "canRegisterStationGeofences" to (fine && background),
             "requestAfterExplanation" to true,
             "backgroundPermissionMustBeRequestedSeparately" to (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R),
         )

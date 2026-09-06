@@ -32,7 +32,7 @@ class MultimodalRoutePage extends ConsumerWidget {
           title: 'Perjalanan tidak ditemukan',
           message: 'Hasil pencarian sudah tidak aktif. Cari perjalanan lagi.',
           action: FilledButton(
-            onPressed: () => context.go('/schedule'),
+            onPressed: () => context.go('/schedule/search'),
             child: const Text('Cari lagi'),
           ),
         ),

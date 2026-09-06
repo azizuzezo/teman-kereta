@@ -1,0 +1,85 @@
+import os
+
+screenshots_dir = r"c:\Projet\Teman Kereta\landing_page\assets\screenshots"
+
+# Schedule Screen SVG
+schedule_svg = """<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 380 780" width="380" height="780" style="background:#0f172a; font-family:'Plus Jakarta Sans', system-ui, sans-serif;">
+  <defs>
+    <linearGradient id="scGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#1e293b"/>
+      <stop offset="100%" stop-color="#0f172a"/>
+    </linearGradient>
+  </defs>
+
+  <!-- Header -->
+  <rect width="380" height="85" fill="#1e293b"/>
+  <text x="24" y="52" fill="#ffffff" font-size="18" font-weight="700">📅 Jadwal &amp; Keberangkatan</text>
+
+  <!-- Station Selector Card -->
+  <g transform="translate(16, 100)">
+    <rect width="348" height="90" rx="16" fill="#1e293b" stroke="#334155" stroke-width="1"/>
+    <text x="20" y="32" fill="#94a3b8" font-size="11">Stasiun Keberangkatan:</text>
+    <text x="20" y="58" fill="#ffffff" font-size="18" font-weight="800">Stasiun Tanah Abang (THB)</text>
+    <rect x="250" y="24" width="80" height="28" rx="8" fill="#2563eb" fill-opacity="0.2"/>
+    <text x="290" y="42" text-anchor="middle" fill="#60a5fa" font-size="11" font-weight="700">Ganti ⇄</text>
+  </g>
+
+  <!-- Line Filter Chips -->
+  <g transform="translate(16, 205)">
+    <rect x="0" y="0" width="85" height="32" rx="16" fill="#2563eb"/>
+    <text x="42" y="20" text-anchor="middle" fill="#ffffff" font-size="11" font-weight="700">Semua Jalur</text>
+
+    <rect x="95" y="0" width="80" height="32" rx="16" fill="#1e293b" stroke="#334155" stroke-width="1"/>
+    <circle cx="110" cy="16" r="4" fill="#ef4444"/>
+    <text x="140" y="20" text-anchor="middle" fill="#cbd5e1" font-size="11" font-weight="600">Bogor</text>
+
+    <rect x="185" y="0" width="90" height="32" rx="16" fill="#1e293b" stroke="#334155" stroke-width="1"/>
+    <circle cx="200" cy="16" r="4" fill="#10b981"/>
+    <text x="235" y="20" text-anchor="middle" fill="#cbd5e1" font-size="11" font-weight="600">Rangkas</text>
+  </g>
+
+  <!-- Schedule Items -->
+  <g transform="translate(16, 255)">
+    <!-- Item 1 -->
+    <rect y="0" width="348" height="85" rx="16" fill="url(#scGrad)" stroke="#334155" stroke-width="1"/>
+    <rect x="16" y="16" width="5" height="52" rx="2.5" fill="#10b981"/>
+    <text x="32" y="36" fill="#ffffff" font-size="15" font-weight="800">Rangkasbitung</text>
+    <text x="32" y="56" fill="#94a3b8" font-size="12">KA 2048 • Peron 5/6 (Via Serpong)</text>
+    <rect x="235" y="18" width="95" height="32" rx="8" fill="#10b981" fill-opacity="0.2"/>
+    <text x="282" y="38" text-anchor="middle" fill="#34d399" font-size="13" font-weight="800">07:45 (3m)</text>
+    <text x="282" y="66" text-anchor="middle" fill="#4ade80" font-size="10">🟢 Lengang</text>
+
+    <!-- Item 2 -->
+    <rect y="98" width="348" height="85" rx="16" fill="url(#scGrad)" stroke="#334155" stroke-width="1"/>
+    <rect x="16" y="114" width="5" height="52" rx="2.5" fill="#3b82f6"/>
+    <text x="32" y="134" fill="#ffffff" font-size="15" font-weight="800">Bekasi / Cikarang</text>
+    <text x="32" y="154" fill="#94a3b8" font-size="12">KA 1120 • Peron 2 (Via Manggarai)</text>
+    <rect x="235" y="116" width="95" height="32" rx="8" fill="#3b82f6" fill-opacity="0.2"/>
+    <text x="282" y="136" text-anchor="middle" fill="#60a5fa" font-size="13" font-weight="800">07:51 (9m)</text>
+    <text x="282" y="164" text-anchor="middle" fill="#facc15" font-size="10">🟡 Sedang</text>
+
+    <!-- Item 3 -->
+    <rect y="196" width="348" height="85" rx="16" fill="url(#scGrad)" stroke="#334155" stroke-width="1"/>
+    <rect x="16" y="212" width="5" height="52" rx="2.5" fill="#10b981"/>
+    <text x="32" y="232" fill="#ffffff" font-size="15" font-weight="800">Parung Panjang</text>
+    <text x="32" y="252" fill="#94a3b8" font-size="12">KA 2054 • Peron 5/6 (Via Sudimara)</text>
+    <rect x="235" y="214" width="95" height="32" rx="8" fill="#10b981" fill-opacity="0.2"/>
+    <text x="282" y="234" text-anchor="middle" fill="#34d399" font-size="13" font-weight="800">07:58 (16m)</text>
+    <text x="282" y="262" text-anchor="middle" fill="#f87171" font-size="10">🔴 Padat</text>
+
+    <!-- Item 4 -->
+    <rect y="294" width="348" height="85" rx="16" fill="url(#scGrad)" stroke="#334155" stroke-width="1"/>
+    <rect x="16" y="310" width="5" height="52" rx="2.5" fill="#ef4444"/>
+    <text x="32" y="330" fill="#ffffff" font-size="15" font-weight="800">Bogor</text>
+    <text x="32" y="350" fill="#94a3b8" font-size="12">KA 1186 • Transit Manggarai</text>
+    <rect x="235" y="312" width="95" height="32" rx="8" fill="#ef4444" fill-opacity="0.2"/>
+    <text x="282" y="332" text-anchor="middle" fill="#f87171" font-size="13" font-weight="800">08:04 (22m)</text>
+    <text x="282" y="360" text-anchor="middle" fill="#facc15" font-size="10">🟡 Sedang</text>
+  </g>
+</svg>"""
+
+with open(os.path.join(screenshots_dir, "screen-schedule.svg"), "w", encoding="utf-8") as f:
+  f.write(schedule_svg)
+
+print("screen-schedule.svg created successfully!")
+

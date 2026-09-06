@@ -17,6 +17,9 @@ _ActiveTripSession _$ActiveTripSessionFromJson(Map<String, dynamic> json) =>
       confidenceScore: (json['confidenceScore'] as num?)?.toInt() ?? 100,
       lowBatteryMode: json['lowBatteryMode'] as bool? ?? false,
       confirmedByUser: json['confirmedByUser'] as bool? ?? false,
+      distanceMeters: (json['distanceMeters'] as num?)?.toDouble() ?? 0,
+      currentSpeedKmh: (json['currentSpeedKmh'] as num?)?.toDouble(),
+      finalDestinationQuery: json['finalDestinationQuery'] as String?,
     );
 
 Map<String, dynamic> _$ActiveTripSessionToJson(_ActiveTripSession instance) =>
@@ -30,6 +33,9 @@ Map<String, dynamic> _$ActiveTripSessionToJson(_ActiveTripSession instance) =>
       'confidenceScore': instance.confidenceScore,
       'lowBatteryMode': instance.lowBatteryMode,
       'confirmedByUser': instance.confirmedByUser,
+      'distanceMeters': instance.distanceMeters,
+      'currentSpeedKmh': instance.currentSpeedKmh,
+      'finalDestinationQuery': instance.finalDestinationQuery,
     };
 
 const _$ActiveTripStateEnumMap = {

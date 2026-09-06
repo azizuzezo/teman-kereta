@@ -1,5 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
+    <!-- Tint Android applies to the (silhouette) notification small icon. -->
+    <color name="tk_notification_accent">#1B3A6B</color>
     <color name="tk_widget_surface">#102E2A</color>
     <color name="tk_widget_surface_active">#18334D</color>
     <color name="tk_widget_primary">#F7FBFA</color>

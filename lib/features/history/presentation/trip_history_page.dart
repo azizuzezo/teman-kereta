@@ -1,10 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 
 import '../../../core/database/app_database.dart';
 import '../../../core/database/database_provider.dart';
-import '../../../core/widgets/data_badges.dart';
 import '../../../core/widgets/empty_state.dart';
 
 final tripHistoryProvider = StreamProvider<List<CompletedTrip>>((Ref ref) {
@@ -22,6 +22,11 @@ class TripHistoryPage extends ConsumerWidget {
       appBar: AppBar(
         title: const Text('Riwayat perjalanan'),
         actions: <Widget>[
+          IconButton(
+            tooltip: 'Rekap perjalanan',
+            onPressed: () => context.push('/history/recap'),
+            icon: const Icon(Icons.insights_rounded),
+          ),
           IconButton(
             tooltip: 'Hapus semua riwayat',
             onPressed: () => _confirmClear(context, ref),
@@ -108,7 +113,6 @@ class _TripHistoryCard extends StatelessWidget {
                     style: Theme.of(context).textTheme.titleMedium,
                   ),
                 ),
-                if (trip.isDemo) const DemoDataBanner(compact: true),
               ],
             ),
             const SizedBox(height: 6),

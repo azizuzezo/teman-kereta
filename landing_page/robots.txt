@@ -1,0 +1,9 @@
+User-agent: *
+Allow: /
+
+# Halaman internal OAuth Threads, bukan konten publik
+Disallow: /threads-callback
+Disallow: /threads-data-deletion
+
+# Sitemaps
+Sitemap: https://temankereta.web.id/sitemap.xml

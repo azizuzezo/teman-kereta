@@ -1,0 +1,150 @@
+import os
+
+screenshots_dir = r"c:\Projet\Teman Kereta\landing_page\assets\screenshots"
+os.makedirs(screenshots_dir, exist_ok=True)
+
+# 1. Hero Preview SVG (Clean, professional dark transit interface)
+hero_svg = """<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 380 780" width="380" height="780" style="background:#090d16; font-family:'Plus Jakarta Sans', -apple-system, system-ui, sans-serif;">
+  <defs>
+    <linearGradient id="blueCardGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#1e40af"/>
+      <stop offset="100%" stop-color="#1e3a8a"/>
+    </linearGradient>
+    <linearGradient id="surfaceGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#151d2f"/>
+      <stop offset="100%" stop-color="#0f172a"/>
+    </linearGradient>
+  </defs>
+
+  <!-- Status Bar -->
+  <text x="32" y="32" fill="#94a3b8" font-size="12" font-weight="600">07:42</text>
+  <circle cx="330" cy="28" r="3.5" fill="#94a3b8"/>
+  <circle cx="342" cy="28" r="3.5" fill="#94a3b8"/>
+  <rect x="352" y="24" width="16" height="8" rx="2" fill="#94a3b8"/>
+
+  <!-- Top App Bar -->
+  <g transform="translate(24, 52)">
+    <rect width="36" height="36" rx="12" fill="#2563eb" fill-opacity="0.2"/>
+    <circle cx="18" cy="18" r="8" fill="#2563eb"/>
+    <text x="48" y="15" fill="#64748b" font-size="11" font-weight="500">Stasiun Terdekat</text>
+    <text x="48" y="31" fill="#f8fafc" font-size="15" font-weight="700">Stasiun Manggarai</text>
+    <circle cx="316" cy="18" r="16" fill="#1e293b"/>
+    <circle cx="316" cy="18" r="3.5" fill="#38bdf8"/>
+  </g>
+
+  <!-- Active Journey Card (Sisa Stasiun) -->
+  <g transform="translate(20, 108)">
+    <rect width="340" height="174" rx="20" fill="url(#blueCardGrad)" stroke="#3b82f6" stroke-opacity="0.3" stroke-width="1"/>
+    
+    <!-- Top badge -->
+    <rect x="16" y="14" width="124" height="24" rx="12" fill="#ffffff" fill-opacity="0.15"/>
+    <circle cx="28" cy="26" r="4" fill="#34d399"/>
+    <text x="38" y="30" fill="#ffffff" font-size="10.5" font-weight="700" letter-spacing="0.5">PERJALANAN AKTIF</text>
+    
+    <text x="240" y="30" fill="#bfdbfe" font-size="11" font-weight="600">Line Cikarang</text>
+    
+    <!-- Destination & Station Count -->
+    <text x="16" y="68" fill="#ffffff" font-size="20" font-weight="800">Menuju Tebet</text>
+    <text x="16" y="86" fill="#93c5fd" font-size="12" font-weight="500">Sisa 3 Stasiun • Estimasi 4 mnt lagi</text>
+    
+    <!-- Metro Progress Line -->
+    <line x1="16" y1="114" x2="324" y2="114" stroke="#3b82f6" stroke-width="4" stroke-linecap="round"/>
+    <line x1="16" y1="114" x2="160" y2="114" stroke="#ffffff" stroke-width="4" stroke-linecap="round"/>
+    
+    <circle cx="16" cy="114" r="5" fill="#ffffff"/>
+    <circle cx="90" cy="114" r="5" fill="#ffffff"/>
+    <circle cx="160" cy="114" r="8" fill="#ffffff" stroke="#2563eb" stroke-width="3"/>
+    <circle cx="240" cy="114" r="5" fill="#60a5fa"/>
+    <circle cx="324" cy="114" r="5" fill="#60a5fa"/>
+    
+    <text x="16" y="132" fill="#cbd5e1" font-size="10">Manggarai</text>
+    <text x="140" y="145" fill="#ffffff" font-weight="700" font-size="11">KA 1182 (Posisi)</text>
+    <text x="298" y="132" fill="#cbd5e1" font-size="10">Tebet</text>
+
+    <!-- Bottom Alert Subtext -->
+    <rect x="16" y="132" width="150" height="24" rx="6" fill="#000000" fill-opacity="0.25"/>
+    <text x="24" y="148" fill="#e2e8f0" font-size="10.5" font-weight="600">Alarm Aktif: 1 Stasiun Sebelum</text>
+  </g>
+
+  <!-- Quick Action Grid -->
+  <g transform="translate(20, 298)">
+    <rect x="0" y="0" width="76" height="72" rx="16" fill="url(#surfaceGrad)" stroke="#1e293b" stroke-width="1"/>
+    <circle cx="38" cy="26" r="13" fill="#2563eb" fill-opacity="0.2"/>
+    <circle cx="38" cy="26" r="5" fill="#38bdf8"/>
+    <text x="38" y="56" text-anchor="middle" fill="#cbd5e1" font-size="11" font-weight="600">Rute</text>
+
+    <rect x="88" y="0" width="76" height="72" rx="16" fill="url(#surfaceGrad)" stroke="#1e293b" stroke-width="1"/>
+    <circle cx="126" cy="26" r="13" fill="#f59e0b" fill-opacity="0.2"/>
+    <circle cx="126" cy="26" r="5" fill="#fbbf24"/>
+    <text x="126" y="56" text-anchor="middle" fill="#cbd5e1" font-size="11" font-weight="600">Jadwal</text>
+
+    <rect x="176" y="0" width="76" height="72" rx="16" fill="url(#surfaceGrad)" stroke="#1e293b" stroke-width="1"/>
+    <circle cx="214" cy="26" r="13" fill="#10b981" fill-opacity="0.2"/>
+    <circle cx="214" cy="26" r="5" fill="#34d399"/>
+    <text x="214" y="56" text-anchor="middle" fill="#cbd5e1" font-size="11" font-weight="600">Gerbong</text>
+
+    <rect x="264" y="0" width="76" height="72" rx="16" fill="url(#surfaceGrad)" stroke="#1e293b" stroke-width="1"/>
+    <circle cx="302" cy="26" r="13" fill="#8b5cf6" fill-opacity="0.2"/>
+    <circle cx="302" cy="26" r="5" fill="#a78bfa"/>
+    <text x="302" y="56" text-anchor="middle" fill="#cbd5e1" font-size="11" font-weight="600">Stasiun</text>
+  </g>
+
+  <!-- Section Title -->
+  <text x="24" y="402" fill="#ffffff" font-size="15" font-weight="700">Keberangkatan Berikutnya</text>
+  <text x="286" y="402" fill="#38bdf8" font-size="12" font-weight="600">Lihat Semua</text>
+
+  <!-- Schedule Card 1 -->
+  <g transform="translate(20, 418)">
+    <rect width="340" height="74" rx="16" fill="url(#surfaceGrad)" stroke="#1e293b" stroke-width="1"/>
+    <rect x="16" y="16" width="4" height="42" rx="2" fill="#ef4444"/>
+    <text x="30" y="34" fill="#ffffff" font-size="14" font-weight="700">Bogor (Line Merah)</text>
+    <text x="30" y="52" fill="#64748b" font-size="11">KA 1188 • Peron 11</text>
+    <rect x="245" y="16" width="78" height="26" rx="8" fill="#ef4444" fill-opacity="0.15"/>
+    <text x="284" y="33" text-anchor="middle" fill="#f87171" font-size="11.5" font-weight="700">07:48 (6m)</text>
+    <text x="284" y="54" text-anchor="middle" fill="#34d399" font-size="10" font-weight="600">Lengang</text>
+  </g>
+
+  <!-- Schedule Card 2 -->
+  <g transform="translate(20, 504)">
+    <rect width="340" height="74" rx="16" fill="url(#surfaceGrad)" stroke="#1e293b" stroke-width="1"/>
+    <rect x="16" y="16" width="4" height="42" rx="2" fill="#3b82f6"/>
+    <text x="30" y="34" fill="#ffffff" font-size="14" font-weight="700">Cikarang (Line Biru)</text>
+    <text x="30" y="52" fill="#64748b" font-size="11">KA 1204 • Peron 1/2</text>
+    <rect x="245" y="16" width="78" height="26" rx="8" fill="#3b82f6" fill-opacity="0.15"/>
+    <text x="284" y="33" text-anchor="middle" fill="#60a5fa" font-size="11.5" font-weight="700">07:54 (12m)</text>
+    <text x="284" y="54" text-anchor="middle" fill="#fbbf24" font-size="10" font-weight="600">Sedang</text>
+  </g>
+
+  <!-- Schedule Card 3 -->
+  <g transform="translate(20, 590)">
+    <rect width="340" height="74" rx="16" fill="url(#surfaceGrad)" stroke="#1e293b" stroke-width="1"/>
+    <rect x="16" y="16" width="4" height="42" rx="2" fill="#10b981"/>
+    <text x="30" y="34" fill="#ffffff" font-size="14" font-weight="700">Rangkasbitung (Line Hijau)</text>
+    <text x="30" y="52" fill="#64748b" font-size="11">KA 2042 • Via Tanah Abang</text>
+    <rect x="245" y="16" width="78" height="26" rx="8" fill="#10b981" fill-opacity="0.15"/>
+    <text x="284" y="33" text-anchor="middle" fill="#34d399" font-size="11.5" font-weight="700">08:02 (20m)</text>
+    <text x="284" y="54" text-anchor="middle" fill="#f87171" font-size="10" font-weight="600">Padat</text>
+  </g>
+
+  <!-- Bottom App Navigation -->
+  <g transform="translate(0, 695)">
+    <rect width="380" height="85" fill="#0b101d" stroke="#1e293b" stroke-width="1"/>
+    <circle cx="55" cy="735" r="14" fill="#2563eb" fill-opacity="0.2"/>
+    <circle cx="55" cy="735" r="5" fill="#3b82f6"/>
+    <text x="55" y="758" text-anchor="middle" fill="#3b82f6" font-size="9.5" font-weight="700">Beranda</text>
+
+    <circle cx="145" cy="735" r="4" fill="#64748b"/>
+    <text x="145" y="758" text-anchor="middle" fill="#64748b" font-size="9.5">Rute</text>
+
+    <circle cx="235" cy="735" r="4" fill="#64748b"/>
+    <text x="235" y="758" text-anchor="middle" fill="#64748b" font-size="9.5">Alarm</text>
+
+    <circle cx="325" cy="735" r="4" fill="#64748b"/>
+    <text x="325" y="758" text-anchor="middle" fill="#64748b" font-size="9.5">Akun</text>
+  </g>
+</svg>"""
+
+with open(os.path.join(screenshots_dir, "hero-preview.svg"), "w", encoding="utf-8") as f:
+  f.write(hero_svg)
+
+print("hero-preview.svg regenerated cleanly without cheesy elements!")

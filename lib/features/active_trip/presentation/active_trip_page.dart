@@ -14,8 +14,24 @@ import '../../../data/providers/demo_data.dart';
 import '../../../data/providers/provider_registry.dart';
 import '../../../domain/entities/active_trip.dart';
 import '../../../domain/entities/transit_models.dart';
+import '../../live_map/presentation/native_gps_fix.dart';
 import '../../schedule/presentation/trip_search_controller.dart';
 import 'active_trip_controller.dart';
+
+/// Real station name for [id], preferring the live station list (Supabase —
+/// real codes like 'KLDB'/'CUK' only resolve here) and falling back to the
+/// bundled demo data, then the raw id itself as a last resort so the UI
+/// never crashes on an unknown id — it just shows something less friendly.
+String _resolveStationName(String? id, List<Station> stations) {
+  if (id == null) {
+    return 'Tujuan';
+  }
+  final fromLive = stations.where((s) => s.id == id).firstOrNull?.name;
+  if (fromLive != null) {
+    return fromLive;
+  }
+  return demoStations.where((s) => s.id == id).firstOrNull?.name ?? id;
+}
 
 class ActiveTripPage extends ConsumerWidget {
   const ActiveTripPage({super.key});
@@ -23,6 +39,7 @@ class ActiveTripPage extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final session = ref.watch(activeTripControllerProvider);
+    final stations = ref.watch(stationListProvider).value ?? const <Station>[];
     if (session == null) {
       return Scaffold(
         appBar: AppBar(title: const Text('Perjalanan aktif')),
@@ -31,7 +48,7 @@ class ActiveTripPage extends ConsumerWidget {
           title: 'Belum ada perjalanan aktif',
           message: 'Cari rute, buka detailnya, lalu pilih Mulai perjalanan.',
           action: FilledButton(
-            onPressed: () => context.go('/schedule'),
+            onPressed: () => context.go('/schedule/search'),
             child: const Text('Cari perjalanan'),
           ),
         ),
@@ -46,9 +63,9 @@ class ActiveTripPage extends ConsumerWidget {
     final progress = totalStops <= 1
         ? 1.0
         : session.currentStationIndex / (totalStops - 1);
-    final currentName = _stationName(session.currentStationId);
-    final nextName = _stationName(session.nextStationId);
-    final destinationName = _stationName(session.trip.destinationStationId);
+    final currentName = _resolveStationName(session.currentStationId, stations);
+    final nextName = _resolveStationName(session.nextStationId, stations);
+    final destinationName = _resolveStationName(session.trip.destinationStationId, stations);
     final isArrived = session.state == ActiveTripState.arrived;
     final isTransferring = session.state == ActiveTripState.transferring;
     final isApproachingTransfer =
@@ -56,7 +73,7 @@ class ActiveTripPage extends ConsumerWidget {
     final transferBoundary = session.nextTransferBoundary;
     final transferStationName = transferBoundary == null
         ? null
-        : _stationName(session.trip.stationIds[transferBoundary.index]);
+        : _resolveStationName(session.trip.stationIds[transferBoundary.index], stations);
     final headlineName = isArrived
         ? destinationName
         : (isTransferring || isApproachingTransfer) && transferStationName != null
@@ -67,6 +84,16 @@ class ActiveTripPage extends ConsumerWidget {
       backgroundColor: AppColors.navy,
       appBar: AppBar(
         foregroundColor: AppColors.surfaceLight,
+        // The app's global `AppBarTheme.titleTextStyle` (see app_theme.dart)
+        // fixes a dark title color for the light-background app bars used
+        // everywhere else — it wins over `foregroundColor` above, which only
+        // covers icons once a `titleTextStyle` exists. On this page's dark
+        // navy background that made the title unreadable (dark-on-dark, no
+        // contrast) — confirmed live on-device. Overriding just the color
+        // here keeps the same size/weight while fixing the contrast.
+        titleTextStyle: Theme.of(context).appBarTheme.titleTextStyle?.copyWith(
+          color: AppColors.surfaceLight,
+        ),
         title: const Text('Perjalanan aktif'),
         actions: <Widget>[
           IconButton(
@@ -165,6 +192,8 @@ class ActiveTripPage extends ConsumerWidget {
                   ),
                   const SizedBox(height: 18),
                   _TripStatsRow(session: session),
+                  const SizedBox(height: 14),
+                  const _LocationHealthRow(),
                 ],
               ),
             ),
@@ -188,7 +217,7 @@ class ActiveTripPage extends ConsumerWidget {
                           ),
                         ),
                         Text(
-                          session.lowBatteryMode ? 'Hemat baterai' : 'GPS adaptif',
+                          session.lowBatteryMode ? 'Hemat baterai' : 'GPS akurasi tinggi',
                           style: Theme.of(context).textTheme.bodySmall,
                         ),
                       ],
@@ -196,10 +225,11 @@ class ActiveTripPage extends ConsumerWidget {
                     const SizedBox(height: 14),
                     for (var index = 0; index < session.trip.stationIds.length; index += 1)
                       _StationProgressRow(
-                        name: _stationName(session.trip.stationIds[index]),
+                        name: _resolveStationName(session.trip.stationIds[index], stations),
                         isPast: index < session.currentStationIndex,
                         isCurrent: index == session.currentStationIndex,
                         isDestination: index == session.trip.stationIds.length - 1,
+                        transferInstruction: _transferInstructionAt(session.trip, index),
                       ),
                     const SizedBox(height: 20),
                     if (session.trip.isDemo && !isArrived)
@@ -217,14 +247,14 @@ class ActiveTripPage extends ConsumerWidget {
                       SizedBox(
                         width: double.infinity,
                         child: FilledButton.icon(
-                          onPressed: () async {
-                            await ref
-                                .read(activeTripControllerProvider.notifier)
-                                .complete();
-                            if (context.mounted) {
-                              context.go('/trip-complete');
-                            }
-                          },
+                          // Safety net only: arrival auto-completes, so
+                          // this is reachable only if that never fired.
+                          // Navigation is the app shell's job now (see
+                          // `RideDetectionWatcher`), so completing is all
+                          // this has to do — doing both would `go` twice.
+                          onPressed: () => ref
+                              .read(activeTripControllerProvider.notifier)
+                              .complete(),
                           icon: const Icon(Icons.flag_outlined),
                           label: const Text('Selesaikan perjalanan'),
                         ),
@@ -302,12 +332,99 @@ class ActiveTripPage extends ConsumerWidget {
     }
   }
 
-  String _stationName(String? id) {
-    if (id == null) {
-      return 'Tujuan';
+  /// Non-null exactly when [index] is one of this trip's real transfer
+  /// stations — used to give every transit stop its own marker in "Urutan
+  /// stasiun" instead of only the single upcoming one shown in the header.
+  String? _transferInstructionAt(TransitTrip trip, int index) {
+    for (final boundary in trip.transferBoundaries) {
+      if (boundary.index == index) {
+        return boundary.instruction ?? 'Transit';
+      }
     }
-    return demoStations.where((station) => station.id == id).firstOrNull?.name ??
-        id;
+    return null;
+  }
+}
+
+/// GPS health readout plus the manual "Perbarui lokasi" button.
+///
+/// The button is deliberately secondary, and labelled as such: automatic
+/// tracking is the source of truth (a fix every ~3s, a native watchdog that
+/// rebuilds the subscription after 90s of silence, and a route catch-up that
+/// re-syncs the trip from wherever the rider really is once fixes return).
+/// This just lets a rider who can see the app is behind skip the wait
+/// instead of sitting there wondering — it feeds the same pipeline and can
+/// never move the trip somewhere automatic tracking wouldn't have.
+class _LocationHealthRow extends ConsumerStatefulWidget {
+  const _LocationHealthRow();
+
+  @override
+  ConsumerState<_LocationHealthRow> createState() => _LocationHealthRowState();
+}
+
+class _LocationHealthRowState extends ConsumerState<_LocationHealthRow> {
+  bool _refreshing = false;
+
+  Future<void> _refresh() async {
+    if (_refreshing) return;
+    setState(() => _refreshing = true);
+    try {
+      await ref.read(activeTripControllerProvider.notifier).refreshLocation();
+    } finally {
+      if (mounted) setState(() => _refreshing = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final status = ref.watch(tripLocationStatusProvider);
+    final fix = ref.watch(latestNativeGpsFixProvider);
+    final degraded = status == 'signal_lost' || status == 'permission_missing';
+    final label = switch (status) {
+      'signal_lost' =>
+        'Sinyal GPS hilang — perjalanan tetap jalan dan menyusul otomatis',
+      'permission_missing' => 'Izin lokasi dicabut — aktifkan lagi di pengaturan',
+      'waiting_for_location' => 'Mencari sinyal GPS…',
+      'starting' => 'Menyiapkan pelacakan…',
+      _ => fix == null
+          ? 'Melacak lokasi otomatis'
+          : 'Lokasi terbaru ${DateFormat.Hms('id_ID').format(fix.at)}',
+    };
+    return Row(
+      children: <Widget>[
+        Icon(
+          degraded ? Icons.gps_off_rounded : Icons.gps_fixed_rounded,
+          size: 16,
+          color: degraded ? AppColors.coral : AppColors.textSecondaryDark,
+        ),
+        const SizedBox(width: 8),
+        Expanded(
+          child: Text(
+            label,
+            style: Theme.of(context).textTheme.bodySmall?.copyWith(
+              color: degraded ? AppColors.coral : AppColors.textSecondaryDark,
+            ),
+          ),
+        ),
+        const SizedBox(width: 8),
+        TextButton.icon(
+          onPressed: _refreshing ? null : _refresh,
+          style: TextButton.styleFrom(
+            foregroundColor: AppColors.surfaceLight,
+            visualDensity: VisualDensity.compact,
+          ),
+          icon: _refreshing
+              ? const SizedBox.square(
+                  dimension: 14,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                )
+              : const Icon(Icons.my_location_rounded, size: 16),
+          label: Text(
+            _refreshing ? 'Memperbarui…' : 'Perbarui lokasi',
+            style: const TextStyle(fontSize: 12),
+          ),
+        ),
+      ],
+    );
   }
 }
 
@@ -317,54 +434,116 @@ class _StationProgressRow extends StatelessWidget {
     required this.isPast,
     required this.isCurrent,
     required this.isDestination,
+    this.transferInstruction,
   });
 
   final String name;
   final bool isPast;
   final bool isCurrent;
   final bool isDestination;
+  // Non-null exactly when this row is a real transfer station — gives it a
+  // distinct marker from an ordinary pass-through stop, per the platform
+  // guidance already computed for this trip (see transfer_platform_guidance).
+  final String? transferInstruction;
 
   @override
   Widget build(BuildContext context) {
+    final isTransfer = transferInstruction != null;
     final color = isCurrent
         ? AppColors.blue
         : isPast
         ? AppColors.success
+        : isTransfer
+        ? AppColors.warning
         : Theme.of(context).colorScheme.outline;
     final icon = isDestination
         ? Icons.flag_rounded
-        : isPast
-        ? Icons.check_rounded
         : isCurrent
         ? Icons.train_rounded
+        : isTransfer
+        ? Icons.compare_arrows_rounded
+        : isPast
+        ? Icons.check_rounded
         : Icons.circle_outlined;
     final label = isDestination
         ? '$name, tujuan'
         : isCurrent
         ? '$name, posisi saat ini'
+        : isTransfer
+        ? '$name, stasiun transit: $transferInstruction'
         : name;
     return Semantics(
       label: label,
       child: Padding(
         padding: const EdgeInsets.symmetric(vertical: 7),
         child: Row(
+          crossAxisAlignment: CrossAxisAlignment.center,
           children: <Widget>[
-            Icon(icon, size: 22, color: color),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Text(
-                name,
-                style: TextStyle(
-                  fontWeight: isCurrent || isDestination
-                      ? FontWeight.w700
-                      : FontWeight.w400,
-                  color: isPast
-                      ? Theme.of(context).colorScheme.onSurfaceVariant
-                      : null,
-                ),
+            DecoratedBox(
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                border: isTransfer && !isCurrent
+                    ? Border.all(color: AppColors.warning, width: 1.5)
+                    : null,
+              ),
+              child: Padding(
+                padding: EdgeInsets.all(isTransfer && !isCurrent ? 3 : 0),
+                child: Icon(icon, size: 18, color: color),
               ),
             ),
-            if (isCurrent) const Text('Sekarang'),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: <Widget>[
+                  Text(
+                    name,
+                    style: TextStyle(
+                      fontWeight: isCurrent || isDestination
+                          ? FontWeight.w700
+                          : FontWeight.w400,
+                      color: isPast
+                          ? Theme.of(context).colorScheme.onSurfaceVariant
+                          : null,
+                    ),
+                  ),
+                  if (isTransfer)
+                    Padding(
+                      padding: const EdgeInsets.only(top: 2),
+                      child: Text(
+                        transferInstruction!,
+                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                          color: AppColors.warning,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ),
+                ],
+              ),
+            ),
+            if (isTransfer)
+              Padding(
+                padding: const EdgeInsets.only(left: 8),
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                  decoration: BoxDecoration(
+                    color: AppColors.warning.withValues(alpha: 0.14),
+                    borderRadius: BorderRadius.circular(999),
+                  ),
+                  child: const Text(
+                    'Transit',
+                    style: TextStyle(
+                      color: AppColors.warning,
+                      fontSize: 11,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                ),
+              ),
+            if (isCurrent) const Padding(
+              padding: EdgeInsets.only(left: 8),
+              child: Text('Sekarang'),
+            ),
           ],
         ),
       ),
@@ -488,7 +667,8 @@ class _MissedDestinationView extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final destinationName = _stationName(session.trip.destinationStationId);
+    final stations = ref.watch(stationListProvider).value ?? const <Station>[];
+    final destinationName = _resolveStationName(session.trip.destinationStationId, stations);
     return Scaffold(
       appBar: AppBar(title: const Text('Perjalanan aktif')),
       body: SafeArea(
@@ -525,7 +705,7 @@ class _MissedDestinationView extends ConsumerWidget {
                         .read(activeTripControllerProvider.notifier)
                         .cancel();
                     if (context.mounted) {
-                      context.go('/schedule');
+                      context.go('/schedule/search');
                     }
                   },
                   icon: const Icon(Icons.route_outlined),
@@ -554,10 +734,6 @@ class _MissedDestinationView extends ConsumerWidget {
     );
   }
 
-  String _stationName(String id) {
-    return demoStations.where((station) => station.id == id).firstOrNull?.name ??
-        id;
-  }
 }
 
 class TripCompletePage extends ConsumerWidget {
@@ -567,11 +743,10 @@ class TripCompletePage extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final session = ref.watch(activeTripControllerProvider);
     final finalDestinationQuery = session?.finalDestinationQuery;
+    final stations = ref.watch(stationListProvider).value ?? const <Station>[];
     final destinationStation = session == null
         ? null
-        : (ref.watch(stationListProvider).value ?? const <Station>[])
-            .where((s) => s.id == session.trip.destinationStationId)
-            .firstOrNull;
+        : stations.where((s) => s.id == session.trip.destinationStationId).firstOrNull;
 
     return Scaffold(
       body: SafeArea(
@@ -592,15 +767,21 @@ class TripCompletePage extends ConsumerWidget {
                 ),
                 const SizedBox(height: 24),
                 Text(
-                  'Perjalanan selesai',
+                  session == null
+                      ? 'Perjalanan selesai'
+                      : 'Selamat, kamu tiba di '
+                            '${_resolveStationName(session.trip.destinationStationId, stations)}!',
                   textAlign: TextAlign.center,
                   style: Theme.of(context).textTheme.headlineLarge,
                 ),
                 const SizedBox(height: 10),
+                // The trip closes itself on arrival now, so this screen is
+                // the confirmation of something that already happened —
+                // not a place that still mentions which backend stored it.
                 Text(
                   session == null
-                      ? 'Sesi lokal telah ditutup.'
-                      : 'Kamu tiba di ${_name(session.trip.destinationStationId)}. Riwayat cloud tidak dibuat pada mode lokal.',
+                      ? 'Perjalanan sudah ditutup.'
+                      : 'Perjalanan otomatis diselesaikan setibanya kamu di tujuan.',
                   textAlign: TextAlign.center,
                 ),
                 if (session != null) ...<Widget>[
@@ -646,10 +827,6 @@ class TripCompletePage extends ConsumerWidget {
     );
   }
 
-  String _name(String id) {
-    return demoStations.where((station) => station.id == id).firstOrNull?.name ??
-        id;
-  }
 }
 
 /// Waktu tempuh / jarak / rata-rata kecepatan for the just-finished trip —

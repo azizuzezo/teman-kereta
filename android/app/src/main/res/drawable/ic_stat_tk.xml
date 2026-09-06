@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    Notification small icon: the Teman Kereta "TK" monogram.
+
+    Android renders a notification's small icon as a mask — only the alpha
+    channel survives, every non-transparent pixel is repainted in the system
+    accent/white. A full-colour launcher icon (which is what this app used
+    to point at, via `AndroidInitializationSettings('@mipmap/ic_launcher')`)
+    therefore collapses into an opaque white square, which is the "logo
+    notifikasi putih blank" this replaces. So this is deliberately a flat
+    silhouette on a transparent ground, with no background plate and no
+    train — the train from the full logo is unreadable at 24dp.
+
+    The full-colour logo still appears on these notifications, as the large
+    icon (see `LocalNotificationService`/`TripNotifier`), where colour is
+    allowed.
+-->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+    <!-- T -->
+    <path
+        android:fillColor="#FFFFFFFF"
+        android:pathData="M1.4,4.5 H11.71 V7.69 H7.96 V19.5 H5.15 V7.69 H1.4 Z" />
+    <!-- K -->
+    <path
+        android:fillColor="#FFFFFFFF"
+        android:pathData="M12.6,4.5 H15.41 V10.13 L19.54,4.5 H22.54 L18.13,12.0 L22.54,19.5 H19.35 L15.41,13.88 V19.5 H12.6 Z" />
+</vector>

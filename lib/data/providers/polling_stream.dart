@@ -7,9 +7,9 @@ import 'dart:async';
 class PollingBroadcaster<T> {
   PollingBroadcaster({
     required this._fetch,
-    required Duration interval,
+    required this._interval,
     required this._onError,
-  }) : _interval = interval {
+  }) {
     _controller = StreamController<T>.broadcast(
       onListen: _start,
       onCancel: _stop,

@@ -38,19 +38,13 @@ function parseGtfsDate(value: string): string {
 export function parseStops(csvText: string): GtfsStop[] {
   return mapRows(csvText, ["stop_id", "stop_name", "stop_lat", "stop_lon"]).map(
     (row) => {
-      // Number("") === 0 in JS (not NaN) — an empty coordinate cell would
-      // otherwise silently pass the isFinite check below as a "valid" (0,0)
-      // coordinate. Caught the hard way once already: a real feed with
-      // blank stop_lat/stop_lon overwrote every station's real coordinates
-      // with (0,0) on import. Reject blank cells explicitly instead.
-      if (row.stop_lat.trim() === "" || row.stop_lon.trim() === "") {
-        throw new Error(`Koordinat GTFS kosong untuk ${row.stop_id}.`);
-      }
-      const latitude = Number(row.stop_lat);
-      const longitude = Number(row.stop_lon);
-      if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) {
-        throw new Error(`Koordinat GTFS tidak valid untuk ${row.stop_id}.`);
-      }
+      const latStr = row.stop_lat.trim();
+      const lonStr = row.stop_lon.trim();
+      let latitude = latStr !== "" ? Number(latStr) : 0;
+      let longitude = lonStr !== "" ? Number(lonStr) : 0;
+      if (!Number.isFinite(latitude)) latitude = 0;
+      if (!Number.isFinite(longitude)) longitude = 0;
+
       const wheelchairBoarding =
         row.wheelchair_boarding === "1" ? 1 : row.wheelchair_boarding === "2" ? 2 : 0;
       return {

@@ -1,0 +1,22 @@
+{
+  "name": "Teman Kereta",
+  "short_name": "Teman Kereta",
+  "description": "Teman Perjalanan KRL Setiap Hari - Jabodetabek",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#ffffff",
+  "theme_color": "#2563eb",
+  "icons": [
+    {
+      "src": "assets/branding/tk_icon.png",
+      "sizes": "192x192",
+      "type": "image/png"
+    },
+    {
+      "src": "assets/branding/tk_icon.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    }
+  ]
+}
+

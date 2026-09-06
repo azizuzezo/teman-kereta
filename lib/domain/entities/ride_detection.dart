@@ -17,24 +17,11 @@ class ActivityEvent {
   final DateTime occurredAt;
 }
 
-enum GeofenceTransition { enter, exit, dwell, unknown }
-
-class GeofenceEvent {
-  const GeofenceEvent({
-    required this.stationIds,
-    required this.transition,
-    required this.occurredAt,
-  });
-
-  final List<String> stationIds;
-  final GeofenceTransition transition;
-  final DateTime occurredAt;
-}
-
 /// Inputs the confidence engine combines into a single [RideDetectionAssessment].
 /// Every field here must come from a signal the app already has honest access
-/// to (geofence transitions, Activity Recognition, published schedules, the
-/// user's own saved routes) — never a value the app has to guess or fabricate.
+/// to (real-time GPS proximity to a saved station, Activity Recognition,
+/// published schedules, the user's own saved routes) — never a value the app
+/// has to guess or fabricate.
 class RideDetectionSignals {
   const RideDetectionSignals({
     required this.exitedStationId,
@@ -57,10 +44,10 @@ class RideDetectionSignals {
   /// stations, when [exitedStationId] matches that route's origin.
   final String? matchingSavedDestinationId;
 
-  /// A later geofence ENTER at a different, plausible-next station — the
-  /// strongest signal, since it confirms the user is actually moving along a
-  /// rail corridor rather than just having wandered out of one station's
-  /// radius.
+  /// GPS showing the rider newly near a different, plausible-next station —
+  /// the strongest signal, since it confirms the user is actually moving
+  /// along a rail corridor rather than just having wandered out of one
+  /// station's radius.
   final String? subsequentStationId;
 }
 

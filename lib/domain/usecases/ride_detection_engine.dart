@@ -1,7 +1,7 @@
 import '../entities/ride_detection.dart';
 
 /// Scores how likely it is that the user just boarded a train after leaving
-/// a station's geofence, per PRD §9. This is a pure function over signals
+/// the vicinity of a station, per PRD §9. This is a pure function over signals
 /// the app can honestly observe — it never invents certainty it doesn't
 /// have, which is why the result is a graded confidence score rather than a
 /// yes/no answer, and why the two lowest confidence tiers stay silent or ask

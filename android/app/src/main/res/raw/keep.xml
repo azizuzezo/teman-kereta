@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    Keeps the alert sounds in release builds.
+
+    Nothing in this project ever references `R.raw.*` from code: the native
+    side builds `android.resource://<pkg>/raw/<name>` as a plain string
+    (TripNotifier.createChannel), and Dart passes the bare resource name to
+    flutter_local_notifications, which resolves it at runtime via
+    `Resources.getIdentifier`. Neither is a reference the resource shrinker
+    can see, so it concluded all nine wavs were dead weight and stripped
+    them from every release APK.
+
+    The symptom was badly misleading: the notification channels still
+    carried a perfectly valid-looking sound URI (confirmed via `dumpsys
+    notification`), the notifications still appeared — they were just
+    silent, because the resource behind the URI no longer existed. On the
+    Dart side the same missing resource surfaced as
+    `PlatformException(invalid_sound, The resource remaining_station_2 could
+    not be found…)`. Debug builds were unaffected (no shrinking), which is
+    why this survived several rounds of on-device testing.
+
+    Verify after touching this file by checking the built artifact itself,
+    not just the emulator:
+      unzip -l build/app/outputs/flutter-apk/app-release.apk | grep res/raw
+-->
+<resources xmlns:tools="http://schemas.android.com/tools"
+    tools:keep="@raw/arrive_station,@raw/alert_terlewat,@raw/remaining_station_1,@raw/remaining_station_2,@raw/remaining_station_3,@raw/remaining_transit_1,@raw/remaining_transit_2,@raw/remaining_transit_3,@raw/transit_reminder" />

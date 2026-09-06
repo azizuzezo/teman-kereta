@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "280208902514",
+    "project_id": "teman-kereta",
+    "storage_bucket": "teman-kereta.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:280208902514:android:c7ffc815516d0b1d1335eb",
+        "android_client_info": {
+          "package_name": "id.temankereta.teman_kereta"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBXNEKK69Qw4oeY-SPTWVjUj42EUGu2IIw"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

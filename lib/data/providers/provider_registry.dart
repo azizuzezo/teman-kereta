@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 
 import 'package:clock/clock.dart';
+import 'package:flutter/material.dart' show Color;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
@@ -11,9 +12,6 @@ import '../../core/database/database_provider.dart';
 import '../../core/network/api_client.dart';
 import '../../domain/entities/transit_models.dart';
 import '../../domain/providers/transit_providers.dart';
-import 'gtfs_realtime_provider.dart';
-import 'gtfs_static_schedule_provider.dart';
-import 'hybrid_transit_realtime_provider.dart';
 import 'mock_transit_provider.dart';
 import 'official_api_transit_provider.dart';
 import 'supabase_transit_provider.dart';
@@ -36,20 +34,6 @@ final officialApiTransitProvider = Provider<OfficialApiTransitProvider>((
   return provider;
 });
 
-final gtfsRealtimeTransitProvider = Provider<GtfsRealtimeTransitProvider>((
-  Ref ref,
-) {
-  final provider = GtfsRealtimeTransitProvider(
-    dio: ref.watch(apiClientProvider).dio,
-    vehiclePositionsUrl: AppEnvironment.gtfsRtVehiclePositionsUrl,
-    tripUpdatesUrl: AppEnvironment.gtfsRtTripUpdatesUrl,
-    alertsUrl: AppEnvironment.gtfsRtAlertsUrl,
-    pollInterval: Duration(seconds: AppEnvironment.gtfsRtPollSeconds),
-  );
-  ref.onDispose(() => unawaited(provider.dispose()));
-  return provider;
-});
-
 final supabaseTransitProvider = Provider<SupabaseTransitProvider>((Ref ref) {
   if (!AppEnvironment.supabaseEnabled) {
     throw StateError(
@@ -60,49 +44,8 @@ final supabaseTransitProvider = Provider<SupabaseTransitProvider>((Ref ref) {
   return SupabaseTransitProvider(Supabase.instance.client);
 });
 
-/// Merges `gtfs`'s real-feed vehicle positions (empty today — no GTFS-RT
-/// URL configured) with Supabase's `vehicle_positions` (schedule-estimated
-/// + genuine crowd-sourced rider reports), so `TRANSIT_PROVIDER=gtfs` shows
-/// real crowd-sourced positions without needing schedule data to also come
-/// from Supabase. Only constructed when `SUPABASE_ENABLED=true` — see
-/// `transitRealtimeProvider` below, which falls back to plain
-/// `gtfsRealtimeTransitProvider` otherwise.
-final hybridGtfsRealtimeProvider = Provider<HybridTransitRealtimeProvider>((
-  Ref ref,
-) {
-  final provider = HybridTransitRealtimeProvider(
-    primary: ref.watch(gtfsRealtimeTransitProvider),
-    supplementalPositions: ref.watch(supabaseTransitProvider),
-  );
-  ref.onDispose(() => unawaited(provider.dispose()));
-  return provider;
-});
-
-/// Real schedule/station data once `GtfsStaticImporter` has populated the
-/// GTFS Drift tables; falls back to [mockTransitProvider] (Data Demo) until
-/// then, so `TRANSIT_PROVIDER=gtfs` never shows an empty app pre-import.
-final gtfsStaticScheduleProvider = Provider<GtfsStaticScheduleProvider>((
-  Ref ref,
-) {
-  return GtfsStaticScheduleProvider(
-    database: ref.watch(appDatabaseProvider),
-    fallback: ref.watch(mockTransitProvider),
-  );
-});
-
 // Fallback matrix, by TRANSIT_PROVIDER (see AppEnvironment.provider):
 //   mock          -> demo data for everything.
-//   gtfs          -> vehicle positions come from HybridTransitRealtimeProvider
-//                    when SUPABASE_ENABLED (real GTFS-RT feed, empty today,
-//                    merged with Supabase's crowd-sourced/estimated
-//                    positions) — otherwise plain GtfsRealtimeTransitProvider
-//                    (empty until a real feed URL exists). Trip
-//                    updates/alerts always come from the plain GTFS-RT
-//                    provider — no crowd-sourced equivalent for those.
-//                    Schedule/station data comes from
-//                    GtfsStaticScheduleProvider once a feed has been
-//                    imported via GtfsStaticImporter (see
-//                    docs/backend-local.md) — Data Demo before that.
 //   officialApi   -> a self-hosted REST backend for every capability.
 //   localSupabase -> a real Supabase-backed provider (see
 //                    supabase_transit_provider.dart), but trip search only
@@ -110,7 +53,6 @@ final gtfsStaticScheduleProvider = Provider<GtfsStaticScheduleProvider>((
 //                    file's doc comment and ENGINEERING.md's "Known gaps".
 final stationProvider = Provider<StationProvider>((Ref ref) {
   return switch (AppEnvironment.provider) {
-    TransitProviderKind.gtfs => ref.watch(gtfsStaticScheduleProvider),
     TransitProviderKind.officialApi => ref.watch(officialApiTransitProvider),
     TransitProviderKind.localSupabase => ref.watch(supabaseTransitProvider),
     _ => ref.watch(mockTransitProvider),
@@ -119,7 +61,6 @@ final stationProvider = Provider<StationProvider>((Ref ref) {
 
 final transitScheduleProvider = Provider<TransitScheduleProvider>((Ref ref) {
   return switch (AppEnvironment.provider) {
-    TransitProviderKind.gtfs => ref.watch(gtfsStaticScheduleProvider),
     TransitProviderKind.officialApi => ref.watch(officialApiTransitProvider),
     TransitProviderKind.localSupabase => ref.watch(supabaseTransitProvider),
     _ => ref.watch(mockTransitProvider),
@@ -128,9 +69,6 @@ final transitScheduleProvider = Provider<TransitScheduleProvider>((Ref ref) {
 
 final transitRealtimeProvider = Provider<TransitRealtimeProvider>((Ref ref) {
   return switch (AppEnvironment.provider) {
-    TransitProviderKind.gtfs => AppEnvironment.supabaseEnabled
-        ? ref.watch(hybridGtfsRealtimeProvider)
-        : ref.watch(gtfsRealtimeTransitProvider),
     TransitProviderKind.officialApi => ref.watch(officialApiTransitProvider),
     TransitProviderKind.localSupabase => ref.watch(supabaseTransitProvider),
     _ => ref.watch(mockTransitProvider),
@@ -208,6 +146,36 @@ final vehiclePositionsProvider = StreamProvider<List<VehiclePosition>>((
   Ref ref,
 ) {
   return ref.watch(transitRealtimeProvider).watchVehiclePositions();
+});
+
+/// Real per-line brand colors from `public.lines` ({code: color}), used by
+/// the live map to draw each line's polyline/legend swatch in its actual
+/// KAI Commuterline color instead of an arbitrary index-based palette.
+/// Supabase-specific — matches `TRANSIT_PROVIDER=local_supabase`, the only
+/// provider with a real `lines` table; any other provider (or a fetch
+/// failure) yields an empty map, and callers fall back to a neutral grey.
+final lineColorsProvider = FutureProvider<Map<String, Color>>((Ref ref) async {
+  if (!AppEnvironment.supabaseEnabled) {
+    return const <String, Color>{};
+  }
+  try {
+    final rows = await Supabase.instance.client.from('lines').select('code, color');
+    final colors = <String, Color>{};
+    for (final row in (rows as List<dynamic>).cast<Map<String, dynamic>>()) {
+      final code = row['code'] as String?;
+      final hex = row['color'] as String?;
+      if (code == null || hex == null || hex.isEmpty) {
+        continue;
+      }
+      final parsed = int.tryParse(hex.replaceFirst('#', '0xFF'));
+      if (parsed != null) {
+        colors[code] = Color(parsed);
+      }
+    }
+    return colors;
+  } on Object {
+    return const <String, Color>{};
+  }
 });
 
 final nearbyPlacesProvider = FutureProvider.family<List<NearbyPlace>, String>(

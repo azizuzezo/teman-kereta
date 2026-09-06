@@ -2185,3 +2185,750 @@ no code changes needed.
 - When backgrounding a long Gradle build, don't pipe it through
   `tail -N` (no `-f`) — that buffers all output until the process exits, so
   a genuinely-still-running build is indistinguishable from a hung one.
+
+## Round 23 — Production Build & Supabase Cloud Live Setup (2026-08-06)
+
+- **UI & Error Handling Cleanup**:
+  - Removed all demo banners (`DemoDataBanner`), "Data Demo", "Supabase", "remote", "local_supabase", and raw backend details across `profile_page.dart`, `home_page.dart`, `explore_page.dart`, `support_pages.dart`, `station_detail_page.dart`, and `live_map_page.dart`.
+  - Standardized all raw technical exception messages to user-friendly copy: *"Terjadi kesalahan. Silakan hubungi admin."*
+  - Added explicit signup notification prompt instructing users to check their email/spam folder for account confirmation.
+- **Geographic Station Map Diagram**:
+  - Updated station diagram sorting in `live_map_page.dart` to sort stations geographically by latitude (`a.latitude.compareTo(b.latitude)`).
+  - Positioned transfer branch curve dynamically at the transit hub node (`Manggarai`), eliminating diagonal cross-lines.
+- **Guest & Profile Display Name**:
+  - Added `guestDisplayName` property and setter to `PreferencesStore` (`preferences_store.dart`) and `AccountController` (`account_controller.dart`).
+  - Enabled display name editing for both unauthenticated guest users and logged-in users on `profile_page.dart`.
+- **Complete Station List**:
+  - Expanded `demoStations` in `demo_data.dart` to cover all major Jabodetabek KRL stations across Bogor, Cikarang, Rangkasbitung, Tangerang, and Tanjung Priok lines.
+- **Web App Public Routes (`admin/app`)**:
+  - Added public `/privacy` page (`admin/app/privacy/page.tsx`) rendering an Indonesian Privacy Policy for Google Play Store & Apple App Store submission.
+  - Added public `/confirm` page (`admin/app/confirm/page.tsx`) rendering an email confirmation landing page with a `temankereta://login-callback` deep link button.
+  - Updated `admin/middleware.ts` to allow unauthenticated public access to `/privacy`, `/confirm`, and `/login`.
+- **Android Build & NDK Packaging**:
+  - Added `packaging { jniLibs { keepDebugSymbols.add("**/*.so"); doNotStrip.add("**/*.so") } }` to `android/app/build.gradle.kts` to allow release builds to succeed cleanly on Windows hosts without NDK strip tool dependencies.
+  - Created automated release build script `scripts/build-release.ps1` and production release guide `docs/production-release-guide.md`.
+  - Verified clean `flutter analyze` (0 errors) and successfully compiled production release APK (`release.apk`) connected to live Supabase Cloud project (`https://slcttxbxcdrsavgugzdy.supabase.co`).
+
+
+## Round 24 — GPS gap recovery, anti-stuck watchdog, and five UI/packaging fixes (2026-09-04)
+
+Seven rider-reported bugs. The first two are the substantial ones and share
+a root cause; the rest are self-contained.
+
+### 1 & 2. A trip could get permanently stuck, and never recovered on its own
+
+**Root cause (both bugs, one mechanism).** `TripProgressEngine.onAcceptedFix`
+only ever asked a single question: *"is the rider within 120m of
+`currentStationIndex + 1` right now, closing, twice in a row?"* If the answer
+was ever missed — GPS lost in a tunnel or a dead zone, two fixes rejected by
+the 50m accuracy gate, the phone's fused provider going quiet — the trip
+waited for that one station forever. It could not be reached again, because
+the train had already passed it. Every station after it was unreachable too.
+That is the same defect behind both reports: "signal lost at Universitas
+Pancasila and the trip never resumed", and "already at Cilebut but the app
+still says Citayam".
+
+Compounding it, nothing ever noticed the tracker had gone silent.
+`FusedLocationProviderClient` can stop delivering to a long-lived callback
+with no error at all (doze transition, provider restart, Play services
+killed), and `requestLocationUpdatesIfProfileChanged` deliberately returned
+early unless `lowBatteryMode` had changed — so the subscription was never
+rebuilt for the entire trip.
+
+**The fix, in three parts:**
+
+- **Route catch-up** (`TripProgressEngine.resolveReachedIndex`). Every fix
+  now also asks *"which hop of this route am I actually on?"*, by projecting
+  the fix onto the route's own station-to-station segments
+  (`GeoMath.segmentMatch`, new — equirectangular projection, returns
+  cross-track distance plus along-track fraction). If the rider is
+  demonstrably on a later hop than the trip believes, `advanceStop` jumps
+  straight there and auto-completes every station in between. Gated at 600m
+  cross-track (the rail corridor plus urban GPS error), an along-track
+  fraction ≥ 0.08 (so a fix level with a station isn't ambiguous between the
+  hop before and after it), and **3** consecutive agreeing fixes rather than
+  2 — a multi-station jump rewrites more of the trip, so it asks for more
+  agreement. The single-station arrival gate is unchanged.
+  Only the state the rider is *now* in gets announced, so a recovered gap
+  never replays a backlog of stale "3 stasiun lagi" alerts.
+- **Distance floor** (`TripProgressEngine.routeDistanceMeters`). Cumulative
+  distance is now `max(GPS-accumulated, route length up to the reached
+  index)`. A gap that swallowed every intermediate fix still leaves the
+  odometer reading what the rider actually travelled — the reported "2.5 km
+  at Universitas Pancasila → 5 km at Depok Baru", updated in place rather
+  than restarted.
+- **Watchdog** (`ActiveTripLocationService.checkForStalledUpdates`). A 30s
+  handler; after 90s with no fix at all it tears the subscription down,
+  builds a fresh one, requests a one-shot `getCurrentLocation`, and flags
+  `ACTIVE_LOCATION_STATUS = "signal_lost"`. Rebuilding resets the silence
+  clock, so a real dead zone retries about every 90s rather than every tick.
+
+**Three related correctness fixes found while doing this:**
+
+- `NativeStateStore.updateActiveTrip` applied Dart's `currentStationIndex`
+  and `distanceMeters` verbatim. Native owns trip progress and keeps
+  advancing while the Flutter engine is dead, so the session Dart restores
+  on relaunch is routinely behind — and `ActiveTripController.build()` pushes
+  it straight back. **Every app restart mid-trip therefore rewound native to
+  where it was when the app died.** An update carrying an older index now
+  keeps its route/settings changes and drops its position claims; the
+  odometer is `max`ed rather than assigned.
+- `applyProgressUpdate` wrote station **ids** into `ACTIVE_CURRENT_STATION`/
+  `ACTIVE_NEXT_STATION`, which are the display-name keys the foreground
+  notification and home-screen widget read. After native advanced a stop on
+  its own, the ongoing notification read "Menuju CTA" instead of "Menuju
+  Citayam". Ids and names now go to their own keys.
+- **The ongoing notification never updated at all** (found on-device, see
+  Verification). `enterForeground()` builds and posts it, and it was only
+  ever called from `onStartCommand` — so a trip advanced by
+  `TripProgressEngine` left the notification frozen on whatever station it
+  started at. Confirmed live: the trip page read "Depok Baru" while the
+  notification still read "Pasar Minggu → Tanjung Barat". Since the
+  persistent notification is the most visible surface of a trip, this
+  *looked* exactly like the "GPS stuck" bug even when tracking was working.
+  `TripProgressEngine` now takes an `onStationAdvanced` callback; the
+  service re-posts the notification (same id, in place) and refreshes the
+  home-screen widget from it.
+
+**Signal-gap prompt** (requested). `ActiveTripLocationService` records a gap
+(≥2 min silent **and** ≥400m moved) into `NativeStateStore`; Dart drains it
+in `_refreshFromNative` into `tripSignalGapProvider`, and
+`RideDetectionWatcher` (which already owns app-resume handling) shows
+`showTripSignalGapPrompt`: *"Kami mendeteksi lokasi kamu berbeda dari lokasi
+terakhir. Apakah kamu masih di kereta?"* **The trip is already running when
+this appears and stays running unless the rider explicitly says they got
+off** — dismissing it, or never answering, changes nothing. There is
+deliberately no "confirm to continue" button; continuing is the default, not
+the reward for answering. `lastAccepted*` is now seeded from persisted state
+in `onCreate` so a service Android restarted mid-trip can still see that a
+gap happened.
+
+**Manual refresh** (requested). "Perbarui lokasi" on the active-trip screen
+(`_LocationHealthRow`), alongside a GPS-health readout so "the app is stuck"
+is visibly distinguishable from "the train hasn't got there yet". It routes
+through `refreshActiveTripLocation` → `ACTION_REFRESH` → the same one-shot
+fix the watchdog uses, feeding the same pipeline: it can only make automatic
+tracking conclude sooner, never assert progress by itself. Handled after
+`enterForeground()` rather than as an early return in `onStartCommand`, since
+a refresh may be the call that restarts the service.
+
+### 3. Home screen no longer assumes where you're going
+
+`_QuickTripCard` defaulted to saved home station → work station. The two most
+prominent buttons on the home screen would plan a commute the rider never
+asked for, and anything else was a third button underneath. Origin and
+destination are now two empty, equal fields with a searchable picker (the old
+picker had no search at all, against the full KRL station list). The swap
+button, "Langsung mulai" and "Lihat detail rute" all behave exactly as
+before. The nearest station is still offered — as a one-tap suggestion chip,
+never as a pre-selected value.
+
+### 4. Alert sound test
+
+`SoundTestPage` (`/settings/sound-test`, linked from both Profil and
+Pengaturan notifikasi). Fires the **real** notification for each alert —
+custom `raw/*.wav` channel sound, vibration, spoken Indonesian announcement —
+because the thing worth testing is the whole path (channel, sound, silent
+mode, permission), not the waveform. `LocalNotificationService` gained a
+`log` flag so previews don't pollute "Pusat notifikasi".
+
+### 5. Blank white notification icon
+
+Android masks a notification's small icon down to its alpha channel, so the
+full-colour `@mipmap/ic_launcher` this app pointed at collapsed into a
+featureless white square. New `ic_stat_tk.xml` (flat TK monogram silhouette)
+is now the small icon for Dart notifications, `TripNotifier`, and the
+foreground service; the colour logo comes back as the **large** icon, where
+Android allows it. FCM background pushes are posted by the Firebase SDK
+itself, so they needed their own `default_notification_icon`/`_color`
+manifest meta-data — added.
+
+### 6. Changelog couldn't be scrolled
+
+`AlertDialog.content` does not scroll; it lays its child out at full height
+and clips the overflow. Any release note longer than a few lines was simply
+unreachable. Now a `SingleChildScrollView` inside a 50%-of-screen-height cap,
+with the changelog split out under a "Yang baru" heading.
+
+### 7. Release APK filename
+
+Now `Teman-Kereta.<versi>.apk`, and the version is bumped to **1.0.11+12**
+(from 1.0.10+11) as the first release carrying these fixes.
+
+Gradle's own output is deliberately still `app-release.apk`: `flutter build
+apk` looks that exact filename up by hand (flutter_tools' `_apkFilesFor`) and
+fails with "Gradle build failed to produce an .apk file" if it is renamed. So
+`android/app/build.gradle.kts` writes a *second*, properly named copy next to
+it, and `scripts/build-release.ps1` names the dist copy, the R2 object and
+therefore the download link the same way.
+
+### Verification
+
+`flutter analyze` clean (no new issues — the 16 remaining are pre-existing
+style infos plus one pre-existing `_buildLegs` unused-element warning).
+`flutter test`: 54 passing, 1 skipped, **1 pre-existing failure** unrelated to
+this round — `test/widget_test.dart` fails in `appRouterProvider` on
+`Supabase.instance` not being initialized in a plain widget test
+(`AppEnvironment.supabaseEnabled` defaults true); nothing in this round
+touches that path. `test/support/fakes.dart` updated for the new `log`
+parameter. `flutter build apk --debug --dart-define-from-file=.env` succeeds —
+a real Kotlin compile of every native file touched.
+
+**On-device verification (2026-09-04, x86_64 emulator, API 35, release
+build, mock GPS via `adb emu geo fix`)** — the reported scenario walked end
+to end, Pasar Minggu → Bogor:
+
+1. Home screen: both station fields start empty ("Pilih stasiun…"), the two
+   action buttons are disabled until both are chosen, search finds
+   "Pasar Minggu" by prefix. **Fix 3 confirmed.**
+2. Trip started; stations advanced automatically on GPS proximity —
+   Pasar Minggu ✓ → Tanjung Barat (2.8 km) → Lenteng Agung → Universitas
+   Pancasila, **6.3 km, 8 stasiun tersisa**.
+3. Location disabled system-wide (`cmd location set-location-enabled
+   false`). After ~90s the health row turned coral: *"Sinyal GPS hilang —
+   perjalanan tetap jalan dan menyusul otomatis"*. The trip held at
+   Universitas Pancasila rather than breaking. **Watchdog confirmed.**
+4. Location re-enabled ~2.5 min later, positioned at **Depok Baru** (two
+   stations further on). The trip caught up in one step: Universitas
+   Indonesia ✓ and Pondok Cina ✓ auto-completed, now at Depok Baru with
+   **5 stasiun tersisa and 12.3 km** — the exact route distance
+   (6.22 + 2.44 + 0.94 + 2.72), updated rather than reset. **Fixes 1 and 2
+   confirmed, including the distance requirement.**
+5. The prompt appeared on the same resume: *"Kami mendeteksi lokasi kamu
+   berbeda dari lokasi terakhir. Apakah kamu masih di kereta?"* with
+   "Sinyal sempat hilang 3 menit dan kamu berpindah sekitar 6.0 km."
+   **Dismissed with the back gesture, without answering — the trip kept
+   running**, which is the actual requirement. A second run confirmed the
+   explicit "Ya, masih di kereta" path too.
+6. "Perbarui lokasi" rebuilt the subscription (status → "Mencari sinyal
+   GPS…", spinner) without disturbing trip state.
+7. Trip driven to completion: **"Kamu tiba di Bogor", 0 stasiun tersisa,
+   35.5 km** — `arrived` still reached correctly after a catch-up, and the
+   3/2/1-stasiun countdown alerts all fired.
+8. Notification shade: the **TK monogram** renders as a proper silhouette
+   (not a white square), with the full-colour logo as the large icon.
+   **Fix 5 confirmed.** This is also where the frozen-notification bug above
+   was found and, after the fix, re-verified: the notification tracked
+   "Universitas Pancasila → …" then "Depok Baru → Depok", with station
+   *names*, not codes.
+9. "Tes suara peringatan" reachable from Profil; tapping an entry posts the
+   real alert ("3 stasiun lagi • Bersiap menuju Bogor"). **Fix 4
+   confirmed.** Profil footer reads **TK 1.0.11**. **Fix 7 confirmed.**
+
+**Still not runtime-verified**: the changelog dialog (fix 6). It only
+appears when `app_releases` offers a newer build, and the on-device run used
+a `SUPABASE_ENABLED=false` build (see the note below), so there was no
+update to show. Code-verified only.
+
+**Why the on-device run used mock data**: login is mandatory after
+onboarding (`app_router.dart`'s redirect), and the only way to sign in is a
+real account on the production Supabase project — creating one is a live
+write to `auth.users`, not something to do for a test run unasked. The run
+therefore used a `TRANSIT_PROVIDER=mock, SUPABASE_ENABLED=false` build.
+`MockTransitProvider`'s `_stationsBetween('PSM','BOO')` yields the real
+12-station Bogor-line chain, and every mechanism under test
+(`TripProgressEngine`, the watchdog, the catch-up, the gap prompt) operates
+on the route pushed to native and is provider-independent, so this exercises
+the real code paths. What it does *not* cover is the Supabase provider's own
+route/station data.
+
+## Round 25 — Auto-finish on arrival, the last missing alert sound, name/username caps (2026-09-04)
+
+Three follow-ups from the Round 24 on-device session.
+
+### 1. A trip now finishes itself when it arrives
+
+Reaching the destination used to park the app on an "arrived" screen waiting
+for a **Selesaikan perjalanan** tap. Nothing finished a trip the rider never
+looked at, so the foreground service kept running and no history row was
+written. Arrival now ends the trip on its own and shows the recap.
+
+- **Native decides, native announces.** `TripProgressEngine.advanceStop`
+  gained an `arrived` branch at the *top* of its `when` (arrival outranks a
+  transfer boundary that happens to sit on the final index) which fires the
+  new `TripNotifier.showArrivalAlert` instead of `showStopAlert(0, …)`:
+  *"Selamat, kamu tiba di X"* with the recap as the body. It needs the trip's
+  start time, which native never stored — hence the new
+  `NativeStateStore.ACTIVE_STARTED_AT`, written by `startActiveTrip` from a
+  new `startedAtEpochMs` field on `NativeTripService._payload`.
+- **New `TripRecap.kt`** formats travel time / distance / average speed,
+  deliberately mirroring `lib/core/utils/geo.dart`'s three formatters string
+  for string so the same trip never reads one way in the notification and
+  another way on the screen it opens.
+- **Dart closes the session.** `ActiveTripController._refreshFromNative`
+  calls `complete()` the moment native reports `arrived`; `advanceStop()`
+  does the same on the manual/demo path (firing
+  `LocalNotificationService.showArrivalAlert`, kept copy-identical to the
+  native one, since native isn't the side that decided it there). A session
+  restored already-`arrived` is finished from `build()` too — `arrived` is
+  not a tracked state, so no timer would ever have picked it up.
+- **Timing correctness.** `applyProgressUpdate` now stamps
+  `ACTIVE_UPDATED_AT` whenever it moves the station index, and Dart adopts
+  that as `updatedAt` instead of `clock.now()`. `complete()` leaves an
+  already-`arrived` session's `updatedAt` alone. Without both, a trip that
+  arrived while the app was closed would have its recap timed from the next
+  app launch rather than from the arrival.
+- **Routing.** `RideDetectionWatcher` watches for `completed` and routes to
+  `/trip-complete`. It has to live there rather than on the button that used
+  to be the only way to complete a trip, because arrival can now happen on
+  any screen — or with the rider not looking at all. The old button remains
+  as an unreachable safety net and no longer navigates itself (that would
+  `go` twice).
+- The recap screen (`TripCompletePage` + `_TripSummaryStats`) already showed
+  waktu tempuh / jarak / rata-rata; only its copy changed — it led with
+  "Perjalanan selesai" and a leftover *"Riwayat cloud tidak dibuat pada mode
+  lokal"* line, which is exactly the backend wording Round 23 removed
+  everywhere else.
+
+### 2. The missed-destination alert had no sound
+
+Verified on-device via `dumpsys notification`: every countdown/transit/
+arrival channel already mapped to its recorded `raw/*.wav`, but **`trip_alerts`
+— the channel the missed-destination alert used — was still on
+`content://settings/system/notification_sound`**, i.e. the stock Android tone.
+There was simply no recorded asset for it until one was added
+(`assets/alert terlewat.wav`).
+
+Copied to `res/raw/alert_terlewat.wav` and given its own channel
+(`trip_alert_alert_terlewat`, "Tujuan terlewat") in both `TripNotifier`
+(native) and `LocalNotificationService` (Dart) — a channel's sound is fixed
+at creation on Android 8+, so a new sound always means a new channel id.
+`trip_alerts` stays as the generic fallback for alerts with no recorded
+counterpart (a stop alert with more than 3 stations remaining).
+
+### 3. Name and username length caps
+
+Display name 80 → **20**, username `^[a-z0-9_]{3,20}$` → **`{3,10}`**. Each
+field got a hard `maxLength` (which also renders the live counter) *and* a
+matching validator, so a pasted or pre-existing over-length value is still
+caught. Applied in all three places the rules are defined:
+`edit_display_name_dialog.dart` (which now exports `kMaxDisplayNameLength`),
+`login_page.dart`'s sign-up "Nama Lengkap" field — the same field, so it
+could not be allowed in longer than the editor will later accept — and both
+`edit_username_dialog.dart` and `set_username_page.dart`.
+
+**Deliberately not changed**: the Supabase check constraint
+`users_username_format` in `20260822090000_consolidate_users_profiles.sql`
+still allows `{3,20}`. Tightening it to `{3,10}` is a migration that fails
+outright if any existing row holds a longer username, so whether to run it
+(and what to do with any such rows) is a call for whoever owns the
+production data, not a silent side effect of a client-side limit.
+
+### Verification
+
+`flutter analyze` clean (same 16 pre-existing infos/warning). `flutter test`
+**56 passing** (up from 54), 1 skipped, plus the same pre-existing
+`widget_test.dart` Supabase-init failure Round 24 documented.
+
+`active_trip_controller_test.dart` needed real work, not just renumbering:
+
+- The walk-through test now ends at `completed` rather than `arrived` →
+  `missedDestination`, and asserts `stopAlerts == 3` + `arrivalAlerts == 1`
+  (the countdown no longer covers the 0-remaining case).
+- That removed the suite's only missed-destination coverage, so a new test
+  covers what actually detects it now — Dart mirroring a `missedDestination`
+  that native's overshoot watch decided. A second new test covers
+  auto-finish from a native `arrived`.
+- **`complete()` runs in these tests for the first time**, which means
+  `_logHistory()`'s Drift write finally executes — and blew up on
+  `MissingPluginException(path_provider)` as an unhandled async error. The
+  container now overrides `appDatabaseProvider` with
+  `AppDatabase.forTesting(NativeDatabase.memory())`. This closes the
+  "`_logHistory()`'s call site isn't covered" gap noted earlier in this file.
+- Both new tests initially failed for an unrelated reason worth recording:
+  **Riverpod providers are lazy**, so `containerWithSnapshot(session)` alone
+  never runs `build()` — the `await Future.delayed` was waiting on nothing.
+  They now read the provider first to instantiate it. (The pre-existing test
+  in that group only passes because it happens to assert a value before
+  delaying.)
+
+**On-device (same emulator/setup as Round 24)**: a Cilebut → Bogor trip
+driven to its destination auto-navigated to the recap — *"Selamat, kamu tiba
+di Bogor!"*, 38 detik / 7.3 km / rata-rata — with no tap, and posted
+*"Selamat, kamu tiba di Bogor — 38 detik • 7…"*. `dumpsys notification`
+confirms all nine alert channels now resolve to recorded wavs including
+`trip_alert_alert_terlewat -> raw/alert_terlewat`. "Ubah nama" caps at
+20/20, "Atur username" at 10/10 with the 3–10 helper text.
+
+**Not runtime-verified**: the missed-destination *sound* itself — reaching
+that state on-device needs the native overshoot watch to fire (approach the
+destination, then travel well past it without arrival triggering), which the
+teleporting mock-GPS harness can't stage faithfully. The channel binding is
+confirmed; the alert firing on that channel is code-verified only.
+
+### Released to production — 1.0.11 (version_code 12), 2026-09-04
+
+Published from Linux, so `scripts/build-release.ps1` (PowerShell) could not
+be run; its steps were carried out directly and are recorded here so the two
+paths stay comparable.
+
+- **Build**: `flutter build apk --release --target-platform
+  android-arm,android-arm64,android-x64 --dart-define-from-file=.env`
+  (108.6 MB). `.env` sets `APP_ENV=remote`, where the script passes
+  `APP_ENV=production` — equivalent, since `AppEnvironment` only special-
+  cases `local`; every other value takes the same path.
+- **Signing verified before upload**: `apksigner` reports the same
+  certificate as the live 1.0.10 (SHA-256 `65c7ba1e…`), so existing installs
+  update in place rather than hitting a signature mismatch. `aapt2` confirms
+  `versionCode=12 versionName=1.0.11 minSdkVersion=24`.
+- **R2**: uploaded to `temankereta-releases/Teman-Kereta.1.0.11.apk` —
+  the first release to use the Round 24 naming rather than
+  `app-release-<versi>.apk`. Verified by re-downloading through the public
+  domain and comparing SHA-256 against the local artifact (identical), not
+  just by checking for HTTP 200.
+- **`app_releases`**: row inserted via the PostgREST endpoint with the
+  service-role key (`Prefer: resolution=merge-duplicates`, matching the
+  script's `on conflict (version_code) do update`), rather than
+  `supabase db query` + a database password. `min_supported_version_code`
+  left null — this is not a forced update. Confirmed afterwards through the
+  **anon** key, i.e. exactly what a real device's `UpdateCheckerController`
+  sees.
+- **Push broadcast**: sent to the 2 registered users after explicitly
+  confirming it with the project owner (it is immediate and unrecallable,
+  and they had only named the R2 upload). Result:
+  `{"sent":3,"failed":3,"cleaned_up":3}` — the 3 failures were stale FCM
+  tokens, which the Edge Function deleted itself. Several of those were
+  almost certainly this round's own emulator reinstalls, since each
+  `pm clear`/reinstall orphans the previous token.
+
+## Round 26 — The alert sounds were never in the release APK (2026-09-04)
+
+### The bug behind "tes suara tidak keluar suara"
+
+**Every alert sound was being stripped out of release builds by the Android
+resource shrinker.** Nothing in this project references `R.raw.*` from code:
+`TripNotifier.createChannel` (native) builds
+`android.resource://<pkg>/raw/<name>` as a **string**, and Dart passes the
+bare resource name to `flutter_local_notifications`, which resolves it at
+runtime via `Resources.getIdentifier`. Neither is a reference the shrinker
+can see, so it concluded all nine wavs were dead and removed them.
+
+Two things made this nearly invisible, and both had already fooled this
+project's own testing:
+
+1. **`dumpsys notification` proves nothing here.** Every channel showed a
+   perfectly valid-looking `android.resource://…/raw/remaining_station_2`.
+   Android stores a channel's sound Uri **unvalidated** — verified directly
+   by creating the channels from a build with zero wavs in it and watching
+   the correct-looking URIs appear anyway. Round 25 read that output as
+   confirmation the sounds worked. It wasn't.
+2. **Debug builds don't shrink resources**, so every on-device debug session
+   had working sounds.
+
+The actual symptom split by caller, which is why it read as "the test page
+is broken" rather than "the app has no sounds":
+- Dart → `PlatformException(invalid_sound, The resource
+  remaining_station_2 could not be found…)`, thrown out of `_plugin.show`,
+  so **no notification appeared at all** from the sound-test page.
+- Native `TripNotifier` → never throws (it only builds a Uri string), so
+  trip alerts appeared normally and were simply **silent**.
+
+Caught by `adb logcat` on a release build; the exception had been there all
+along with nothing surfacing it.
+
+**Fix**: `android/app/src/main/res/raw/keep.xml` with an explicit
+`tools:keep` listing all nine sounds. Verified on the artifact itself, not
+the emulator — the release APK went 61.8 MB → 64.3 MB (exactly the 2.47 MB
+of wavs) and `aapt2 dump resources` now maps every `raw/*` entry to a real
+file. Then verified end-to-end: no `invalid_sound`, notification posted,
+and `dumpsys media.audio_flinger` reporting active tracks during playback.
+
+**Note when checking this**: release builds shorten resource paths, so the
+wavs appear as `res/eD.wav`, not `res/raw/remaining_station_2.wav`. Grepping
+for `res/raw` gives a false negative — grep for `\.wav`, or read the
+resource table. An earlier pass of this investigation drew the wrong
+conclusion from exactly that mistake.
+
+**Scope, precisely**:
+- `dist/app-release.apk` (09-02), which shipped as **1.0.10 — the build most
+  users are on right now — contains zero `.wav` entries**. Those users have
+  never heard an alert sound.
+- The published **1.0.11 does contain all nine** (confirmed in its resource
+  table), so the shrinker's behaviour varies between builds of the same
+  project. That is exactly why an explicit keep rule is needed rather than
+  relying on it.
+- **No channel migration is required.** Confirmed by experiment: channels
+  created by a zero-wav build, then upgraded in place to a build with the
+  wavs — the stored name-based Uri resolves against the newly present
+  resource and the sound plays. Users get working audio from the update
+  alone.
+
+### Also this round
+
+- **Home**: dropped the third "Tanyakan dulu mau langsung atau lihat rute"
+  button; it duplicated the two buttons directly above it. `_askThenGo` and
+  `_TripKickoffChoice` deleted with it rather than left dead.
+- **Profil**: the "Alamat & Stasiun Komuter" section is now just **"Stasiun
+  Komuter"** — two dropdowns. The free-text address fields that sat above
+  each one (and guessed a station from whatever was typed, via
+  `resolveAddressToNearestStation`) are gone: the station is the only part
+  the app ever consumed, and picking it directly is both shorter and exact.
+  `PreferencesStore.homeAddress`/`workAddress` are left in place — nothing
+  writes them any more, but removing stored keys is a separate migration.
+- **Forum @mentions** (`widgets/mentions.dart`): typing `@` in the composer
+  or the comment bar opens a debounced suggestion list of accounts;
+  choosing one inserts `@username`. Bodies of both posts and comments render
+  through `MentionText`, which highlights each mention and opens that
+  person's profile on tap. The mention pattern is deliberately pinned to the
+  same rule usernames are validated against (`[a-z0-9_]{3,10}`) with a
+  `(?<![\w@])` guard, so an email address or a stray "@" in prose is never
+  highlighted.
+
+### Verification
+
+`flutter analyze` clean; `flutter test` 56 passing / 1 skipped / the one
+pre-existing `widget_test.dart` Supabase failure. On-device: sound test now
+plays (no exception, audio tracks active), Profil shows the two-dropdown
+"Stasiun Komuter", and the home card ends after the two action buttons.
+
+**Not verified on-device: the forum @mention flow.** The emulator harness
+runs a `SUPABASE_ENABLED=false` build (login is mandatory otherwise — see
+Round 24), and `searchMentionCandidates`/`resolveMentionedUserId` both
+return empty without Supabase, so the suggestion list can't populate and a
+mention can't resolve to a profile. The parsing/rendering is unit-shaped and
+analyzer-clean, but the round trip against real accounts is untested.
+
+### Released to production — 1.0.12 (version_code 13), 2026-09-04
+
+Same manual path as 1.0.11 (PowerShell script not runnable on Linux), with
+one check added that 1.0.11 did not have and should have:
+
+- **The artifact is now checked for the alert sounds before it leaves the
+  machine** — `unzip -l … | grep -ci '\.wav'` must be 9, and `aapt2 dump
+  resources` must list 9 `raw/` entries. Grepping for `res/raw` does not
+  work on a release APK (paths are shortened to `res/eD.wav`); that mistake
+  is what made the Round 26 diagnosis take a wrong turn.
+- Signing certificate re-verified as `65c7ba1e…`, identical to every
+  previous release, so installs upgrade in place.
+- Uploaded to `temankereta-releases/Teman-Kereta.1.0.12.apk`, re-downloaded
+  through the public domain, SHA-256 compared against the local artifact
+  (identical), and the **downloaded** copy re-checked for its 9 wavs — the
+  point of failure this release exists to fix is verified on the bytes
+  users will actually receive, not just on the local build.
+- `app_releases` row published via PostgREST, then confirmed through the
+  anon key. Changelog deliberately covers 1.0.11 + 1.0.12, since most users
+  are still on 1.0.10 and the update dialog only shows the latest row.
+- Push broadcast sent (2 users): `{"sent":3,"failed":1,"cleaned_up":1}`.
+
+## Round 27 — Real KRL fare, trip recap, and the start of the iOS port (2026-09-05)
+
+### The fare shown to riders was fabricated
+
+`TripDetailPage` had always rendered a chip reading `Estimasi Rp{fare}`. What
+fed it:
+
+- For real trips from `search_direct_trips` / `search_one_transfer_trips`,
+  nothing ever set `estimatedFare`, so it kept its `@Default(0)` — riders saw
+  **"Estimasi Rp0"**.
+- For the synthesised fallback path, `SupabaseTransitProvider` set
+  `estimatedFare: 4000 + (index * 1000)` and
+  `walkingMeters: 150 + (index * 60)` — numbers derived from *the trip's
+  position in the result list*. The third option looked pricier and longer
+  than the first purely because it was listed third.
+
+Both are now gone. Fare is computed for real, and `walkingMeters` stays 0
+until there is an actual source for it (the chip hides itself at 0 rather
+than claiming "0 meter").
+
+### How the fare is computed
+
+Two new use cases, both unit-tested:
+
+- `lib/domain/usecases/krl_fare.dart` — the published KAI Commuter tariff:
+  Rp3.000 covers the first 25 km, every *started* 10 km beyond adds Rp1.000.
+  Takes **integer meters**, not a double of km, because band edges land
+  exactly on 10 km multiples and `(35.0 - 25) / 10` can float to
+  `1.0000000000000002`, which ceils to 2 and overcharges by Rp1.000 at
+  precisely the boundary.
+- `lib/domain/usecases/rail_distance.dart` — distance measured along the
+  **real OSM track geometry** already bundled in
+  `lib/data/providers/rail_line_shapes.dart` (which existed for the live
+  map's polylines and turned out to be exactly the data a fare needs).
+  Stations are projected onto the line they share; the walk is done station
+  pair by station pair, which is what lets a trip spanning two lines get each
+  leg measured on its own geometry. Straight-line distance is the fallback
+  for any pair no shape covers.
+
+`TripDetailPage` refuses to show a fare unless **every** station on the route
+resolved to real coordinates — a partially-resolved path measures short and
+would quote a fare that is wrong in the rider's favour right up to the gate.
+
+### The one place this can still be wrong, and it is not the formula
+
+The formula is exact. Its *input* is measured from OpenStreetMap, and OSM's
+traced route differs from the official KAI distance by a few hundred metres.
+In the middle of a tariff band that is invisible. Within ~0.5 km of a band
+edge it can shift the fare by one Rp1.000 block. Measured against the demo
+station set:
+
+| Rute | Terukur | Tarif hitung |
+| --- | --- | --- |
+| Depok – Manggarai | 22.9 km | Rp3.000 |
+| Bekasi – Jakarta Kota | 27.1 km | Rp4.000 |
+| Rangkasbitung – Tanah Abang | 72.7 km | Rp8.000 |
+| Bogor – Manggarai | 45.2 km | Rp6.000 (batas pita di 45 km) |
+| Bogor – Jakarta Kota | 55.0 km | Rp7.000 (batas pita di 55 km) |
+
+The last two sit directly on a band edge, where a few hundred metres of
+measurement difference decides a whole Rp1.000. **Feeding operator-published
+station-pair distances in place of the measured value is what would close
+this for good** — the same "get the real data rather than infer it" problem
+as the GTFS-RT and MRT items elsewhere in this file. Until then the two
+edge-case routes are the known-risky ones.
+
+### Trip recap (`/history/recap`)
+
+`lib/domain/usecases/trip_recap.dart` + `TripRecapPage`, reachable from
+Profile and from the history page's app bar. Built from the device-local
+`CompletedTrips` table, which was previously only ever rendered as a flat
+list.
+
+Counted figures (trips, time on board, top station, top route, longest trip,
+active days, weekday distribution) come straight from stored rows and are
+exact. Distance and fare are the two derived figures and are deliberately
+reported next to `measuredTripCount`: only trips whose two endpoints resolve
+to stations sharing track geometry can be measured, so the card says
+"dihitung dari N dari M perjalanan" whenever those differ. That is what stops
+"total tarif" from quietly meaning "total for the trips we happened to be
+able to measure."
+
+Two edge cases are tested because they silently corrupt totals otherwise: a
+row whose `arrivedAt` precedes `departedAt` (device clock changed mid-trip)
+must not subtract from the total, and tie-breaks in "most frequent" must be
+deterministic so the same history doesn't render a different winner per
+build.
+
+### iOS: scaffolded, configured, not yet buildable here
+
+`flutter create --platforms=ios` run against the existing project — 40 files
+under `ios/`. **This machine is Linux; nothing iOS was compiled, pod-installed
+or run.** Everything below is configuration, not verification.
+
+Done:
+
+- `.metadata` — `flutter create` **dropped the `android` platform entry** and
+  wrote only `ios`. Restored, so both are listed. Worth knowing this happens
+  before running that command on any other project here.
+- `Info.plist` — usage strings for location (when-in-use *and* always),
+  motion (ride detection), and photo library (`image_picker`, gallery only —
+  the app never opens the camera, so no camera string). iOS terminates an app
+  that asks for a capability with no usage string, so these are not optional.
+  `UIBackgroundModes` declares `location` + `remote-notification`.
+- `CFBundleName` corrected from `teman_kereta` to `Teman Kereta`.
+- `LocalNotificationService` was **Android-only** — `InitializationSettings`
+  had no `iOS:` block and `NotificationDetails` no `iOS:` block, so on iOS it
+  would have initialised into nothing. Both added, plus an iOS branch in
+  `requestPermission()`. Every Darwin `request*` flag is off at init
+  (matching PRD §10: this service initialises lazily on the first alert, and
+  the default would put a permission dialog in front of the rider at an
+  arbitrary moment).
+- Alert sounds copied to `ios/Runner/Sounds/`. Android resolves `res/raw` by
+  bare name; iOS needs the extension, hence `_darwinSoundFile`.
+
+Known open items, in the order they will bite:
+
+1. **The sound files are not yet members of the Xcode target.** They must be
+   added to Runner's "Copy Bundle Resources" (as files, not a folder
+   reference, so they flatten to the bundle root). Until then iOS falls back
+   to the default notification sound — quieter than intended, not silent.
+2. **All native trip tracking is Android-only.** Ten Kotlin files
+   (`ActiveTripLocationService`, `TripProgressEngine`, `NativeStateStore`,
+   the widget providers, activity recognition) back the
+   `id.temankereta.teman_kereta/native` MethodChannel. There is no Swift
+   counterpart. The good news, verified by reading `NativeTripService`: every
+   call already catches `MissingPluginException` and degrades, so iOS falls
+   through to the Dart-side controller rather than crashing. The bad news is
+   that background tracking — the app's entire reason to exist — is exactly
+   what lives in that native layer.
+3. **Home-screen widgets** have no iOS equivalent (they would be a WidgetKit
+   extension, a separate target).
+4. `PRODUCT_BUNDLE_IDENTIFIER` generated as `id.temankereta.temanKereta`
+   (iOS bundle ids can't contain the underscore Android's
+   `id.temankereta.teman_kereta` uses). Nothing is published yet, so this is
+   still free to change — but it is effectively permanent after the first App
+   Store submission, so decide deliberately rather than by default.
+5. Neither pod resolution nor a build has been attempted. First real step on
+   a Mac: `flutter build ios --no-codesign`.
+
+### Pre-existing test failure, unrelated to this round
+
+`test/widget_test.dart` fails with a `ProviderException` —
+`Supabase.instance` accessed before initialisation, from
+`appRouterProvider` (`app_router.dart:83`). Cause: `AppEnvironment
+.supabaseEnabled` now defaults to `true`, and the widget test builds
+`TemanKeretaApp` without ever initialising Supabase. Confirmed by running
+`flutter test test/widget_test.dart --dart-define=SUPABASE_ENABLED=false`,
+which passes. The rest of the suite is green (73 passed, 1 skipped) including
+the 3 new test files added this round.
+
+### Release 1.0.13+14 — emulator verification, then R2 (2026-09-05)
+
+**A stale incremental Kotlin compile silently produced a partial release
+build.** First `flutter build apk --release` failed with `cannot find symbol:
+class SentryFlutterPlugin` from `GeneratedPluginRegistrant.java`. The class
+does exist in sentry_flutter (9.29.0, upgraded from the 9.26.0 pinned at
+HEAD). Digging in: `:sentry_flutter:compileReleaseKotlin` reported
+`UP-TO-DATE`, but `build/sentry_flutter/tmp/kotlin-classes/release/` held only
+6 of the module's 10 classes — `SentryFlutterPlugin` and
+`SentryFlutterReplayRecorder` were missing. Forcing `--rerun-tasks` produced
+all 10 and the build went through.
+
+That is the dangerous kind of failure: Gradle believed a *partially compiled*
+module was current. Here javac caught it because the registrant references
+the missing class by name — a Kotlin class nothing references by name would
+have been dropped silently into a shipped APK. So the artifact was **rebuilt
+from `flutter clean`** rather than trusted, and only the clean-build APK was
+uploaded. (Reassuringly, the incremental and clean APKs came out the same
+size to the byte, 111,032,949 — but that was checked after deciding to
+rebuild, not instead of it.)
+
+**Verification before upload** (`dist/Teman-Kereta.1.0.13.apk`):
+`versionCode=14 versionName=1.0.13 minSdk=24`; 9 `.wav` alert sounds present
+(the Round 26 check); signing certificate SHA-256 `65c7ba1e…`, identical to
+every prior release, so installs update in place.
+
+**On-device (emulator-5554, Android 15, x86_64).** The release APK installs
+and launches, but the app requires a Supabase login and no test account was
+available, so feature verification ran on a **separate no-auth build**
+(`--dart-define SUPABASE_ENABLED=false, TRANSIT_PROVIDER=mock`) — same Dart
+code, no writes to production:
+
+1. Bogor → Jakarta Kota trip detail renders **"57.1 km"** and **"Tarif
+   Rp7.000"** with the tariff-rule explainer. The old "Estimasi Rp0" is gone,
+   and `walkingMeters` only renders when non-zero.
+2. Recap empty state reads correctly with no history.
+3. Trip started at Bogor, GPS moved to Jakarta Kota, auto-finish fired
+   ("Selamat, kamu tiba di Jakarta Kota!").
+4. Recap then showed: 1x, 32 menit, **55.0 km / Rp7.000**, rute tersering,
+   stasiun tersering, "Sabtu 1 dari 1 (100%)" (5 Sep 2026 is a Saturday),
+   perjalanan terlama, perjalanan pertama.
+
+**Known inconsistency this surfaced, not yet fixed.** The same journey reads
+**57.1 km** on the trip detail and **55.0 km** in the recap. Both are honest
+but measure different things: detail sums the real station-by-station path,
+while the recap only has the completed trip's origin and destination ids
+stored, so it measures endpoint-to-endpoint along the shared line. Whenever
+the ridden path is not the straightest one between endpoints, the two differ.
+Here both land in the same Rp7.000 band, but they need not. **The fix is to
+store the measured distance on the `CompletedTrips` row at completion time**
+(a Drift schema bump) so the recap sums what was actually measured during the
+trip instead of re-deriving it — deliberately not attempted as a
+last-minute change before a release.
+
+**R2**: uploaded to `temankereta-releases/Teman-Kereta.1.0.13.apk`, then
+re-downloaded through `https://dl.temankereta.web.id/Teman-Kereta.1.0.13.apk`
+(HTTP 200) and SHA-256 compared against the local artifact — identical
+(`2927067b…`).
+
+**`app_releases`**: row published via PostgREST with the service-role key
+(`Prefer: resolution=merge-duplicates`), `version_code=14`,
+`min_supported_version_code` null (not a forced update). Confirmed afterwards
+through the **anon** key — i.e. exactly what a real device's
+`UpdateCheckerController` sees — with 1.0.13 sitting above 1.0.12 and 1.0.11.
+
+**Push broadcast**: prepared but **not sent**. Recipients resolved from
+`device_tokens` (4 token rows across 2 distinct users) and the payload
+written out, but the outbound `send-push-notification` call was blocked by
+this session's permission classifier. Left for the project owner to send;
+the release itself is live and discoverable without it, since the
+`app_releases` row is what `UpdateCheckerController` polls.

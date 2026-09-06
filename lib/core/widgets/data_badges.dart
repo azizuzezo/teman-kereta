@@ -3,48 +3,6 @@ import 'package:flutter/material.dart';
 import '../../app/theme/app_theme.dart';
 import '../../domain/entities/transit_models.dart';
 
-class DemoDataBanner extends StatelessWidget {
-  const DemoDataBanner({super.key, this.compact = false});
-
-  final bool compact;
-
-  @override
-  Widget build(BuildContext context) {
-    return Semantics(
-      label: 'Data Demo, bukan informasi operasional',
-      child: Container(
-        padding: EdgeInsets.symmetric(
-          horizontal: compact ? 10 : 14,
-          vertical: compact ? 7 : 10,
-        ),
-        decoration: BoxDecoration(
-          color: Theme.of(context).brightness == Brightness.dark
-              ? AppColors.elevatedDark
-              : AppColors.softBlue,
-          borderRadius: BorderRadius.circular(12),
-        ),
-        child: Row(
-          mainAxisSize: compact ? MainAxisSize.min : MainAxisSize.max,
-          children: <Widget>[
-            const Icon(Icons.science_outlined, size: 18),
-            const SizedBox(width: 8),
-            Flexible(
-              child: Text(
-                compact
-                    ? 'Data Demo'
-                    : 'Data Demo • Bukan informasi operasional',
-                style: Theme.of(
-                  context,
-                ).textTheme.bodySmall?.copyWith(fontWeight: FontWeight.w700),
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
 class DataFreshnessBadge extends StatelessWidget {
   const DataFreshnessBadge({
     required this.freshness,

@@ -1,8 +1,14 @@
+import 'dart:convert';
+
+import 'package:drift/native.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:teman_kereta/core/database/app_database.dart';
+import 'package:teman_kereta/core/database/database_provider.dart';
 import 'package:teman_kereta/core/notifications/local_notification_service.dart';
 import 'package:teman_kereta/core/preferences/preferences_store.dart';
+import 'package:teman_kereta/data/providers/provider_registry.dart';
 import 'package:teman_kereta/domain/entities/active_trip.dart';
 import 'package:teman_kereta/domain/entities/transit_models.dart';
 import 'package:teman_kereta/features/active_trip/presentation/active_trip_controller.dart';
@@ -57,15 +63,21 @@ void main() {
 
   late ProviderContainer container;
   late FakeNotificationService notifications;
+  late AppDatabase database;
   Map<String, Object?>? queuedGeofenceEvent;
+  Map<String, Object?>? nativeFullState;
 
   setUp(() {
     notifications = FakeNotificationService();
+    database = AppDatabase.forTesting(NativeDatabase.memory());
     queuedGeofenceEvent = null;
+    nativeFullState = null;
     container = ProviderContainer(
       overrides: [
         preferencesStoreProvider.overrideWithValue(MemoryPreferencesStore()),
         localNotificationServiceProvider.overrideWithValue(notifications),
+        stationListProvider.overrideWith((ref) async => const <Station>[]),
+        appDatabaseProvider.overrideWithValue(database),
       ],
     );
     TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
@@ -73,19 +85,23 @@ void main() {
       if (call.method == 'getLastGeofenceEvent') {
         return queuedGeofenceEvent;
       }
+      if (call.method == 'getActiveTripFullState') {
+        return nativeFullState;
+      }
       return null;
     });
   });
 
-  tearDown(() {
+  tearDown(() async {
     TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
         .setMockMethodCallHandler(_nativeChannel, null);
     container.dispose();
+    await database.close();
   });
 
   test(
     'advanceStop walks through approaching-transfer, transferring, '
-    'approaching-destination, arrived, then missed-destination',
+    'approaching-destination, then auto-finishes on arrival',
     () async {
       final notifier = container.read(activeTripControllerProvider.notifier);
       await notifier.start(_transferTrip());
@@ -99,7 +115,6 @@ void main() {
         ActiveTripState.approachingDestination, // G
         ActiveTripState.approachingDestination, // H
         ActiveTripState.approachingDestination, // I
-        ActiveTripState.arrived, // J
       ];
 
       for (final expected in expectedStates) {
@@ -107,18 +122,22 @@ void main() {
         expect(container.read(activeTripControllerProvider)?.state, expected);
       }
 
-      // Train keeps moving past the destination without the user ending
-      // the trip: this must surface as missedDestination, not silently
-      // stay clamped at "arrived".
-      await notifier.advanceStop();
+      // Reaching the destination ends the trip on its own — no "Selesai"
+      // tap. The session stays readable (as `completed`) so the recap
+      // screen can render travel time / distance / average speed from it;
+      // `dismissCompleted()` is what finally clears it.
+      await notifier.advanceStop(); // J, the destination
       expect(
         container.read(activeTripControllerProvider)?.state,
-        ActiveTripState.missedDestination,
+        ActiveTripState.completed,
       );
 
       expect(notifications.transferAlerts, 1);
-      expect(notifications.missedAlerts, 1);
-      expect(notifications.stopAlerts, 4); // remaining 3, 2, 1, 0
+      expect(notifications.transferApproachingAlerts, 2); // remaining 2, 1
+      // Arrival gets its own summary alert, so the countdown only covers
+      // remaining 3, 2 and 1.
+      expect(notifications.stopAlerts, 3);
+      expect(notifications.arrivalAlerts, 1);
     },
   );
 
@@ -131,77 +150,143 @@ void main() {
     expect(container.read(activeTripControllerProvider), isNull);
   });
 
-  group('checkGeofenceProgress (real geofence ENTER auto-advances the trip)', () {
-    test('advances when the phone enters the next station along the route', () async {
-      final notifier = container.read(activeTripControllerProvider.notifier);
-      await notifier.start(_transferTrip()); // currentStationIndex 0 (A), next = B
+  group('native GPS reconciliation (TripProgressEngine drives real progress)', () {
+    // Station advancement/notifications are now decided natively (see
+    // `TripProgressEngine.kt`) from continuous GPS proximity, since that's
+    // the only thing guaranteed to keep running once the Flutter engine is
+    // torn down (app swiped from Recents — this app has no headless Dart
+    // execution). `ActiveTripController` just reconciles whatever native
+    // already decided via `getActiveTripFullState` — these tests cover that
+    // reconciliation, not the native proximity logic itself (untestable
+    // from Dart).
+    ProviderContainer containerWithSnapshot(ActiveTripSession session) {
+      return ProviderContainer(
+        overrides: [
+          preferencesStoreProvider.overrideWithValue(
+            MemoryPreferencesStore(
+              initial: StoredPreferences(
+                activeTripSnapshot: jsonEncode(session.toJson()),
+              ),
+            ),
+          ),
+          localNotificationServiceProvider.overrideWithValue(notifications),
+          stationListProvider.overrideWith((ref) async => const <Station>[]),
+          appDatabaseProvider.overrideWithValue(database),
+        ],
+      );
+    }
 
-      queuedGeofenceEvent = <String, Object?>{
-        'stationIds': <String>['B'],
-        'transition': 'enter',
-        'occurredAtEpochMs': DateTime.utc(2026, 1, 1, 8, 5).millisecondsSinceEpoch,
+    test('adopts a more-advanced index/state/distance/speed from native on restore', () async {
+      final session = ActiveTripSession(
+        id: 'sess-1',
+        trip: _transferTrip(),
+        state: ActiveTripState.onBoard,
+        currentStationIndex: 0,
+        startedAt: DateTime.utc(2026, 1, 1, 8),
+        updatedAt: DateTime.utc(2026, 1, 1, 8),
+        confirmedByUser: true,
+      );
+      nativeFullState = <String, Object?>{
+        'currentStationIndex': 1,
+        'state': 'approachingTransfer',
+        'distanceMeters': 1200.0,
+        'speedKmh': 42.0,
       };
-      await notifier.checkGeofenceProgress();
+      container.dispose();
+      container = containerWithSnapshot(session);
 
-      final session = container.read(activeTripControllerProvider);
-      expect(session?.currentStationIndex, 1);
-      expect(session?.state, ActiveTripState.approachingTransfer);
+      final restored = container.read(activeTripControllerProvider);
+      expect(restored?.currentStationIndex, 0); // synchronous restore, before reconcile lands
+
+      await Future<void>.delayed(const Duration(milliseconds: 10));
+
+      final reconciled = container.read(activeTripControllerProvider);
+      expect(reconciled?.currentStationIndex, 1);
+      expect(reconciled?.state, ActiveTripState.approachingTransfer);
+      expect(reconciled?.distanceMeters, 1200.0);
+      expect(reconciled?.currentSpeedKmh, 42.0);
     });
 
-    test('does nothing when the geofence event is for a different station', () async {
-      final notifier = container.read(activeTripControllerProvider.notifier);
-      await notifier.start(_transferTrip());
-
-      queuedGeofenceEvent = <String, Object?>{
-        'stationIds': <String>['C'], // not the next station (B)
-        'transition': 'enter',
-        'occurredAtEpochMs': DateTime.utc(2026, 1, 1, 8, 5).millisecondsSinceEpoch,
+    test('mirrors a missedDestination decided natively (overshoot watch)', () async {
+      // The rider slept through their stop: native's overshoot watch
+      // (`TripProgressEngine.markMissedDestination`) saw the destination
+      // approached and then left behind without an arrival ever firing.
+      // Auto-finish-on-arrival never triggers here precisely because
+      // arrival never happened, so this path has to keep working.
+      final session = ActiveTripSession(
+        id: 'sess-3',
+        trip: _transferTrip(),
+        state: ActiveTripState.approachingDestination,
+        currentStationIndex: 8,
+        startedAt: DateTime.utc(2026, 1, 1, 8),
+        updatedAt: DateTime.utc(2026, 1, 1, 8),
+        confirmedByUser: true,
+      );
+      nativeFullState = <String, Object?>{
+        'currentStationIndex': 8,
+        'state': 'missedDestination',
       };
-      await notifier.checkGeofenceProgress();
+      container.dispose();
+      container = containerWithSnapshot(session);
+      container.read(activeTripControllerProvider); // instantiate, so build() runs
 
-      expect(container.read(activeTripControllerProvider)?.currentStationIndex, 0);
+      await Future<void>.delayed(const Duration(milliseconds: 10));
+
+      expect(
+        container.read(activeTripControllerProvider)?.state,
+        ActiveTripState.missedDestination,
+      );
     });
 
-    test('does nothing on an exit/dwell transition, only enter', () async {
-      final notifier = container.read(activeTripControllerProvider.notifier);
-      await notifier.start(_transferTrip());
-
-      queuedGeofenceEvent = <String, Object?>{
-        'stationIds': <String>['B'],
-        'transition': 'dwell',
-        'occurredAtEpochMs': DateTime.utc(2026, 1, 1, 8, 5).millisecondsSinceEpoch,
+    test('auto-finishes a trip native reports as arrived', () async {
+      final session = ActiveTripSession(
+        id: 'sess-4',
+        trip: _transferTrip(),
+        state: ActiveTripState.approachingDestination,
+        currentStationIndex: 8,
+        startedAt: DateTime.utc(2026, 1, 1, 8),
+        updatedAt: DateTime.utc(2026, 1, 1, 8),
+        confirmedByUser: true,
+      );
+      nativeFullState = <String, Object?>{
+        'currentStationIndex': 9,
+        'state': 'arrived',
+        'distanceMeters': 24000.0,
       };
-      await notifier.checkGeofenceProgress();
+      container.dispose();
+      container = containerWithSnapshot(session);
+      container.read(activeTripControllerProvider); // instantiate, so build() runs
 
-      expect(container.read(activeTripControllerProvider)?.currentStationIndex, 0);
+      await Future<void>.delayed(const Duration(milliseconds: 10));
+
+      final finished = container.read(activeTripControllerProvider);
+      expect(finished?.state, ActiveTripState.completed);
+      // Kept for the recap screen rather than cleared.
+      expect(finished?.distanceMeters, 24000.0);
     });
 
-    test('does not double-advance on a repeated (already-processed) event', () async {
-      final notifier = container.read(activeTripControllerProvider.notifier);
-      await notifier.start(_transferTrip());
-
-      queuedGeofenceEvent = <String, Object?>{
-        'stationIds': <String>['B'],
-        'transition': 'enter',
-        'occurredAtEpochMs': DateTime.utc(2026, 1, 1, 8, 5).millisecondsSinceEpoch,
+    test('never regresses currentStationIndex backward', () async {
+      final session = ActiveTripSession(
+        id: 'sess-2',
+        trip: _transferTrip(),
+        state: ActiveTripState.onBoard,
+        currentStationIndex: 3,
+        startedAt: DateTime.utc(2026, 1, 1, 8),
+        updatedAt: DateTime.utc(2026, 1, 1, 8),
+        confirmedByUser: true,
+      );
+      // Native hasn't caught up yet with a manual "Lanjut" advance that
+      // already pushed Dart ahead.
+      nativeFullState = <String, Object?>{
+        'currentStationIndex': 1,
+        'state': 'approachingTransfer',
       };
-      await notifier.checkGeofenceProgress();
-      expect(container.read(activeTripControllerProvider)?.currentStationIndex, 1);
+      container.dispose();
+      container = containerWithSnapshot(session);
 
-      // Same event polled again (native side hasn't produced a new one yet).
-      await notifier.checkGeofenceProgress();
-      expect(container.read(activeTripControllerProvider)?.currentStationIndex, 1);
-    });
+      await Future<void>.delayed(const Duration(milliseconds: 10));
 
-    test('does nothing before a trip is confirmed onBoard', () async {
-      final notifier = container.read(activeTripControllerProvider.notifier);
-      queuedGeofenceEvent = <String, Object?>{
-        'stationIds': <String>['B'],
-        'transition': 'enter',
-        'occurredAtEpochMs': DateTime.utc(2026, 1, 1, 8, 5).millisecondsSinceEpoch,
-      };
-      await notifier.checkGeofenceProgress();
-      expect(container.read(activeTripControllerProvider), isNull);
+      expect(container.read(activeTripControllerProvider)?.currentStationIndex, 3);
     });
   });
 }

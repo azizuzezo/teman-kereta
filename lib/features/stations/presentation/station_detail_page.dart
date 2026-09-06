@@ -3,8 +3,10 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 
+import '../../../core/utils/map_launcher.dart';
 import '../../../core/widgets/data_badges.dart';
 import '../../../core/widgets/empty_state.dart';
+import '../../../core/widgets/facility_icon_chip.dart';
 import '../../../data/providers/provider_registry.dart';
 import '../../../domain/entities/transit_models.dart';
 
@@ -33,7 +35,7 @@ class StationDetailPage extends ConsumerWidget {
               return AppEmptyState(
                 icon: Icons.wrong_location_outlined,
                 title: 'Stasiun tidak ditemukan',
-                message: 'Kode stasiun tidak ada di data demo lokal.',
+                message: 'Kode stasiun tidak ditemukan.',
                 action: FilledButton(
                   onPressed: () => context.go('/map'),
                   child: const Text('Buka peta'),
@@ -59,8 +61,6 @@ class _StationContent extends ConsumerWidget {
     return ListView(
       padding: const EdgeInsets.fromLTRB(16, 8, 16, 28),
       children: <Widget>[
-        const DemoDataBanner(),
-        const SizedBox(height: 16),
         Card(
           child: Padding(
             padding: const EdgeInsets.all(20),
@@ -92,12 +92,9 @@ class _StationContent extends ConsumerWidget {
                   runSpacing: 8,
                   children: <Widget>[
                     if (station.wheelchairAccessible)
-                      const Chip(
-                        avatar: Icon(Icons.accessible_rounded, size: 18),
-                        label: Text('Akses kursi roda'),
-                      ),
+                      const FacilityIconChip(label: 'Akses kursi roda'),
                     for (final facility in station.facilities)
-                      Chip(label: Text(facility)),
+                      FacilityIconChip(label: facility),
                     if (station.facilities.isEmpty &&
                         !station.wheelchairAccessible)
                       const Chip(label: Text('Fasilitas belum terverifikasi')),
@@ -120,12 +117,25 @@ class _StationContent extends ConsumerWidget {
             const SizedBox(width: 10),
             Expanded(
               child: FilledButton.icon(
-                onPressed: () => context.go('/schedule'),
+                onPressed: () => context.go('/schedule/search'),
                 icon: const Icon(Icons.route_outlined),
                 label: const Text('Cari rute'),
               ),
             ),
           ],
+        ),
+        const SizedBox(height: 10),
+        SizedBox(
+          width: double.infinity,
+          child: OutlinedButton.icon(
+            onPressed: () => launchMapDirections(
+              station.latitude,
+              station.longitude,
+              label: station.name,
+            ),
+            icon: const Icon(Icons.directions_rounded),
+            label: const Text('Arahkan ke Sini'),
+          ),
         ),
         const SizedBox(height: 26),
         Text('Keberangkatan berikutnya', style: Theme.of(context).textTheme.titleLarge),
@@ -141,7 +151,7 @@ class _StationContent extends ConsumerWidget {
               ? const AppEmptyState(
                   icon: Icons.schedule_outlined,
                   title: 'Tidak ada keberangkatan',
-                  message: 'Data demo belum memuat jadwal stasiun ini.',
+                  message: 'Belum ada jadwal untuk stasiun ini.',
                 )
               : Column(
                   children: <Widget>[
@@ -168,7 +178,7 @@ class _StationContent extends ConsumerWidget {
         ),
         const SizedBox(height: 14),
         Text(
-          'Koordinat demo: ${station.latitude.toStringAsFixed(4)}, ${station.longitude.toStringAsFixed(4)}',
+          'Lokasi stasiun: ${station.latitude.toStringAsFixed(4)}, ${station.longitude.toStringAsFixed(4)}',
           style: Theme.of(context).textTheme.bodySmall,
         ),
       ],

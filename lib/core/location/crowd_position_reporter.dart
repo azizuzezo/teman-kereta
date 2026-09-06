@@ -37,26 +37,31 @@ class CrowdPositionReporter {
     return generated;
   }
 
-  Future<void> reportOnce({
+  /// Returns the sampled [Position] on success (or `null` if Supabase
+  /// reporting is disabled, permission/service isn't available, or the GPS
+  /// call itself failed) — this doubles as the "already have a fresh GPS
+  /// sample" hook `LiveTripPositionController` piggybacks on so it never has
+  /// to start a second GPS-polling timer of its own alongside this one.
+  Future<Position?> reportOnce({
     required String externalTripId,
     required DateTime serviceDate,
   }) async {
     if (!AppEnvironment.supabaseEnabled) {
-      return;
+      return null;
     }
 
     Position position;
     try {
       final serviceEnabled = await Geolocator.isLocationServiceEnabled();
       if (!serviceEnabled) {
-        return;
+        return null;
       }
       final permission = await Geolocator.checkPermission();
       final granted =
           permission == LocationPermission.always ||
           permission == LocationPermission.whileInUse;
       if (!granted) {
-        return;
+        return null;
       }
       position = await Geolocator.getCurrentPosition(
         locationSettings: const LocationSettings(
@@ -65,7 +70,7 @@ class CrowdPositionReporter {
         ),
       );
     } on Object {
-      return;
+      return null;
     }
 
     try {
@@ -84,6 +89,7 @@ class CrowdPositionReporter {
       // Best-effort — a failed report must never surface to the rider or
       // interrupt their trip.
     }
+    return position;
   }
 
   String _isoDate(DateTime date) {

@@ -4,6 +4,7 @@ import { logout } from "./actions";
 
 const NAV_ITEMS = [
   { href: "/dashboard", label: "Dashboard" },
+  { href: "/users", label: "Pengguna" },
   { href: "/operators", label: "Operator" },
   { href: "/lines", label: "Jalur" },
   { href: "/stations", label: "Stasiun" },
@@ -11,6 +12,8 @@ const NAV_ITEMS = [
   { href: "/nearby-places", label: "Destinasi" },
   { href: "/service-alerts", label: "Gangguan Layanan" },
   { href: "/user-reports", label: "Laporan Pengguna" },
+  { href: "/forum", label: "Forum" },
+  { href: "/releases", label: "Rilis Aplikasi" },
   { href: "/audit-log", label: "Audit Log" },
   { href: "/settings", label: "Pengaturan" },
 ];

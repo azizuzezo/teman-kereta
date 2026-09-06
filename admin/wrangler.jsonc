@@ -9,6 +9,6 @@
     "binding": "ASSETS"
   },
   "routes": [
-    { "pattern": "www.temankereta.web.id", "custom_domain": true }
+    { "pattern": "panel.temankereta.web.id", "custom_domain": true }
   ]
 }

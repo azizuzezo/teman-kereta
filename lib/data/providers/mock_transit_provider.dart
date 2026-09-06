@@ -4,6 +4,8 @@ import 'package:clock/clock.dart';
 
 import '../../domain/entities/transit_models.dart';
 import '../../domain/providers/transit_providers.dart';
+import '../../domain/usecases/line_transfer_router.dart';
+import '../../domain/usecases/transfer_platform_guidance.dart';
 import 'demo_data.dart';
 
 class MockTransitProvider
@@ -171,7 +173,7 @@ class MockTransitProvider
                 lineName: 'Commuter Line Cikarang Loop (KA $leg2Ka)',
                 headsign: 'Angke / Kampung Bandan',
                 externalTripId: leg2Ka,
-                stationIds: <String>['MRI', 'SUD', 'KRT', 'THB', 'DU'],
+                stationIds: <String>['MRI', 'SUD', 'THB', 'DU'],
                 transferInstruction:
                     'Transit #2 di Duri. Pindah ke Peron 5 (Tangerang Line arah Tangerang).',
               ),
@@ -241,7 +243,7 @@ class MockTransitProvider
                 lineName: 'Commuter Line Cikarang Loop (KA $leg2Ka)',
                 headsign: 'Tanah Abang / Angke',
                 externalTripId: leg2Ka,
-                stationIds: <String>['MRI', 'SUD', 'KRT', 'THB'],
+                stationIds: <String>['MRI', 'SUD', 'THB'],
                 transferInstruction:
                     'Transit #2 di Tanah Abang. Pindah ke Peron 5-6 (Rangkasbitung Line).',
               ),
@@ -267,66 +269,77 @@ class MockTransitProvider
           ),
         );
       }
-      // ── CASE 4: 1 Transfer (Default 1-transfer hub via MRI / THB / DU) ─────
+      // ── CASE 4: whatever transfer chain the real topology actually needs ──
+      // Not a hardcoded single-hub guess (MRI/THB/DU) — that silently
+      // produced a WRONG one-transfer route for any line pair that
+      // genuinely needs two, e.g. Nambo→Tangerang or Bekasi→Serpong. Routed
+      // by the same real breadth-first search as the Supabase provider's
+      // fallback (see routeBetweenStations's doc comment for why an honest
+      // "no route" beats a fabricated wrong one).
       else {
-        final transferStationCode = (originLine == 'TANGERANG' || destLine == 'TANGERANG')
-            ? 'DU'
-            : (originLine == 'RANGKASBITUNG' || destLine == 'RANGKASBITUNG')
-                ? 'THB'
-                : 'MRI';
-        final transferStationName = transferStationCode == 'DU'
-            ? 'Duri'
-            : transferStationCode == 'THB'
-                ? 'Tanah Abang'
-                : 'Manggarai';
-
-        final leg1Ka = _kaNumberForLine(originLine, index);
-        final leg2Ka = _kaNumberForLine(destLine, index);
-
-        final leg1End = departure.add(const Duration(minutes: 32));
-        final leg2Start = leg1End.add(const Duration(minutes: 7));
-        final arrival = leg2Start.add(const Duration(minutes: 35));
-
+        final legStations = routeBetweenStations(demoStations, origin.id, destination.id);
+        if (legStations == null) {
+          continue;
+        }
+        final legMinutes = 32 + (index * 6);
+        final legs = <TripLeg>[];
+        var legStart = departure;
+        for (var legIndex = 0; legIndex < legStations.length; legIndex++) {
+          final stations = legStations[legIndex];
+          final isLastLeg = legIndex == legStations.length - 1;
+          final legEnd = legStart.add(Duration(minutes: legMinutes));
+          final legOriginName = legIndex == 0 ? origin.name : legStations[legIndex - 1].last.name;
+          final legDestinationName = isLastLeg ? destination.name : stations.last.name;
+          final legLine = stations.first.lineIds
+              .where((l) => stations.last.lineIds.contains(l))
+              .firstOrNull;
+          final ka = _kaNumberForLine(legLine ?? originLine, index);
+          String? transferInstruction;
+          if (!isLastLeg) {
+            final nextStations = legStations[legIndex + 1];
+            final nextName = nextStations.length >= 2 ? nextStations[1].name : null;
+            // Real stop immediately before the transfer, not the leg's own
+            // start — see transferPlatformInstruction's doc comment.
+            final approachingFromName = stations[stations.length - 2].name;
+            transferInstruction = transferPlatformInstruction(
+                  approachingFromName: approachingFromName,
+                  transferName: legDestinationName,
+                  nextName: nextName,
+                ) ??
+                'Transit di $legDestinationName.';
+          }
+          legs.add(
+            TripLeg(
+              id: 'leg-$legIndex-$index',
+              mode: TransportMode.commuterRail,
+              originName: legOriginName,
+              destinationName: legDestinationName,
+              departureAt: legStart,
+              arrivalAt: legEnd,
+              lineName: '${_lineName(legLine ?? originLine)} (KA $ka)',
+              headsign: legDestinationName,
+              externalTripId: ka,
+              stationIds: stations.map((s) => s.id).toList(growable: false),
+              transferInstruction: transferInstruction,
+            ),
+          );
+          legStart = legEnd.add(const Duration(minutes: 7));
+        }
         result.add(
           TransitTrip(
             id: 'trip-1x-${origin.id}-${destination.id}-$index',
             originStationId: origin.id,
             destinationStationId: destination.id,
             departureAt: departure,
-            arrivalAt: arrival,
-            legs: <TripLeg>[
-              TripLeg(
-                id: 'leg-1-$index',
-                mode: TransportMode.commuterRail,
-                originName: origin.name,
-                destinationName: transferStationName,
-                departureAt: departure,
-                arrivalAt: leg1End,
-                lineName: '${_lineName(originLine)} (KA $leg1Ka)',
-                headsign: transferStationName,
-                externalTripId: leg1Ka,
-                stationIds: _stationsBetween(origin.id, transferStationCode),
-                transferInstruction:
-                    'Transit di $transferStationName ke peron ${_lineName(destLine)}.',
-              ),
-              TripLeg(
-                id: 'leg-2-$index',
-                mode: TransportMode.commuterRail,
-                originName: transferStationName,
-                destinationName: destination.name,
-                departureAt: leg2Start,
-                arrivalAt: arrival,
-                lineName: '${_lineName(destLine)} (KA $leg2Ka)',
-                headsign: destination.name,
-                externalTripId: leg2Ka,
-                stationIds: _stationsBetween(transferStationCode, destination.id),
-              ),
-            ],
-            transfers: 1,
+            arrivalAt: legStart.subtract(const Duration(minutes: 7)),
+            legs: legs,
+            transfers: legs.length - 1,
             walkingMeters: 200,
             estimatedFare: 5000,
             freshness: DataFreshness.estimated,
-            sourceLabel: 'Jadwal Resmi KRL • 1x Transit ($transferStationName)',
+            sourceLabel: legs.length > 1
+                ? 'Jadwal Resmi KRL • ${legs.length - 1}x Transit'
+                : 'Jadwal Resmi KRL • Langsung',
             updatedAt: _clock.now(),
           ),
         );
@@ -491,6 +504,24 @@ class MockTransitProvider
       ),
     );
     final resumeAt = transferAt.add(const Duration(minutes: 6));
+    final nextAfterTransferName = secondLegStations.length >= 2
+        ? demoStations.where((s) => s.id == secondLegStations[1]).firstOrNull?.name
+        : null;
+    // Real stop immediately before the transfer, not the trip's ultimate
+    // origin — see transferPlatformInstruction's doc comment.
+    final approachingFromName = firstLegStations.length >= 2
+        ? demoStations
+                .where((s) => s.id == firstLegStations[firstLegStations.length - 2])
+                .firstOrNull
+                ?.name ??
+            originName
+        : originName;
+    final transferInstruction = transferPlatformInstruction(
+          approachingFromName: approachingFromName,
+          transferName: 'Manggarai',
+          nextName: nextAfterTransferName,
+        ) ??
+        'Transit di Manggarai ke arah Cikarang Line. Peron harus diverifikasi dari sumber resmi.';
 
     return <TripLeg>[
       TripLeg(
@@ -503,8 +534,7 @@ class MockTransitProvider
         lineName: 'Bogor Line',
         headsign: 'Jakarta Kota',
         stationIds: firstLegStations,
-        transferInstruction:
-            'Transit di Manggarai ke arah Cikarang Line. Peron harus diverifikasi dari sumber resmi.',
+        transferInstruction: transferInstruction,
       ),
       TripLeg(
         id: 'rail-$index-b',

@@ -15,7 +15,13 @@ T _$identity<T>(T value) => value;
 /// @nodoc
 mixin _$Station {
 
- String get id; String get code; String get name; double get latitude; double get longitude; List<String> get lineIds; List<String> get facilities; bool get wheelchairAccessible;
+ String get id; String get code; String get name; double get latitude; double get longitude; List<String> get lineIds; List<String> get facilities; bool get wheelchairAccessible;// Per-line stop order (`{lineCode: stopOrder}`), used to draw each
+// line's real geographic polyline in station-sequence order on the live
+// map. Only `SupabaseTransitProvider` populates this from the
+// `station_lines` join's `stop_order` column — every other provider
+// (mock/demo/GTFS importer) defaults to empty, since they don't need
+// route-accurate map rendering.
+ Map<String, int> get stopOrderByLine;
 /// Create a copy of Station
 /// with the given fields replaced by the non-null parameter values.
 @JsonKey(includeFromJson: false, includeToJson: false)
@@ -28,16 +34,16 @@ $StationCopyWith<Station> get copyWith => _$StationCopyWithImpl<Station>(this as
 
 @override
 bool operator ==(Object other) {
-  return identical(this, other) || (other.runtimeType == runtimeType&&other is Station&&(identical(other.id, id) || other.id == id)&&(identical(other.code, code) || other.code == code)&&(identical(other.name, name) || other.name == name)&&(identical(other.latitude, latitude) || other.latitude == latitude)&&(identical(other.longitude, longitude) || other.longitude == longitude)&&const DeepCollectionEquality().equals(other.lineIds, lineIds)&&const DeepCollectionEquality().equals(other.facilities, facilities)&&(identical(other.wheelchairAccessible, wheelchairAccessible) || other.wheelchairAccessible == wheelchairAccessible));
+  return identical(this, other) || (other.runtimeType == runtimeType&&other is Station&&(identical(other.id, id) || other.id == id)&&(identical(other.code, code) || other.code == code)&&(identical(other.name, name) || other.name == name)&&(identical(other.latitude, latitude) || other.latitude == latitude)&&(identical(other.longitude, longitude) || other.longitude == longitude)&&const DeepCollectionEquality().equals(other.lineIds, lineIds)&&const DeepCollectionEquality().equals(other.facilities, facilities)&&(identical(other.wheelchairAccessible, wheelchairAccessible) || other.wheelchairAccessible == wheelchairAccessible)&&const DeepCollectionEquality().equals(other.stopOrderByLine, stopOrderByLine));
 }
 
 @JsonKey(includeFromJson: false, includeToJson: false)
 @override
-int get hashCode => Object.hash(runtimeType,id,code,name,latitude,longitude,const DeepCollectionEquality().hash(lineIds),const DeepCollectionEquality().hash(facilities),wheelchairAccessible);
+int get hashCode => Object.hash(runtimeType,id,code,name,latitude,longitude,const DeepCollectionEquality().hash(lineIds),const DeepCollectionEquality().hash(facilities),wheelchairAccessible,const DeepCollectionEquality().hash(stopOrderByLine));
 
 @override
 String toString() {
-  return 'Station(id: $id, code: $code, name: $name, latitude: $latitude, longitude: $longitude, lineIds: $lineIds, facilities: $facilities, wheelchairAccessible: $wheelchairAccessible)';
+  return 'Station(id: $id, code: $code, name: $name, latitude: $latitude, longitude: $longitude, lineIds: $lineIds, facilities: $facilities, wheelchairAccessible: $wheelchairAccessible, stopOrderByLine: $stopOrderByLine)';
 }
 
 
@@ -48,7 +54,7 @@ abstract mixin class $StationCopyWith<$Res>  {
   factory $StationCopyWith(Station value, $Res Function(Station) _then) = _$StationCopyWithImpl;
 @useResult
 $Res call({
- String id, String code, String name, double latitude, double longitude, List<String> lineIds, List<String> facilities, bool wheelchairAccessible
+ String id, String code, String name, double latitude, double longitude, List<String> lineIds, List<String> facilities, bool wheelchairAccessible, Map<String, int> stopOrderByLine
 });
 
 
@@ -65,7 +71,7 @@ class _$StationCopyWithImpl<$Res>
 
 /// Create a copy of Station
 /// with the given fields replaced by the non-null parameter values.
-@pragma('vm:prefer-inline') @override $Res call({Object? id = null,Object? code = null,Object? name = null,Object? latitude = null,Object? longitude = null,Object? lineIds = null,Object? facilities = null,Object? wheelchairAccessible = null,}) {
+@pragma('vm:prefer-inline') @override $Res call({Object? id = null,Object? code = null,Object? name = null,Object? latitude = null,Object? longitude = null,Object? lineIds = null,Object? facilities = null,Object? wheelchairAccessible = null,Object? stopOrderByLine = null,}) {
   return _then(_self.copyWith(
 id: null == id ? _self.id : id // ignore: cast_nullable_to_non_nullable
 as String,code: null == code ? _self.code : code // ignore: cast_nullable_to_non_nullable
@@ -75,7 +81,8 @@ as double,longitude: null == longitude ? _self.longitude : longitude // ignore: 
 as double,lineIds: null == lineIds ? _self.lineIds : lineIds // ignore: cast_nullable_to_non_nullable
 as List<String>,facilities: null == facilities ? _self.facilities : facilities // ignore: cast_nullable_to_non_nullable
 as List<String>,wheelchairAccessible: null == wheelchairAccessible ? _self.wheelchairAccessible : wheelchairAccessible // ignore: cast_nullable_to_non_nullable
-as bool,
+as bool,stopOrderByLine: null == stopOrderByLine ? _self.stopOrderByLine : stopOrderByLine // ignore: cast_nullable_to_non_nullable
+as Map<String, int>,
   ));
 }
 
@@ -160,10 +167,10 @@ return $default(_that);case _:
 /// }
 /// ```
 
-@optionalTypeArgs TResult maybeWhen<TResult extends Object?>(TResult Function( String id,  String code,  String name,  double latitude,  double longitude,  List<String> lineIds,  List<String> facilities,  bool wheelchairAccessible)?  $default,{required TResult orElse(),}) {final _that = this;
+@optionalTypeArgs TResult maybeWhen<TResult extends Object?>(TResult Function( String id,  String code,  String name,  double latitude,  double longitude,  List<String> lineIds,  List<String> facilities,  bool wheelchairAccessible,  Map<String, int> stopOrderByLine)?  $default,{required TResult orElse(),}) {final _that = this;
 switch (_that) {
 case _Station() when $default != null:
-return $default(_that.id,_that.code,_that.name,_that.latitude,_that.longitude,_that.lineIds,_that.facilities,_that.wheelchairAccessible);case _:
+return $default(_that.id,_that.code,_that.name,_that.latitude,_that.longitude,_that.lineIds,_that.facilities,_that.wheelchairAccessible,_that.stopOrderByLine);case _:
   return orElse();
 
 }
@@ -181,10 +188,10 @@ return $default(_that.id,_that.code,_that.name,_that.latitude,_that.longitude,_t
 /// }
 /// ```
 
-@optionalTypeArgs TResult when<TResult extends Object?>(TResult Function( String id,  String code,  String name,  double latitude,  double longitude,  List<String> lineIds,  List<String> facilities,  bool wheelchairAccessible)  $default,) {final _that = this;
+@optionalTypeArgs TResult when<TResult extends Object?>(TResult Function( String id,  String code,  String name,  double latitude,  double longitude,  List<String> lineIds,  List<String> facilities,  bool wheelchairAccessible,  Map<String, int> stopOrderByLine)  $default,) {final _that = this;
 switch (_that) {
 case _Station():
-return $default(_that.id,_that.code,_that.name,_that.latitude,_that.longitude,_that.lineIds,_that.facilities,_that.wheelchairAccessible);case _:
+return $default(_that.id,_that.code,_that.name,_that.latitude,_that.longitude,_that.lineIds,_that.facilities,_that.wheelchairAccessible,_that.stopOrderByLine);case _:
   throw StateError('Unexpected subclass');
 
 }
@@ -201,10 +208,10 @@ return $default(_that.id,_that.code,_that.name,_that.latitude,_that.longitude,_t
 /// }
 /// ```
 
-@optionalTypeArgs TResult? whenOrNull<TResult extends Object?>(TResult? Function( String id,  String code,  String name,  double latitude,  double longitude,  List<String> lineIds,  List<String> facilities,  bool wheelchairAccessible)?  $default,) {final _that = this;
+@optionalTypeArgs TResult? whenOrNull<TResult extends Object?>(TResult? Function( String id,  String code,  String name,  double latitude,  double longitude,  List<String> lineIds,  List<String> facilities,  bool wheelchairAccessible,  Map<String, int> stopOrderByLine)?  $default,) {final _that = this;
 switch (_that) {
 case _Station() when $default != null:
-return $default(_that.id,_that.code,_that.name,_that.latitude,_that.longitude,_that.lineIds,_that.facilities,_that.wheelchairAccessible);case _:
+return $default(_that.id,_that.code,_that.name,_that.latitude,_that.longitude,_that.lineIds,_that.facilities,_that.wheelchairAccessible,_that.stopOrderByLine);case _:
   return null;
 
 }
@@ -216,7 +223,7 @@ return $default(_that.id,_that.code,_that.name,_that.latitude,_that.longitude,_t
 @JsonSerializable()
 
 class _Station implements Station {
-  const _Station({required this.id, required this.code, required this.name, required this.latitude, required this.longitude, final  List<String> lineIds = const <String>[], final  List<String> facilities = const <String>[], this.wheelchairAccessible = false}): _lineIds = lineIds,_facilities = facilities;
+  const _Station({required this.id, required this.code, required this.name, required this.latitude, required this.longitude, final  List<String> lineIds = const <String>[], final  List<String> facilities = const <String>[], this.wheelchairAccessible = false, final  Map<String, int> stopOrderByLine = const <String, int>{}}): _lineIds = lineIds,_facilities = facilities,_stopOrderByLine = stopOrderByLine;
   factory _Station.fromJson(Map<String, dynamic> json) => _$StationFromJson(json);
 
 @override final  String id;
@@ -239,6 +246,25 @@ class _Station implements Station {
 }
 
 @override@JsonKey() final  bool wheelchairAccessible;
+// Per-line stop order (`{lineCode: stopOrder}`), used to draw each
+// line's real geographic polyline in station-sequence order on the live
+// map. Only `SupabaseTransitProvider` populates this from the
+// `station_lines` join's `stop_order` column — every other provider
+// (mock/demo/GTFS importer) defaults to empty, since they don't need
+// route-accurate map rendering.
+ final  Map<String, int> _stopOrderByLine;
+// Per-line stop order (`{lineCode: stopOrder}`), used to draw each
+// line's real geographic polyline in station-sequence order on the live
+// map. Only `SupabaseTransitProvider` populates this from the
+// `station_lines` join's `stop_order` column — every other provider
+// (mock/demo/GTFS importer) defaults to empty, since they don't need
+// route-accurate map rendering.
+@override@JsonKey() Map<String, int> get stopOrderByLine {
+  if (_stopOrderByLine is EqualUnmodifiableMapView) return _stopOrderByLine;
+  // ignore: implicit_dynamic_type
+  return EqualUnmodifiableMapView(_stopOrderByLine);
+}
+
 
 /// Create a copy of Station
 /// with the given fields replaced by the non-null parameter values.
@@ -253,16 +279,16 @@ Map<String, dynamic> toJson() {
 
 @override
 bool operator ==(Object other) {
-  return identical(this, other) || (other.runtimeType == runtimeType&&other is _Station&&(identical(other.id, id) || other.id == id)&&(identical(other.code, code) || other.code == code)&&(identical(other.name, name) || other.name == name)&&(identical(other.latitude, latitude) || other.latitude == latitude)&&(identical(other.longitude, longitude) || other.longitude == longitude)&&const DeepCollectionEquality().equals(other._lineIds, _lineIds)&&const DeepCollectionEquality().equals(other._facilities, _facilities)&&(identical(other.wheelchairAccessible, wheelchairAccessible) || other.wheelchairAccessible == wheelchairAccessible));
+  return identical(this, other) || (other.runtimeType == runtimeType&&other is _Station&&(identical(other.id, id) || other.id == id)&&(identical(other.code, code) || other.code == code)&&(identical(other.name, name) || other.name == name)&&(identical(other.latitude, latitude) || other.latitude == latitude)&&(identical(other.longitude, longitude) || other.longitude == longitude)&&const DeepCollectionEquality().equals(other._lineIds, _lineIds)&&const DeepCollectionEquality().equals(other._facilities, _facilities)&&(identical(other.wheelchairAccessible, wheelchairAccessible) || other.wheelchairAccessible == wheelchairAccessible)&&const DeepCollectionEquality().equals(other._stopOrderByLine, _stopOrderByLine));
 }
 
 @JsonKey(includeFromJson: false, includeToJson: false)
 @override
-int get hashCode => Object.hash(runtimeType,id,code,name,latitude,longitude,const DeepCollectionEquality().hash(_lineIds),const DeepCollectionEquality().hash(_facilities),wheelchairAccessible);
+int get hashCode => Object.hash(runtimeType,id,code,name,latitude,longitude,const DeepCollectionEquality().hash(_lineIds),const DeepCollectionEquality().hash(_facilities),wheelchairAccessible,const DeepCollectionEquality().hash(_stopOrderByLine));
 
 @override
 String toString() {
-  return 'Station(id: $id, code: $code, name: $name, latitude: $latitude, longitude: $longitude, lineIds: $lineIds, facilities: $facilities, wheelchairAccessible: $wheelchairAccessible)';
+  return 'Station(id: $id, code: $code, name: $name, latitude: $latitude, longitude: $longitude, lineIds: $lineIds, facilities: $facilities, wheelchairAccessible: $wheelchairAccessible, stopOrderByLine: $stopOrderByLine)';
 }
 
 
@@ -273,7 +299,7 @@ abstract mixin class _$StationCopyWith<$Res> implements $StationCopyWith<$Res> {
   factory _$StationCopyWith(_Station value, $Res Function(_Station) _then) = __$StationCopyWithImpl;
 @override @useResult
 $Res call({
- String id, String code, String name, double latitude, double longitude, List<String> lineIds, List<String> facilities, bool wheelchairAccessible
+ String id, String code, String name, double latitude, double longitude, List<String> lineIds, List<String> facilities, bool wheelchairAccessible, Map<String, int> stopOrderByLine
 });
 
 
@@ -290,7 +316,7 @@ class __$StationCopyWithImpl<$Res>
 
 /// Create a copy of Station
 /// with the given fields replaced by the non-null parameter values.
-@override @pragma('vm:prefer-inline') $Res call({Object? id = null,Object? code = null,Object? name = null,Object? latitude = null,Object? longitude = null,Object? lineIds = null,Object? facilities = null,Object? wheelchairAccessible = null,}) {
+@override @pragma('vm:prefer-inline') $Res call({Object? id = null,Object? code = null,Object? name = null,Object? latitude = null,Object? longitude = null,Object? lineIds = null,Object? facilities = null,Object? wheelchairAccessible = null,Object? stopOrderByLine = null,}) {
   return _then(_Station(
 id: null == id ? _self.id : id // ignore: cast_nullable_to_non_nullable
 as String,code: null == code ? _self.code : code // ignore: cast_nullable_to_non_nullable
@@ -300,7 +326,8 @@ as double,longitude: null == longitude ? _self.longitude : longitude // ignore: 
 as double,lineIds: null == lineIds ? _self._lineIds : lineIds // ignore: cast_nullable_to_non_nullable
 as List<String>,facilities: null == facilities ? _self._facilities : facilities // ignore: cast_nullable_to_non_nullable
 as List<String>,wheelchairAccessible: null == wheelchairAccessible ? _self.wheelchairAccessible : wheelchairAccessible // ignore: cast_nullable_to_non_nullable
-as bool,
+as bool,stopOrderByLine: null == stopOrderByLine ? _self._stopOrderByLine : stopOrderByLine // ignore: cast_nullable_to_non_nullable
+as Map<String, int>,
   ));
 }
 
@@ -606,10 +633,8 @@ mixin _$TripLeg {
 
  String get id; TransportMode get mode; String get originName; String get destinationName; DateTime get departureAt; DateTime get arrivalAt; String? get lineName; String? get headsign; List<String> get stationIds; int get walkingMeters; String? get transferInstruction;// The raw GTFS trip_id + service date backing this leg's physical
 // vehicle, when the originating provider actually has one (real feed
-// data, not Data Demo/mock) — the shared identifier crowd-sourced
-// position reports key off, since it's the one thing every provider
-// (`gtfs`/`local_supabase`) agrees on regardless of which one is
-// active. Null for mock/demo legs, which never report a position.
+// data, not mock) — the shared identifier crowd-sourced position
+// reports key off. Null for mock legs, which never report a position.
  String? get externalTripId; DateTime? get serviceDate;
 /// Create a copy of TripLeg
 /// with the given fields replaced by the non-null parameter values.
@@ -838,10 +863,8 @@ class _TripLeg implements TripLeg {
 @override final  String? transferInstruction;
 // The raw GTFS trip_id + service date backing this leg's physical
 // vehicle, when the originating provider actually has one (real feed
-// data, not Data Demo/mock) — the shared identifier crowd-sourced
-// position reports key off, since it's the one thing every provider
-// (`gtfs`/`local_supabase`) agrees on regardless of which one is
-// active. Null for mock/demo legs, which never report a position.
+// data, not mock) — the shared identifier crowd-sourced position
+// reports key off. Null for mock legs, which never report a position.
 @override final  String? externalTripId;
 @override final  DateTime? serviceDate;
 

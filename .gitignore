@@ -1,4 +1,5 @@
 # Miscellaneous
+dist/
 *.class
 *.log
 *.pyc
@@ -63,3 +64,8 @@ app.*.map.json
 /android/app/release
 .vercel
 .env*
+
+# Berkas APK tidak pernah masuk repo: ukurannya di atas batas 100MB GitHub,
+# dan distribusi rilis memang lewat Cloudflare R2 + tabel app_releases
+# (lihat docs/production-release-guide.md Bagian 3), bukan lewat git.
+*.apk

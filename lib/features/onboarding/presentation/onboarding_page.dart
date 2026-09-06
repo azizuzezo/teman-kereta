@@ -3,11 +3,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:go_router/go_router.dart';
 
-import '../../../app/config/app_environment.dart';
 import '../../../app/theme/app_theme.dart';
 import '../../../core/notifications/local_notification_service.dart';
 import '../../../core/preferences/preferences_store.dart';
-import '../../../core/widgets/data_badges.dart';
 import '../../../core/widgets/tk_logo.dart';
 import '../../../data/providers/provider_registry.dart';
 import '../../../domain/entities/transit_models.dart';
@@ -192,16 +190,11 @@ class _WelcomeStep extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final isDemo = AppEnvironment.provider == TransitProviderKind.mock;
     return SingleChildScrollView(
       padding: const EdgeInsets.fromLTRB(24, 28, 24, 24),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: <Widget>[
-          if (isDemo) ...<Widget>[
-            const DemoDataBanner(),
-            const SizedBox(height: 36),
-          ],
           Semantics(
             label: 'Ilustrasi kereta dan jalur perjalanan',
             image: true,
@@ -372,7 +365,10 @@ class _DailyRouteStep extends ConsumerWidget {
     )..sort((a, b) => a.name.compareTo(b.name));
     final stationItems = <DropdownMenuItem<String>>[
       for (final station in stations)
-        DropdownMenuItem(value: station.id, child: Text(station.name)),
+        DropdownMenuItem(
+          value: station.id,
+          child: Text(station.name, overflow: TextOverflow.ellipsis),
+        ),
     ];
     return SingleChildScrollView(
       padding: const EdgeInsets.fromLTRB(24, 30, 24, 24),
@@ -390,6 +386,7 @@ class _DailyRouteStep extends ConsumerWidget {
           const SizedBox(height: 28),
           DropdownButtonFormField<String>(
             initialValue: homeStation,
+            isExpanded: true,
             decoration: const InputDecoration(
               labelText: 'Stasiun rumah',
               prefixIcon: Icon(Icons.home_outlined),
@@ -400,6 +397,7 @@ class _DailyRouteStep extends ConsumerWidget {
           const SizedBox(height: 16),
           DropdownButtonFormField<String>(
             initialValue: workStation,
+            isExpanded: true,
             decoration: const InputDecoration(
               labelText: 'Stasiun kantor atau kampus',
               prefixIcon: Icon(Icons.work_outline_rounded),

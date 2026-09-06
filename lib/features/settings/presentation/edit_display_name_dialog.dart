@@ -3,6 +3,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../account/presentation/account_controller.dart';
 
+/// Longest display name a rider may set.
+const kMaxDisplayNameLength = 20;
+
 Future<void> showEditDisplayNameDialog(
   BuildContext context,
   WidgetRef ref, {
@@ -24,11 +27,20 @@ Future<void> showEditDisplayNameDialog(
               child: TextFormField(
                 controller: controller,
                 autofocus: true,
-                decoration: const InputDecoration(labelText: 'Nama tampilan'),
+                // Both a hard input cap and a validator: the cap stops the
+                // rider typing past the limit at all, the validator still
+                // catches a pasted/pre-existing value that is over it.
+                maxLength: kMaxDisplayNameLength,
+                decoration: const InputDecoration(
+                  labelText: 'Nama tampilan',
+                  helperText: 'Maksimal $kMaxDisplayNameLength karakter.',
+                ),
                 validator: (value) {
                   final trimmed = value?.trim() ?? '';
                   if (trimmed.isEmpty) return 'Nama tidak boleh kosong.';
-                  if (trimmed.length > 80) return 'Nama maksimal 80 karakter.';
+                  if (trimmed.length > kMaxDisplayNameLength) {
+                    return 'Nama maksimal $kMaxDisplayNameLength karakter.';
+                  }
                   return null;
                 },
               ),

@@ -1,0 +1,67 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 380 780" width="380" height="780" style="background:#090d16; font-family:'Plus Jakarta Sans', -apple-system, system-ui, sans-serif;">
+  <defs>
+    <linearGradient id="surfaceGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#151d2f"/>
+      <stop offset="100%" stop-color="#0f172a"/>
+    </linearGradient>
+  </defs>
+
+  <rect width="380" height="85" fill="#0f172a" stroke="#1e293b" stroke-width="1"/>
+  <text x="24" y="52" fill="#f8fafc" font-size="17" font-weight="700">Informasi &amp; Fasilitas Stasiun</text>
+
+  <!-- Station Header -->
+  <g transform="translate(20, 105)">
+    <rect width="340" height="92" rx="18" fill="url(#surfaceGrad)" stroke="#1e293b" stroke-width="1"/>
+    <text x="20" y="32" fill="#ffffff" font-size="17" font-weight="800">Stasiun Manggarai (MRI)</text>
+    <text x="20" y="52" fill="#94a3b8" font-size="11.5">Hub Transit Utama KRL Jabodetabek</text>
+    <text x="20" y="74" fill="#38bdf8" font-size="11" font-weight="600">Akses Ramah Kursi Roda • Lift &amp; Eskalator</text>
+  </g>
+
+  <!-- Facilities Grid -->
+  <g transform="translate(20, 212)">
+    <rect width="340" height="230" rx="20" fill="url(#surfaceGrad)" stroke="#1e293b" stroke-width="1"/>
+    <text x="20" y="28" fill="#ffffff" font-size="13.5" font-weight="700">Fasilitas Utama Stasiun</text>
+
+    <rect x="20" y="44" width="145" height="75" rx="12" fill="#0f172a" stroke="#1e293b" stroke-width="1"/>
+    <circle cx="40" cy="68" r="8" fill="#2563eb" fill-opacity="0.2"/>
+    <circle cx="40" cy="68" r="3" fill="#38bdf8"/>
+    <text x="56" y="72" fill="#ffffff" font-size="12" font-weight="600">Lift &amp; Eskalator</text>
+    <text x="28" y="102" fill="#94a3b8" font-size="10">Peron 1 s.d 12</text>
+
+    <rect x="175" y="44" width="145" height="75" rx="12" fill="#0f172a" stroke="#1e293b" stroke-width="1"/>
+    <circle cx="195" cy="68" r="8" fill="#10b981" fill-opacity="0.2"/>
+    <circle cx="195" cy="68" r="3" fill="#34d399"/>
+    <text x="211" y="72" fill="#ffffff" font-size="12" font-weight="600">Musholla</text>
+    <text x="183" y="102" fill="#94a3b8" font-size="10">Lantai 2 &amp; Peron</text>
+
+    <rect x="20" y="132" width="145" height="75" rx="12" fill="#0f172a" stroke="#1e293b" stroke-width="1"/>
+    <circle cx="40" cy="156" r="8" fill="#f59e0b" fill-opacity="0.2"/>
+    <circle cx="40" cy="156" r="3" fill="#fbbf24"/>
+    <text x="56" y="160" fill="#ffffff" font-size="12" font-weight="600">Toilet Bersih</text>
+    <text x="28" y="190" fill="#94a3b8" font-size="10">Umum &amp; Difabel</text>
+
+    <rect x="175" y="132" width="145" height="75" rx="12" fill="#0f172a" stroke="#1e293b" stroke-width="1"/>
+    <circle cx="195" cy="156" r="8" fill="#8b5cf6" fill-opacity="0.2"/>
+    <circle cx="195" cy="156" r="3" fill="#a78bfa"/>
+    <text x="211" y="160" fill="#ffffff" font-size="12" font-weight="600">Minimarket &amp; ATM</text>
+    <text x="183" y="190" fill="#94a3b8" font-size="10">Lantai Concourse</text>
+  </g>
+
+  <!-- Connections -->
+  <g transform="translate(20, 458)">
+    <rect width="340" height="240" rx="20" fill="url(#surfaceGrad)" stroke="#1e293b" stroke-width="1"/>
+    <text x="20" y="30" fill="#ffffff" font-size="13.5" font-weight="700">Integrasi Transportasi Lanjutan</text>
+    
+    <rect x="20" y="48" width="300" height="50" rx="12" fill="#0f172a" stroke="#1e293b" stroke-width="1"/>
+    <text x="35" y="70" fill="#ffffff" font-size="12" font-weight="600">TransJakarta (Halte Manggarai)</text>
+    <text x="35" y="86" fill="#94a3b8" font-size="10.5">Koridor 4, 4D • Terhubung Skybridge</text>
+
+    <rect x="20" y="108" width="300" height="50" rx="12" fill="#0f172a" stroke="#1e293b" stroke-width="1"/>
+    <text x="35" y="130" fill="#ffffff" font-size="12" font-weight="600">Titik Jemput Ojek Online</text>
+    <text x="35" y="146" fill="#94a3b8" font-size="10.5">Pintu Barat &amp; Pintu Timur</text>
+
+    <rect x="20" y="168" width="300" height="50" rx="12" fill="#0f172a" stroke="#1e293b" stroke-width="1"/>
+    <text x="35" y="190" fill="#ffffff" font-size="12" font-weight="600">Mikrotrans / JakLingko</text>
+    <text x="35" y="206" fill="#94a3b8" font-size="10.5">JAK-86, JAK-85</text>
+  </g>
+</svg>

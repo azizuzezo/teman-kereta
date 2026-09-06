@@ -5,7 +5,9 @@ import 'package:go_router/go_router.dart';
 import '../../../app/theme/app_theme.dart';
 import '../../../core/widgets/empty_state.dart';
 import '../../../data/providers/demo_data.dart';
+import '../../../data/providers/provider_registry.dart';
 import '../../../domain/entities/ride_detection.dart';
+import '../../../domain/entities/transit_models.dart';
 import 'ride_detection_controller.dart';
 
 class RideDetectionConfirmPage extends ConsumerWidget {
@@ -31,10 +33,11 @@ class RideDetectionConfirmPage extends ConsumerWidget {
       );
     }
 
-    final stationName = _stationName(assessment.stationId);
+    final stations = ref.watch(stationListProvider).value ?? const <Station>[];
+    final stationName = _stationName(assessment.stationId, stations);
     final destinationName = assessment.suggestedDestinationId == null
         ? null
-        : _stationName(assessment.suggestedDestinationId!);
+        : _stationName(assessment.suggestedDestinationId!, stations);
     final isStrong = assessment.level == RideDetectionLevel.strong;
 
     return Scaffold(
@@ -104,7 +107,7 @@ class RideDetectionConfirmPage extends ConsumerWidget {
                 child: OutlinedButton(
                   onPressed: () {
                     controller.chooseAnother();
-                    context.go('/schedule');
+                    context.go('/schedule/search');
                   },
                   child: const Text('Pilih kereta lain'),
                 ),
@@ -141,8 +144,9 @@ class RideDetectionConfirmPage extends ConsumerWidget {
     );
   }
 
-  String _stationName(String id) {
-    return demoStations.where((station) => station.id == id).firstOrNull?.name ??
+  String _stationName(String id, List<Station> stations) {
+    return stations.where((s) => s.id == id).firstOrNull?.name ??
+        demoStations.where((s) => s.id == id).firstOrNull?.name ??
         id;
   }
 }

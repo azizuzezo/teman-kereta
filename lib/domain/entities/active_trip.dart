@@ -33,6 +33,22 @@ abstract class ActiveTripSession with _$ActiveTripSession {
     @Default(100) int confidenceScore,
     @Default(false) bool lowBatteryMode,
     @Default(false) bool confirmedByUser,
+    // Cumulative straight-line distance covered so far, summed hop-by-hop
+    // from station coordinates as `currentStationIndex` advances — there's
+    // no track-shape/polyline data to follow the rail curve exactly.
+    @Default(0) double distanceMeters,
+    // Best-known current speed in km/h: refreshed either from a real GPS fix
+    // (see `CrowdPositionReporter`) or, lacking one, from the previous
+    // hop's distance/time as a stand-in "train speed" reading. Null until
+    // the first hop or GPS fix is available.
+    double? currentSpeedKmh,
+    // Optional free-text final destination (address/place name) beyond the
+    // destination station itself, entered by the user before starting the
+    // trip. Carried through to the arrived/complete screen so it can offer
+    // a "Buka di Google Maps ke [tujuan]" button via
+    // `launchMapDirectionsToQuery` — Google Maps' own geocoder resolves it,
+    // this app never geocodes addresses itself.
+    String? finalDestinationQuery,
   }) = _ActiveTripSession;
   const ActiveTripSession._();
 

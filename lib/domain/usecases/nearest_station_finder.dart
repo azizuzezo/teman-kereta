@@ -1,5 +1,4 @@
-import 'dart:math' as math;
-
+import '../../core/utils/geo.dart';
 import '../entities/transit_models.dart';
 
 class StationDistance {
@@ -37,7 +36,7 @@ class NearestStationFinder {
   }
 
   StationDistance _distanceTo(Station station, double latitude, double longitude) {
-    final meters = _haversineMeters(
+    final meters = haversineMeters(
       latitude,
       longitude,
       station.latitude,
@@ -50,24 +49,4 @@ class NearestStationFinder {
       walkingMinutes: minutes < 1 ? 1 : minutes,
     );
   }
-
-  static double _haversineMeters(
-    double lat1,
-    double lon1,
-    double lat2,
-    double lon2,
-  ) {
-    const earthRadiusMeters = 6371000.0;
-    final dLat = _degToRad(lat2 - lat1);
-    final dLon = _degToRad(lon2 - lon1);
-    final a = math.sin(dLat / 2) * math.sin(dLat / 2) +
-        math.cos(_degToRad(lat1)) *
-            math.cos(_degToRad(lat2)) *
-            math.sin(dLon / 2) *
-            math.sin(dLon / 2);
-    final c = 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a));
-    return earthRadiusMeters * c;
-  }
-
-  static double _degToRad(double degrees) => degrees * (math.pi / 180);
 }

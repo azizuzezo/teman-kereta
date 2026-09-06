@@ -13,11 +13,6 @@
          Requested only when the user turns on auto-detection in Settings, never on launch. -->
     <uses-permission android:name="android.permission.ACTIVITY_RECOGNITION" />
 
-    <!-- Play services clears all geofence registrations on device reboot; GeofenceBootReceiver
-         replays the last-registered scope from native state once location permission already
-         granted (see NativeStateStore.GEOFENCE_DETAILS_JSON). -->
-    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
-
     <application
         android:label="@string/app_name"
         android:name="${applicationName}"
@@ -62,23 +57,9 @@
             android:stopWithTask="false" />
 
         <receiver
-            android:name=".StationGeofenceReceiver"
-            android:enabled="true"
-            android:exported="false" />
-
-        <receiver
             android:name=".ActivityTransitionReceiver"
             android:enabled="true"
             android:exported="false" />
-
-        <receiver
-            android:name=".GeofenceBootReceiver"
-            android:enabled="true"
-            android:exported="false">
-            <intent-filter>
-                <action android:name="android.intent.action.BOOT_COMPLETED" />
-            </intent-filter>
-        </receiver>
 
         <receiver
             android:name=".NextDepartureWidgetProvider"
@@ -128,6 +109,18 @@
                 android:resource="@xml/service_status_widget_info" />
         </receiver>
 
+        <!-- Notifications delivered by FCM while the app is backgrounded are
+             posted by the Firebase SDK itself, not by this app's Dart or
+             native notifier, so they need their own icon/tint pointers.
+             Without them the SDK falls back to the launcher icon, which
+             Android masks into a blank white square. -->
+        <meta-data
+            android:name="com.google.firebase.messaging.default_notification_icon"
+            android:resource="@drawable/ic_stat_tk" />
+        <meta-data
+            android:name="com.google.firebase.messaging.default_notification_color"
+            android:resource="@color/tk_notification_accent" />
+
         <!-- Don't delete the meta-data below.
              This is used by the Flutter tool to generate GeneratedPluginRegistrant.java -->
         <meta-data
@@ -143,6 +136,18 @@
         <intent>
             <action android:name="android.intent.action.PROCESS_TEXT"/>
             <data android:mimeType="text/plain"/>
+        </intent>
+        <intent>
+            <action android:name="android.intent.action.VIEW" />
+            <data android:scheme="geo" />
+        </intent>
+        <intent>
+            <action android:name="android.intent.action.VIEW" />
+            <data android:scheme="google.navigation" />
+        </intent>
+        <intent>
+            <action android:name="android.intent.action.VIEW" />
+            <data android:scheme="https" />
         </intent>
     </queries>
 </manifest>

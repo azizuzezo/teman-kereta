@@ -146,18 +146,30 @@ async function main() {
   const days = dateWindow(startDateIso, windowDays);
 
   console.log("Upserting stations...");
+  const { data: existingStations } = await supabase
+    .from("stations")
+    .select("code, latitude, longitude");
+  const existingCoordsMap = new Map(
+    existingStations?.map((s) => [s.code, { latitude: s.latitude, longitude: s.longitude }]) ?? [],
+  );
+
   await upsertInChunks(
     supabase,
     "stations",
-    feed.stops.map((stop) => ({
-      code: stop.stopId,
-      name: stop.name,
-      latitude: stop.latitude,
-      longitude: stop.longitude,
-      wheelchair_accessible:
-        stop.wheelchairBoarding === 1 ? true : stop.wheelchairBoarding === 2 ? false : null,
-      facilities: parseStationDescription(stop.description),
-    })),
+    feed.stops.map((stop) => {
+      const existing = existingCoordsMap.get(stop.stopId);
+      const lat = stop.latitude !== 0 ? stop.latitude : (existing?.latitude ?? 0);
+      const lon = stop.longitude !== 0 ? stop.longitude : (existing?.longitude ?? 0);
+      return {
+        code: stop.stopId,
+        name: stop.name,
+        latitude: lat,
+        longitude: lon,
+        wheelchair_accessible:
+          stop.wheelchairBoarding === 1 ? true : stop.wheelchairBoarding === 2 ? false : null,
+        facilities: parseStationDescription(stop.description),
+      };
+    }),
     "code",
   );
   const { data: stationRows, error: stationError } = await supabase

@@ -5,6 +5,12 @@ analyzer:
     - build/**
     - lib/**/*.freezed.dart
     - lib/**/*.g.dart
+    - android/**
+    - ios/**
+    - web/**
+    - windows/**
+    - macos/**
+    - linux/**
   errors:
     invalid_annotation_target: ignore
 

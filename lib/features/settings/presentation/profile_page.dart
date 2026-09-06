@@ -9,7 +9,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../../app/config/app_environment.dart';
 import '../../../core/notifications/local_notification_service.dart';
-import '../../../core/utils/station_location_resolver.dart';
+import '../../../core/updates/update_checker.dart';
 import '../../../core/widgets/tk_logo.dart';
 import '../../../data/providers/provider_registry.dart';
 import '../../../domain/entities/transit_models.dart';
@@ -168,12 +168,6 @@ class ProfilePage extends ConsumerWidget {
                                   },
                                 ),
                               ],
-                              const SizedBox(height: 2),
-                              Text(
-                                account != null
-                                    ? 'Masuk dengan akun. Preferensi tetap tersimpan di perangkat ini.'
-                                    : 'Mode tanpa akun. Preferensi tersimpan di perangkat ini.',
-                              ),
                             ],
                           ),
                         ),
@@ -284,7 +278,7 @@ class ProfilePage extends ConsumerWidget {
             ),
             const SizedBox(height: 26),
             Text(
-              'Alamat & Stasiun Komuter',
+              'Stasiun Komuter',
               style: Theme.of(context).textTheme.titleLarge,
             ),
             const SizedBox(height: 10),
@@ -294,131 +288,50 @@ class ProfilePage extends ConsumerWidget {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: <Widget>[
-                    TextFormField(
-                      initialValue: settings.homeAddress ?? '',
-                      decoration: const InputDecoration(
-                        labelText: 'Alamat / Lokasi Rumah',
-                        hintText: 'Contoh: Billabong, Tajurhalang, Bintaro...',
-                        prefixIcon: Icon(Icons.home_work_outlined),
-                      ),
-                      onChanged: (value) {
-                        unawaited(controller.setHomeAddress(value));
-                        final res = resolveAddressToNearestStation(value, stations);
-                        if (res != null) {
-                          unawaited(controller.setHomeStation(res.station.id));
-                        }
-                      },
-                    ),
-                    const SizedBox(height: 8),
+                    // Just the two stations. The free-text "Alamat / Lokasi"
+                    // fields that used to sit above each dropdown (and
+                    // guessed a station from whatever was typed) are gone:
+                    // the station is the only part the app actually uses,
+                    // and picking it directly is both shorter and exact.
                     DropdownButtonFormField<String>(
                       initialValue: settings.homeStationId,
+                      isExpanded: true,
                       decoration: const InputDecoration(
-                        labelText: 'Stasiun terdekat dari rumah',
+                        labelText: 'Stasiun rumah',
                         prefixIcon: Icon(Icons.home_outlined),
                       ),
                       items: <DropdownMenuItem<String>>[
                         for (final station in stations)
                           DropdownMenuItem(
                             value: station.id,
-                            child: Text('${station.name} (${station.id})'),
+                            child: Text(
+                              '${station.name} (${station.id})',
+                              overflow: TextOverflow.ellipsis,
+                            ),
                           ),
                       ],
                       onChanged: (value) => unawaited(controller.setHomeStation(value)),
                     ),
-                    if (settings.homeAddress != null && settings.homeAddress!.isNotEmpty) ...<Widget>[
-                      const SizedBox(height: 4),
-                      Builder(
-                        builder: (context) {
-                          final resolved = resolveAddressToNearestStation(
-                            settings.homeAddress!,
-                            stations,
-                          );
-                          if (resolved == null) return const SizedBox.shrink();
-                          return Container(
-                            padding: const EdgeInsets.all(8),
-                            decoration: BoxDecoration(
-                              color: Theme.of(context).colorScheme.primaryContainer.withValues(alpha: 0.4),
-                              borderRadius: BorderRadius.circular(8),
-                            ),
-                            child: Row(
-                              children: <Widget>[
-                                const Icon(Icons.auto_awesome, size: 16),
-                                const SizedBox(width: 6),
-                                Expanded(
-                                  child: Text(
-                                    resolved.reason,
-                                    style: Theme.of(context).textTheme.bodySmall,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          );
-                        },
-                      ),
-                    ],
                     const SizedBox(height: 16),
-                    TextFormField(
-                      initialValue: settings.workAddress ?? '',
-                      decoration: const InputDecoration(
-                        labelText: 'Alamat / Lokasi Kantor atau Kampus',
-                        hintText: 'Contoh: Wisma 46 Sudirman, BSD City, Margonda...',
-                        prefixIcon: Icon(Icons.business_outlined),
-                      ),
-                      onChanged: (value) {
-                        unawaited(controller.setWorkAddress(value));
-                        final res = resolveAddressToNearestStation(value, stations);
-                        if (res != null) {
-                          unawaited(controller.setWorkStation(res.station.id));
-                        }
-                      },
-                    ),
-                    const SizedBox(height: 8),
                     DropdownButtonFormField<String>(
                       initialValue: settings.workStationId,
+                      isExpanded: true,
                       decoration: const InputDecoration(
-                        labelText: 'Stasiun terdekat dari kantor/kampus',
+                        labelText: 'Stasiun kantor/kampus',
                         prefixIcon: Icon(Icons.work_outline_rounded),
                       ),
                       items: <DropdownMenuItem<String>>[
                         for (final station in stations)
                           DropdownMenuItem(
                             value: station.id,
-                            child: Text('${station.name} (${station.id})'),
+                            child: Text(
+                              '${station.name} (${station.id})',
+                              overflow: TextOverflow.ellipsis,
+                            ),
                           ),
                       ],
                       onChanged: (value) => unawaited(controller.setWorkStation(value)),
                     ),
-                    if (settings.workAddress != null && settings.workAddress!.isNotEmpty) ...<Widget>[
-                      const SizedBox(height: 4),
-                      Builder(
-                        builder: (context) {
-                          final resolved = resolveAddressToNearestStation(
-                            settings.workAddress!,
-                            stations,
-                          );
-                          if (resolved == null) return const SizedBox.shrink();
-                          return Container(
-                            padding: const EdgeInsets.all(8),
-                            decoration: BoxDecoration(
-                              color: Theme.of(context).colorScheme.primaryContainer.withValues(alpha: 0.4),
-                              borderRadius: BorderRadius.circular(8),
-                            ),
-                            child: Row(
-                              children: <Widget>[
-                                const Icon(Icons.auto_awesome, size: 16),
-                                const SizedBox(width: 6),
-                                Expanded(
-                                  child: Text(
-                                    resolved.reason,
-                                    style: Theme.of(context).textTheme.bodySmall,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          );
-                        },
-                      ),
-                    ],
                     const Divider(height: 28),
                     SwitchListTile(
                       contentPadding: EdgeInsets.zero,
@@ -444,7 +357,8 @@ class ProfilePage extends ConsumerWidget {
                       },
                       title: const Text('Deteksi otomatis naik KRL'),
                       subtitle: const Text(
-                        'Meminta izin sensor gerak dan mendaftarkan geofence stasiun rumah/kantor. '
+                        'Meminta izin sensor gerak dan menggunakan GPS real-time untuk mendeteksi '
+                        'saat kamu meninggalkan stasiun rumah/kantor sambil bergerak. '
                         'Tetap meminta konfirmasi sebelum memulai panduan perjalanan. '
                         'Saat perjalanan aktif berjalan, posisi GPS-mu juga dikirim secara berkala '
                         'ke server untuk membantu menampilkan posisi kereta ke pengguna lain — '
@@ -484,14 +398,6 @@ class ProfilePage extends ConsumerWidget {
             Card(
               child: Column(
                 children: <Widget>[
-                  SwitchListTile(
-                    value: settings.offlineMode,
-                    onChanged: controller.setOfflineMode,
-                    secondary: const Icon(Icons.offline_bolt_outlined),
-                    title: const Text('Paksa mode offline'),
-                    subtitle: const Text('Gunakan data yang tersimpan di cache perangkat.'),
-                  ),
-                  const Divider(height: 1),
                   ListTile(
                     leading: const Icon(Icons.notifications_active_outlined),
                     title: const Text('Aktifkan notifikasi perangkat'),
@@ -531,10 +437,10 @@ class ProfilePage extends ConsumerWidget {
                   ),
                   const Divider(height: 1),
                   ListTile(
-                    leading: const Icon(Icons.offline_bolt_outlined),
-                    title: const Text('Mode offline'),
+                    leading: const Icon(Icons.insights_rounded),
+                    title: const Text('Rekap perjalanan'),
                     trailing: const Icon(Icons.chevron_right_rounded),
-                    onTap: () => context.push('/offline-mode'),
+                    onTap: () => context.push('/history/recap'),
                   ),
                   const Divider(height: 1),
                   ListTile(
@@ -549,6 +455,16 @@ class ProfilePage extends ConsumerWidget {
                     title: const Text('Pengaturan notifikasi'),
                     trailing: const Icon(Icons.chevron_right_rounded),
                     onTap: () => context.push('/settings/notifications'),
+                  ),
+                  const Divider(height: 1),
+                  ListTile(
+                    leading: const Icon(Icons.volume_up_rounded),
+                    title: const Text('Tes suara peringatan'),
+                    subtitle: const Text(
+                      'Dengarkan nada tiap peringatan sebelum perjalanan asli.',
+                    ),
+                    trailing: const Icon(Icons.chevron_right_rounded),
+                    onTap: () => context.push('/settings/sound-test'),
                   ),
                   const Divider(height: 1),
                   ListTile(
@@ -618,7 +534,11 @@ class ProfilePage extends ConsumerWidget {
             const SizedBox(height: 18),
             Center(
               child: Text(
-                'TK 0.1.0',
+                ref.watch(packageInfoProvider).when(
+                  data: (info) => 'TK ${info.version}',
+                  loading: () => 'TK',
+                  error: (_, _) => 'TK',
+                ),
                 style: Theme.of(context).textTheme.bodySmall,
               ),
             ),

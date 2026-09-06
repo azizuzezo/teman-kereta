@@ -1,13 +1,20 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../../core/updates/update_checker.dart';
 import '../../../core/widgets/tk_logo.dart';
 
-class AppUpdatePage extends StatelessWidget {
+class AppUpdatePage extends ConsumerWidget {
   const AppUpdatePage({super.key});
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    final packageInfo = ref.watch(packageInfoProvider);
+    final pendingUpdate = ref.watch(updateCheckerControllerProvider);
+
     return Scaffold(
       appBar: AppBar(title: const Text('Tentang & pembaruan')),
       body: SafeArea(
@@ -23,7 +30,15 @@ class AppUpdatePage extends StatelessWidget {
               ),
             ),
             const SizedBox(height: 4),
-            const Center(child: Text('Versi 0.1.0')),
+            Center(
+              child: Text(
+                packageInfo.when(
+                  data: (info) => 'Versi ${info.version} (${info.buildNumber})',
+                  loading: () => 'Memuat versi…',
+                  error: (_, _) => 'Versi tidak diketahui',
+                ),
+              ),
+            ),
             const SizedBox(height: 28),
             Card(
               child: Padding(
@@ -31,21 +46,45 @@ class AppUpdatePage extends StatelessWidget {
                 child: Row(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: <Widget>[
-                    const Icon(Icons.system_update_outlined),
+                    Icon(
+                      pendingUpdate != null
+                          ? Icons.system_update_outlined
+                          : Icons.check_circle_outline,
+                    ),
                     const SizedBox(width: 12),
                     Expanded(
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: <Widget>[
-                          const Text(
-                            'Pengecekan pembaruan belum tersedia',
-                            style: TextStyle(fontWeight: FontWeight.w700),
+                          Text(
+                            pendingUpdate != null
+                                ? 'Pembaruan tersedia: versi ${pendingUpdate.versionName}'
+                                : 'Kamu menggunakan versi terbaru',
+                            style: const TextStyle(fontWeight: FontWeight.w700),
                           ),
                           const SizedBox(height: 6),
-                          const Text(
-                            'Build lokal ini belum terhubung ke Play Store atau server '
-                            'pembaruan mana pun. Pasang versi terbaru secara manual saat tersedia.',
+                          Text(
+                            pendingUpdate != null
+                                ? ((pendingUpdate.changelog?.isNotEmpty ?? false)
+                                    ? pendingUpdate.changelog!
+                                    : 'Ketuk tombol di bawah untuk memasang versi terbaru.')
+                                : 'Aplikasi ini dipasang langsung (bukan lewat Play Store) — '
+                                      'pembaruan diperiksa otomatis setiap kali dibuka.',
                           ),
+                          const SizedBox(height: 12),
+                          if (pendingUpdate != null)
+                            FilledButton(
+                              onPressed: () => unawaited(
+                                showUpdateAvailableDialog(context, pendingUpdate),
+                              ),
+                              child: const Text('Update sekarang'),
+                            )
+                          else
+                            OutlinedButton(
+                              onPressed: () =>
+                                  ref.invalidate(updateCheckerControllerProvider),
+                              child: const Text('Cek pembaruan'),
+                            ),
                         ],
                       ),
                     ),

@@ -1,0 +1,55 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 380 780" width="380" height="780" style="background:#090d16; font-family:'Plus Jakarta Sans', -apple-system, system-ui, sans-serif;">
+  <defs>
+    <linearGradient id="surfaceGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#151d2f"/>
+      <stop offset="100%" stop-color="#0f172a"/>
+    </linearGradient>
+    <linearGradient id="alarmCardGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#ea580c"/>
+      <stop offset="100%" stop-color="#c2410c"/>
+    </linearGradient>
+  </defs>
+
+  <rect width="380" height="85" fill="#0f172a" stroke="#1e293b" stroke-width="1"/>
+  <text x="24" y="52" fill="#f8fafc" font-size="17" font-weight="700">Pengingat &amp; Alarm Stasiun</text>
+
+  <!-- Alarm Notification Card -->
+  <g transform="translate(20, 108)">
+    <rect width="340" height="260" rx="22" fill="url(#alarmCardGrad)" stroke="#f97316" stroke-width="1"/>
+    
+    <circle cx="170" cy="58" r="28" fill="#ffffff" fill-opacity="0.15"/>
+    <circle cx="170" cy="58" r="12" fill="#ffffff"/>
+    
+    <text x="170" y="118" text-anchor="middle" fill="#ffffff" font-size="18" font-weight="800">Bersiap Turun</text>
+    <text x="170" y="144" text-anchor="middle" fill="#fed7aa" font-size="12">Kereta mendekati stasiun tujuan:</text>
+    <text x="170" y="174" text-anchor="middle" fill="#ffffff" font-size="22" font-weight="800">Stasiun Tebet</text>
+    <text x="170" y="198" text-anchor="middle" fill="#fed7aa" font-size="12 font-weight-500">1 Stasiun Lagi • Estimasi 2 Menit</text>
+    
+    <rect x="36" y="214" width="268" height="26" rx="13" fill="#000000" fill-opacity="0.25"/>
+    <text x="170" y="231" text-anchor="middle" fill="#ffffff" font-size="10.5" font-weight="600">Getaran &amp; Nada Dering Aktif</text>
+  </g>
+
+  <!-- Settings List -->
+  <g transform="translate(20, 395)">
+    <rect width="340" height="340" rx="20" fill="url(#surfaceGrad)" stroke="#1e293b" stroke-width="1"/>
+    <text x="20" y="32" fill="#ffffff" font-size="14" font-weight="700">Pengaturan Alarm Pintar</text>
+    
+    <rect x="20" y="52" width="300" height="62" rx="14" fill="#0f172a" stroke="#1e293b" stroke-width="1"/>
+    <text x="36" y="78" fill="#ffffff" font-size="12.5" font-weight="600">Peringatan Sebelum Tujuan</text>
+    <text x="36" y="96" fill="#94a3b8" font-size="11">Aktifkan 1 atau 2 stasiun sebelumnya</text>
+    <rect x="254" y="70" width="46" height="26" rx="13" fill="#2563eb"/>
+    <circle cx="284" cy="83" r="9" fill="#ffffff"/>
+
+    <rect x="20" y="126" width="300" height="62" rx="14" fill="#0f172a" stroke="#1e293b" stroke-width="1"/>
+    <text x="36" y="152" fill="#ffffff" font-size="12.5" font-weight="600">Peringatan Stasiun Transit</text>
+    <text x="36" y="170" fill="#94a3b8" font-size="11">Alarm khusus perpindahan jalur</text>
+    <rect x="254" y="144" width="46" height="26" rx="13" fill="#2563eb"/>
+    <circle cx="284" cy="157" r="9" fill="#ffffff"/>
+
+    <rect x="20" y="200" width="300" height="62" rx="14" fill="#0f172a" stroke="#1e293b" stroke-width="1"/>
+    <text x="36" y="226" fill="#ffffff" font-size="12.5" font-weight="600">Pola Getar Kuat</text>
+    <text x="36" y="244" fill="#94a3b8" font-size="11">Getaran ritmik saat berada di saku</text>
+    <rect x="254" y="218" width="46" height="26" rx="13" fill="#2563eb"/>
+    <circle cx="284" cy="231" r="9" fill="#ffffff"/>
+  </g>
+</svg>

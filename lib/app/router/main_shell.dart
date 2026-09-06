@@ -3,6 +3,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../data/providers/demo_data.dart';
+import '../../data/providers/provider_registry.dart';
+import '../../domain/entities/transit_models.dart';
 import '../../features/active_trip/presentation/active_trip_controller.dart';
 
 class MainShell extends ConsumerWidget {
@@ -13,6 +15,9 @@ class MainShell extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final activeTrip = ref.watch(activeTripControllerProvider);
+    final stations =
+        ref.watch(stationListProvider).asData?.value ?? const <Station>[];
+
     return Scaffold(
       body: navigationShell,
       bottomNavigationBar: Column(
@@ -43,7 +48,7 @@ class MainShell extends ConsumerWidget {
                                 ).textTheme.labelLarge,
                               ),
                               Text(
-                                'Tujuan ${_stationName(activeTrip.trip.destinationStationId)}',
+                                'Tujuan ${_stationName(stations, activeTrip.trip.destinationStationId)}',
                                 maxLines: 1,
                                 overflow: TextOverflow.ellipsis,
                                 style: Theme.of(context).textTheme.bodySmall,
@@ -61,10 +66,7 @@ class MainShell extends ConsumerWidget {
           NavigationBar(
             selectedIndex: navigationShell.currentIndex,
             onDestinationSelected: (index) {
-              navigationShell.goBranch(
-                index,
-                initialLocation: index == navigationShell.currentIndex,
-              );
+              navigationShell.goBranch(index);
             },
             destinations: const <NavigationDestination>[
               NavigationDestination(
@@ -88,6 +90,11 @@ class MainShell extends ConsumerWidget {
                 label: 'Jelajahi',
               ),
               NavigationDestination(
+                icon: Icon(Icons.forum_outlined),
+                selectedIcon: Icon(Icons.forum_rounded),
+                label: 'Forum',
+              ),
+              NavigationDestination(
                 icon: Icon(Icons.person_outline_rounded),
                 selectedIcon: Icon(Icons.person_rounded),
                 label: 'Profil',
@@ -99,8 +106,9 @@ class MainShell extends ConsumerWidget {
     );
   }
 
-  String _stationName(String id) {
-    return demoStations.where((station) => station.id == id).firstOrNull?.name ??
+  String _stationName(List<Station> stations, String id) {
+    return stations.where((station) => station.id == id).firstOrNull?.name ??
+        demoStations.where((station) => station.id == id).firstOrNull?.name ??
         id;
   }
 }

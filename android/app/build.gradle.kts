@@ -5,6 +5,12 @@ plugins {
     id("com.android.application")
     // The Flutter Gradle Plugin must be applied after the Android and Kotlin Gradle plugins.
     id("dev.flutter.flutter-gradle-plugin")
+    // Firebase Cloud Messaging. Reads android/app/google-services.json, which
+    // does not exist in this checkout yet — until a human adds a real one
+    // (see the Firebase console setup steps), this plugin will fail the
+    // build. That failure is the Google Services plugin's own expected
+    // behavior for a missing config file, not a bug introduced here.
+    id("com.google.gms.google-services")
 }
 
 // Real release signing, read from android/key.properties (gitignored, never
@@ -22,9 +28,13 @@ if (hasReleaseKeystore) {
 
 android {
     namespace = "id.temankereta.teman_kereta"
+    // Cannot be lowered below 36: several transitive AndroidX/Firebase
+    // dependencies (androidx.activity 1.12.4, androidx.core-ktx/core 1.18.0)
+    // hard-require compileSdk >= 36 and fail the build otherwise (confirmed
+    // by trying compileSdk=34). compileSdk only affects which APIs are
+    // available at compile time -- it is not itself a device-install-time
+    // compatibility gate, so this was never the cause of install failures.
     compileSdk = 36
-    ndkVersion = flutter.ndkVersion
-
     compileOptions {
         isCoreLibraryDesugaringEnabled = true
         sourceCompatibility = JavaVersion.VERSION_17
@@ -70,6 +80,25 @@ android {
 kotlin {
     compilerOptions {
         jvmTarget = org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_17
+    }
+}
+
+// Ship a release APK a human can identify. Gradle's own output name is left
+// as `app-release.apk` on purpose -- `flutter build apk` looks that exact
+// filename up by hand (flutter_tools' `_apkFilesFor`) and fails the build
+// with "Gradle build failed to produce an .apk file" if it is renamed. So
+// this writes a *second*, properly named copy next to it rather than
+// renaming the first. `scripts/build-release.ps1` publishes under the same
+// name, so what a rider downloads is `Teman-Kereta.<versi>.apk`.
+val friendlyReleaseApkName = "Teman-Kereta.${flutter.versionName}.apk"
+val releaseApkDirectory = layout.buildDirectory.dir("outputs/apk/release")
+tasks.matching { it.name == "assembleRelease" }.configureEach {
+    doLast {
+        val directory = releaseApkDirectory.get().asFile
+        val built = directory.resolve("app-release.apk")
+        if (built.exists()) {
+            built.copyTo(directory.resolve(friendlyReleaseApkName), overwrite = true)
+        }
     }
 }
 

@@ -1,0 +1,430 @@
+@import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap');
+
+:root {
+  --font-sans: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+}
+
+html {
+  scroll-behavior: smooth;
+  overflow-x: hidden !important;
+  width: 100% !important;
+  max-width: 100vw !important;
+}
+
+/* Frosted Glass Sticky Navigation */
+.glass-nav {
+  background-color: rgba(255, 255, 255, 0.92) !important;
+  backdrop-filter: blur(20px) saturate(180%) !important;
+  -webkit-backdrop-filter: blur(20px) saturate(180%) !important;
+  border-bottom: 1px solid rgba(226, 232, 240, 0.85) !important;
+  box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.04);
+}
+
+*, *::before, *::after {
+  box-sizing: border-box;
+}
+
+body {
+  font-family: var(--font-sans);
+  color: #0f172a;
+  background-color: #f8fafc;
+  overflow-x: hidden !important;
+  width: 100% !important;
+  max-width: 100vw !important;
+  position: relative !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  box-sizing: border-box !important;
+  left: 0 !important;
+  right: 0 !important;
+}
+
+/* Centered Content Container (single source of truth for page width) */
+.tk-container {
+  width: 100%;
+  max-width: 1200px;
+  margin-left: auto;
+  margin-right: auto;
+  padding-left: 1rem;
+  padding-right: 1rem;
+}
+
+/* Narrower variant for reading-focused blocks such as the FAQ list */
+.tk-container-narrow {
+  max-width: 880px;
+}
+
+@media (min-width: 640px) {
+  .tk-container {
+    padding-left: 1.5rem;
+    padding-right: 1.5rem;
+  }
+}
+
+@media (min-width: 1024px) {
+  .tk-container {
+    padding-left: 2rem;
+    padding-right: 2rem;
+  }
+}
+
+/* Floating Badges Animation */
+@keyframes float-subtle {
+  0%, 100% {
+    transform: translateY(0px);
+  }
+  50% {
+    transform: translateY(-5px);
+  }
+}
+
+@keyframes float-subtle-reverse {
+  0%, 100% {
+    transform: translateY(0px);
+  }
+  50% {
+    transform: translateY(5px);
+  }
+}
+
+.animate-float {
+  animation: float-subtle 4.5s ease-in-out infinite;
+}
+
+.animate-float-reverse {
+  animation: float-subtle-reverse 5.5s ease-in-out infinite;
+}
+
+/* Infinite Marquee Scrolling to the Right */
+@keyframes marquee-right {
+  0% {
+    transform: translateX(-50%);
+  }
+  100% {
+    transform: translateX(0%);
+  }
+}
+
+.marquee-container {
+  overflow: hidden;
+  position: relative;
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+  contain: paint;
+  mask-image: linear-gradient(to right, transparent, black 8%, black 92%, transparent);
+  -webkit-mask-image: linear-gradient(to right, transparent, black 8%, black 92%, transparent);
+}
+
+.marquee-track-right {
+  display: flex;
+  width: max-content;
+  gap: 1.25rem;
+  will-change: transform;
+  animation: marquee-right 22s linear infinite;
+}
+
+.marquee-track-right:hover {
+  animation-play-state: paused;
+}
+
+/* Showcase Animations & Slide Motion */
+@keyframes slideInRight {
+  from {
+    opacity: 0;
+    transform: translateX(30px) scale(0.97);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0) scale(1);
+  }
+}
+
+@keyframes slideInLeft {
+  from {
+    opacity: 0;
+    transform: translateX(-30px) scale(0.97);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0) scale(1);
+  }
+}
+
+@keyframes slideUpFade {
+  from {
+    opacity: 0;
+    transform: translateY(14px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.animate-slide-right {
+  animation: slideInRight 0.4s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+.animate-slide-left {
+  animation: slideInLeft 0.4s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+/* 3D Flip Phone Mockup Showcase Motion */
+.showcase-mockup-wrapper {
+  perspective: 1200px;
+  transform-style: preserve-3d;
+}
+
+#showcase-mockup-img {
+  transition: transform 0.22s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.22s ease;
+  transform-origin: center center;
+  will-change: transform, opacity;
+}
+
+.mockup-flip-out-next {
+  transform: rotateY(-90deg) scale(0.92) !important;
+  opacity: 0.1 !important;
+}
+
+.mockup-flip-in-next {
+  transform: rotateY(90deg) scale(0.92) !important;
+  opacity: 0.1 !important;
+  transition: none !important;
+}
+
+.mockup-flip-out-prev {
+  transform: rotateY(90deg) scale(0.92) !important;
+  opacity: 0.1 !important;
+}
+
+.mockup-flip-in-prev {
+  transform: rotateY(-90deg) scale(0.92) !important;
+  opacity: 0.1 !important;
+  transition: none !important;
+}
+
+/* Micro-interactions */
+.feature-tab-btn {
+  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.feature-tab-btn:active {
+  transform: scale(0.97);
+}
+
+.slider-btn {
+  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.slider-btn:hover {
+  transform: scale(1.06);
+}
+
+.slider-btn:active {
+  transform: scale(0.94);
+}
+
+/* Custom Gradients & Mesh */
+.bg-mesh-glow {
+  background: radial-gradient(circle at 50% 0%, rgba(37, 99, 235, 0.08) 0%, transparent 60%);
+}
+
+.bg-hero-glow {
+  background: radial-gradient(circle at 70% 30%, rgba(59, 130, 246, 0.12) 0%, rgba(37, 99, 235, 0.04) 40%, transparent 70%);
+}
+
+/* ============================================================
+   LINTASAN KRL — stasiun di tengah, rel penuh, KRL melintas
+   Semua penyetelan posisi ada di variabel berikut.
+   ============================================================ */
+.tk-railway {
+  --rail-bottom: 7px;      /* jarak rel dari dasar panggung */
+  --train-bottom: 9px;     /* roda KRL menempel di atas rel */
+  --station-bottom: 5px;   /* dasar bangunan stasiun */
+  --station-height: 110px; /* tinggi bangunan stasiun */
+  --train-width: 84%;      /* panjang rangkaian, relatif lebar jalur */
+  --pole-gap: 63px;        /* jarak antar tiang LAA; menentukan skala LAA */
+  --run-duration: 12s;     /* satu putaran penuh */
+}
+
+.tk-railway-stage {
+  position: relative;
+  width: 100%;
+  height: calc(var(--station-height) + 26px);
+  overflow: hidden;
+  /* fade di kedua ujung, sama seperti .marquee-container */
+  mask-image: linear-gradient(to right, transparent, black 8%, black 92%, transparent);
+  -webkit-mask-image: linear-gradient(to right, transparent, black 8%, black 92%, transparent);
+}
+
+/* Bangunan stasiun — selalu di tengah, di belakang rel */
+.tk-station {
+  position: absolute;
+  left: 50%;
+  bottom: var(--station-bottom);
+  transform: translateX(-50%);
+  height: var(--station-height);
+  width: calc(var(--station-height) * 3);
+  z-index: 10;
+  pointer-events: none;
+}
+
+.tk-station-img {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+/* Nama stasiun pada papan KAI. Semua posisi diukur dari gambar aslinya
+   (2172x724) lalu dinyatakan dalam persen agar ikut menskala. */
+.tk-station-name {
+  position: absolute;
+  left: 44.15%;
+  top: 45.30%;
+  width: 13.05%;
+  height: 5.95%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #010e57;
+  color: #fff;
+  font-weight: 700;
+  font-size: var(--station-font, calc(var(--station-height) * 0.044));
+  line-height: 1;
+  letter-spacing: -0.01em;
+  white-space: nowrap;
+  overflow: hidden;
+}
+
+/* Hanya tulisannya yang memudar. Kotak birunya wajib tetap pekat, sebab di
+   bawahnya ada tulisan "Jakarta Kota" bawaan gambar yang harus tertutup. */
+.tk-station-name-text {
+  display: block;
+  transition: opacity 0.32s ease;
+}
+
+.tk-station-name.is-swapping .tk-station-name-text {
+  opacity: 0;
+}
+
+/* Listrik aliran atas: tiang + lengan kantilever + kawat penggantung & kawat
+   kontak. Digambar sebagai SVG yang diulang; rasio 140:103 dipakai untuk
+   menghitung tinggi elemen agar kawat kontak jatuh di ujung pantograf. */
+.tk-catenary {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: var(--rail-bottom);
+  height: calc(var(--pole-gap) * 0.736);
+  z-index: 5;
+  pointer-events: none;
+  background: url("data:image/svg+xml,%3Csvg%20xmlns=%22http://www.w3.org/2000/svg%22%20width=%22140%22%20height=%22103%22%20viewBox=%220%200%20140%20103%22%3E%3Cg%20fill=%22none%22%20stroke=%22%2364748b%22%20stroke-linecap=%22round%22%3E%3Cpath%20d=%22M0%204H140%22%20stroke-width=%221.3%22%20stroke-opacity=%22.38%22/%3E%3Cpath%20d=%22M35%204V26M70%204V26M105%204V26%22%20stroke-width=%22.9%22%20stroke-opacity=%22.3%22/%3E%3Cpath%20d=%22M0%2026H140%22%20stroke-width=%221.7%22%20stroke-opacity=%22.45%22/%3E%3Cpath%20d=%22M12%20103V2%22%20stroke-width=%222.6%22%20stroke-opacity=%22.5%22/%3E%3Cpath%20d=%22M6.5%2099.5H17.5%22%20stroke-width=%223.2%22%20stroke-opacity=%22.5%22/%3E%3Cpath%20d=%22M13%209L52%2021%22%20stroke-width=%221.7%22%20stroke-opacity=%22.5%22/%3E%3Cpath%20d=%22M13%2021H52%22%20stroke-width=%221.3%22%20stroke-opacity=%22.42%22/%3E%3Cpath%20d=%22M52%2021V26%22%20stroke-width=%221.5%22%20stroke-opacity=%22.5%22/%3E%3C/g%3E%3C/svg%3E") left bottom / var(--pole-gap) auto repeat-x;
+}
+
+/* Rel memanjang dari ujung ke ujung */
+.tk-rail {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: var(--rail-bottom);
+  height: 8px;
+  z-index: 20;
+  pointer-events: none;
+  background:
+    linear-gradient(#64748b, #64748b) 0 0 / 100% 2px no-repeat,
+    repeating-linear-gradient(90deg, #cbd5e1 0 4px, transparent 4px 16px) 0 2px / 100% 6px no-repeat;
+}
+
+/* Jalur KRL — melintas di depan stasiun */
+.tk-train-lane {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: var(--train-bottom);
+  z-index: 30;
+  pointer-events: none;
+}
+
+.tk-train {
+  display: block;
+  margin: 0 auto;
+  width: var(--train-width);
+  height: auto;
+  max-width: var(--train-width);
+  will-change: transform;
+  animation: tk-krl-run var(--run-duration) infinite;
+}
+
+/* Masuk dari kanan, berhenti 5 detik tepat di depan stasiun, lalu lanjut ke kiri */
+@keyframes tk-krl-run {
+  0% {
+    transform: translateX(135%);
+    animation-timing-function: cubic-bezier(0.22, 0.65, 0.3, 1);
+  }
+  30% {
+    transform: translateX(0);
+    animation-timing-function: linear;
+  }
+  72% {
+    transform: translateX(0);
+    animation-timing-function: cubic-bezier(0.7, 0, 0.8, 0.45);
+  }
+  100% {
+    transform: translateX(-135%);
+  }
+}
+
+@media (min-width: 640px) {
+  .tk-railway {
+    --station-height: 150px;
+    --train-width: 72%;
+    --pole-gap: 107px;
+    --rail-bottom: 8px;
+    --train-bottom: 10px;
+  }
+}
+
+@media (min-width: 1024px) {
+  .tk-railway {
+    --station-height: 200px;
+    --train-width: 60%;
+    --pole-gap: 140px;
+    --rail-bottom: 9px;
+    --train-bottom: 11px;
+  }
+}
+
+/* Hormati preferensi pengguna yang mematikan animasi */
+@media (prefers-reduced-motion: reduce) {
+  .tk-train {
+    animation: none;
+    transform: none;
+  }
+}
+
+/* Tombol uji suara pengingat (kartu Perjalanan Aktif) */
+.tk-sound-btn .tk-wave {
+  opacity: 0.55;
+}
+
+.tk-sound-btn.is-playing .tk-wave {
+  opacity: 1;
+  animation: tk-wave-pulse 1s ease-in-out infinite;
+}
+
+.tk-sound-btn.is-playing .tk-wave:last-child {
+  animation-delay: 0.18s;
+}
+
+@keyframes tk-wave-pulse {
+  0%, 100% { opacity: 0.25; }
+  50%      { opacity: 1; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .tk-sound-btn.is-playing .tk-wave {
+    animation: none;
+    opacity: 1;
+  }
+}

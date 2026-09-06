@@ -8,9 +8,10 @@ class AppSettings {
     required this.onboardingComplete,
     required this.themeMode,
     required this.reduceMotion,
-    required this.offlineMode,
     required this.homeStationId,
     required this.workStationId,
+    required this.homeAddress,
+    required this.workAddress,
     required this.rideDetectionEnabled,
     required this.vibrationEnabled,
     required this.soundEnabled,
@@ -21,9 +22,10 @@ class AppSettings {
   final bool onboardingComplete;
   final ThemeMode themeMode;
   final bool reduceMotion;
-  final bool offlineMode;
   final String? homeStationId;
   final String? workStationId;
+  final String? homeAddress;
+  final String? workAddress;
   final bool rideDetectionEnabled;
   final bool vibrationEnabled;
   final bool soundEnabled;
@@ -34,9 +36,10 @@ class AppSettings {
     bool? onboardingComplete,
     ThemeMode? themeMode,
     bool? reduceMotion,
-    bool? offlineMode,
     Object? homeStationId = _unset,
     Object? workStationId = _unset,
+    Object? homeAddress = _unset,
+    Object? workAddress = _unset,
     bool? rideDetectionEnabled,
     bool? vibrationEnabled,
     bool? soundEnabled,
@@ -47,13 +50,18 @@ class AppSettings {
       onboardingComplete: onboardingComplete ?? this.onboardingComplete,
       themeMode: themeMode ?? this.themeMode,
       reduceMotion: reduceMotion ?? this.reduceMotion,
-      offlineMode: offlineMode ?? this.offlineMode,
       homeStationId: identical(homeStationId, _unset)
           ? this.homeStationId
           : homeStationId as String?,
       workStationId: identical(workStationId, _unset)
           ? this.workStationId
           : workStationId as String?,
+      homeAddress: identical(homeAddress, _unset)
+          ? this.homeAddress
+          : homeAddress as String?,
+      workAddress: identical(workAddress, _unset)
+          ? this.workAddress
+          : workAddress as String?,
       rideDetectionEnabled: rideDetectionEnabled ?? this.rideDetectionEnabled,
       vibrationEnabled: vibrationEnabled ?? this.vibrationEnabled,
       soundEnabled: soundEnabled ?? this.soundEnabled,
@@ -76,9 +84,10 @@ class SettingsController extends Notifier<AppSettings> {
       onboardingComplete: snapshot.onboardingComplete,
       themeMode: snapshot.themeMode,
       reduceMotion: snapshot.reduceMotion,
-      offlineMode: snapshot.offlineMode,
       homeStationId: snapshot.homeStationId,
       workStationId: snapshot.workStationId,
+      homeAddress: snapshot.homeAddress,
+      workAddress: snapshot.workAddress,
       rideDetectionEnabled: snapshot.rideDetectionEnabled,
       vibrationEnabled: snapshot.vibrationEnabled,
       soundEnabled: snapshot.soundEnabled,
@@ -95,11 +104,6 @@ class SettingsController extends Notifier<AppSettings> {
   Future<void> resetOnboarding() async {
     state = state.copyWith(onboardingComplete: false);
     await _store.setOnboardingComplete(false);
-  }
-
-  Future<void> setOfflineMode(bool value) async {
-    state = state.copyWith(offlineMode: value);
-    await _store.setOfflineMode(value);
   }
 
   Future<void> setReduceMotion(bool value) async {
@@ -120,6 +124,16 @@ class SettingsController extends Notifier<AppSettings> {
   Future<void> setWorkStation(String? stationId) async {
     state = state.copyWith(workStationId: stationId);
     await _store.setWorkStation(stationId);
+  }
+
+  Future<void> setHomeAddress(String? address) async {
+    state = state.copyWith(homeAddress: address);
+    await _store.setHomeAddress(address);
+  }
+
+  Future<void> setWorkAddress(String? address) async {
+    state = state.copyWith(workAddress: address);
+    await _store.setWorkAddress(address);
   }
 
   Future<void> setRideDetectionEnabled(bool value) async {

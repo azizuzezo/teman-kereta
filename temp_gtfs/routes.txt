@@ -1,0 +1,6 @@
+﻿route_id,agency_id,route_short_name,route_long_name,route_type,route_color,route_text_color
+BOGOR,KCI,Bogor,Commuter Line Bogor / Nambo,2,E31E24,FFFFFF
+CIKARANG,KCI,Cikarang,Commuter Line Cikarang Loop,2,0084D1,FFFFFF
+RANGKASBITUNG,KCI,Rangkasbitung,Commuter Line Rangkasbitung,2,78BE20,FFFFFF
+TANGERANG,KCI,Tangerang,Commuter Line Tangerang,2,A05A2C,FFFFFF
+TANJUNG_PRIOK,KCI,Tanjung Priok,Commuter Line Tanjung Priok,2,F15A24,FFFFFF

@@ -21,6 +21,11 @@ _Station _$StationFromJson(Map<String, dynamic> json) => _Station(
           .toList() ??
       const <String>[],
   wheelchairAccessible: json['wheelchairAccessible'] as bool? ?? false,
+  stopOrderByLine:
+      (json['stopOrderByLine'] as Map<String, dynamic>?)?.map(
+        (k, e) => MapEntry(k, (e as num).toInt()),
+      ) ??
+      const <String, int>{},
 );
 
 Map<String, dynamic> _$StationToJson(_Station instance) => <String, dynamic>{
@@ -32,6 +37,7 @@ Map<String, dynamic> _$StationToJson(_Station instance) => <String, dynamic>{
   'lineIds': instance.lineIds,
   'facilities': instance.facilities,
   'wheelchairAccessible': instance.wheelchairAccessible,
+  'stopOrderByLine': instance.stopOrderByLine,
 };
 
 _Departure _$DepartureFromJson(Map<String, dynamic> json) => _Departure(

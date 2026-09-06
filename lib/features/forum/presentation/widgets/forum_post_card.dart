@@ -12,6 +12,7 @@ import '../../../../core/widgets/tk_logo.dart';
 import '../../../social/presentation/widgets/follow_button.dart';
 import '../forum_controller.dart';
 import '../forum_models.dart';
+import 'mentions.dart';
 
 /// A single feed post rendered Instagram/Facebook-style: full-bleed photo,
 /// a bold "N suka" line, an Instagram-caption-style "**username** body"
@@ -251,7 +252,7 @@ class _ForumPostCardState extends ConsumerState<ForumPostCard>
         if (_body.isNotEmpty)
           Padding(
             padding: const EdgeInsets.fromLTRB(12, 0, 12, 10),
-            child: Text(
+            child: MentionText(
               _body,
               style: theme.textTheme.bodyMedium?.copyWith(
                 color: theme.colorScheme.onSurface,

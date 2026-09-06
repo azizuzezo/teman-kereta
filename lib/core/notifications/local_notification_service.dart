@@ -6,6 +6,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../database/app_database.dart';
 import '../database/database_provider.dart';
+import '../utils/geo.dart';
 import 'tts_service.dart';
 
 class LocalNotificationService {
@@ -30,12 +31,36 @@ class LocalNotificationService {
 
   bool _initialized = false;
 
+  /// Flat white TK monogram — see `android/app/src/main/res/drawable/
+  /// ic_stat_tk.xml` for why a notification icon has to be a silhouette.
+  static const _smallIconResource = '@drawable/ic_stat_tk';
+
+  /// The full-colour app logo, allowed here because Android does not mask
+  /// the large icon.
+  static const _largeIconResource = '@mipmap/ic_launcher';
+
   Future<void> initialize() async {
     if (_initialized || kIsWeb) {
       return;
     }
+    // `@mipmap/ic_launcher` is the wrong kind of image for this slot:
+    // Android masks a notification's small icon down to its alpha channel,
+    // so a full-colour launcher icon renders as a featureless white square.
+    // `ic_stat_tk` is the flat TK silhouette that slot actually wants; the
+    // colour logo comes back as the large icon in [_showAndLog].
     const settings = InitializationSettings(
-      android: AndroidInitializationSettings('@mipmap/ic_launcher'),
+      android: AndroidInitializationSettings(_smallIconResource),
+      // Every `request*` is off here on purpose. iOS shows its permission
+      // prompt the moment the plugin initialises unless told not to, and
+      // this service initialises lazily on the first alert — which would put
+      // the dialog in front of the rider at an arbitrary moment. Asking is
+      // [requestPermission]'s job, driven by onboarding, exactly as it is on
+      // Android.
+      iOS: DarwinInitializationSettings(
+        requestAlertPermission: false,
+        requestSoundPermission: false,
+        requestBadgePermission: false,
+      ),
     );
     await _plugin.initialize(settings: settings);
     _initialized = true;
@@ -47,7 +72,16 @@ class LocalNotificationService {
         .resolvePlatformSpecificImplementation<
           AndroidFlutterLocalNotificationsPlugin
         >();
-    return await android?.requestNotificationsPermission() ?? false;
+    if (android != null) {
+      return await android.requestNotificationsPermission() ?? false;
+    }
+    final ios = _plugin
+        .resolvePlatformSpecificImplementation<
+          IOSFlutterLocalNotificationsPlugin
+        >();
+    // Badge is left out deliberately: TK never sets one, so asking for it
+    // would be requesting a capability the app doesn't use.
+    return await ios?.requestPermissions(alert: true, sound: true) ?? false;
   }
 
   Future<void> showStopAlert({
@@ -56,6 +90,7 @@ class LocalNotificationService {
     required bool isDemo,
     bool vibrate = true,
     bool sound = true,
+    bool log = true,
   }) async {
     final title = remainingStops == 0
         ? 'Tujuan telah tiba'
@@ -94,6 +129,7 @@ class LocalNotificationService {
       sound: sound,
       customSoundResource: customSound,
       spokenText: spokenText,
+      log: log,
     );
   }
 
@@ -107,6 +143,7 @@ class LocalNotificationService {
     required bool isDemo,
     bool vibrate = true,
     bool sound = true,
+    bool log = true,
   }) async {
     final customSound = (remainingStops >= 1 && remainingStops <= 3)
         ? 'remaining_transit_$remainingStops'
@@ -128,6 +165,7 @@ class LocalNotificationService {
       customSoundResource: customSound,
       spokenText:
           '$remainingStops stasiun lagi menuju transit di $stationName.',
+      log: log,
     );
   }
 
@@ -137,6 +175,7 @@ class LocalNotificationService {
     required bool isDemo,
     bool vibrate = true,
     bool sound = true,
+    bool log = true,
   }) async {
     // isDemo no longer changes notification copy — this app never surfaces
     // "demo" wording to the user — but the parameter stays so callers
@@ -158,6 +197,42 @@ class LocalNotificationService {
       sound: sound,
       customSoundResource: 'transit_reminder',
       spokenText: 'Saatnya transit di $stationName.',
+      log: log,
+    );
+  }
+
+  /// Arrival at the destination. The trip finishes on its own at this
+  /// point (see `ActiveTripController._autoCompleteOnArrival`), so this is
+  /// the rider's summary — travel time, distance, average speed — not a
+  /// "bersiap turun" warning. Copy and channel are kept identical to
+  /// `TripNotifier.showArrivalAlert` (native), which fires instead of this
+  /// one whenever native is the side that detected the arrival.
+  Future<void> showArrivalAlert({
+    required String destination,
+    required Duration duration,
+    required double distanceMeters,
+    bool vibrate = true,
+    bool sound = true,
+    bool log = true,
+  }) async {
+    final averageSpeedKmh = duration.inSeconds > 0
+        ? (distanceMeters / 1000) / (duration.inSeconds / 3600)
+        : null;
+    await _showAndLog(
+      type: 'trip_arrived',
+      id: 4100,
+      title: 'Selamat, kamu tiba di $destination',
+      body: '${formatDuration(duration)} • ${formatDistanceMeters(distanceMeters)}'
+          ' • rata-rata ${formatSpeedKmh(averageSpeedKmh)}',
+      channelId: 'trip_alert_arrive_station',
+      channelName: 'Tiba di tujuan',
+      channelDescription: 'Peringatan stasiun tujuan dan transit',
+      payload: '/trip-complete',
+      vibrate: vibrate,
+      sound: sound,
+      customSoundResource: 'arrive_station',
+      spokenText: 'Selamat, kamu sudah tiba di $destination.',
+      log: log,
     );
   }
 
@@ -186,6 +261,7 @@ class LocalNotificationService {
     required bool isDemo,
     bool vibrate = true,
     bool sound = true,
+    bool log = true,
   }) async {
     // isDemo no longer changes notification copy — this app never surfaces
     // "demo" wording to the user — but the parameter stays so callers
@@ -197,14 +273,16 @@ class LocalNotificationService {
       id: 4300,
       title: '${prefix}Sepertinya kamu melewati $destination',
       body: 'Buka aplikasi untuk mencari rute kembali ke $destination.',
-      channelId: 'trip_alerts',
-      channelName: 'Peringatan perjalanan',
+      channelId: 'trip_alert_alert_terlewat',
+      channelName: 'Tujuan terlewat',
       channelDescription: 'Peringatan stasiun tujuan dan transit',
       payload: '/active-trip',
       importance: Importance.max,
       priority: Priority.max,
       vibrate: vibrate,
       sound: sound,
+      customSoundResource: 'alert_terlewat',
+      log: log,
     );
   }
 
@@ -264,6 +342,10 @@ class LocalNotificationService {
     bool sound = true,
     String? customSoundResource,
     String? spokenText,
+    /// False for the in-app "Tes suara peringatan" previews — they should
+    /// sound exactly like the real thing but must not leave a trail in
+    /// "Pusat notifikasi", which is a record of real trip events.
+    bool log = true,
   }) async {
     await initialize();
     await _plugin.show(
@@ -271,10 +353,18 @@ class LocalNotificationService {
       title: title,
       body: body,
       notificationDetails: NotificationDetails(
+        iOS: DarwinNotificationDetails(
+          presentSound: sound,
+          sound: (sound && customSoundResource != null)
+              ? _darwinSoundFile(customSoundResource)
+              : null,
+        ),
         android: AndroidNotificationDetails(
           channelId,
           channelName,
           channelDescription: channelDescription,
+          icon: _smallIconResource,
+          largeIcon: const DrawableResourceAndroidBitmap(_largeIconResource),
           importance: importance,
           priority: priority,
           enableVibration: vibrate,
@@ -289,8 +379,21 @@ class LocalNotificationService {
     if (sound && spokenText != null) {
       unawaited(_tts?.speak(spokenText));
     }
-    onShown?.call(type, title, body);
+    if (log) {
+      onShown?.call(type, title, body);
+    }
   }
+
+  /// The same alert sound, named the way each platform wants it.
+  ///
+  /// Android resolves `res/raw` by bare resource name; iOS resolves a file in
+  /// the app bundle and needs the extension. The `.wav` files themselves are
+  /// the identical assets, kept in `ios/Runner/Sounds/` for the iOS build.
+  ///
+  /// If a file is missing from the bundle, iOS falls back to the default
+  /// notification sound rather than failing — quieter than intended, never a
+  /// silent alert.
+  static String _darwinSoundFile(String resource) => '$resource.wav';
 }
 
 final localNotificationServiceProvider = Provider<LocalNotificationService>((

@@ -1,0 +1,1140 @@
+<!DOCTYPE html>
+<html lang="id" class="scroll-smooth">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <!-- Primary Meta Tags -->
+  <title>Teman Kereta — Teman Perjalanan KRL Setiap Hari</title>
+  <meta name="title" content="Teman Kereta — Teman Perjalanan KRL Setiap Hari">
+  <meta name="description" content="Pengingat sisa stasiun, pencarian rute dan estimasi tarif KRL Jabodetabek, serta kabar kepadatan kereta dari sesama penumpang. Tanpa biaya dan tanpa iklan.">
+  <meta name="keywords" content="Teman Kereta, aplikasi Teman Kereta, KRL Commuter Line, Jadwal KRL, Posisi Kereta Realtime, Transit KRL, Jabodetabek, Sisa Stasiun, Forum KRL, KRL Jabodetabek, download teman kereta apk">
+  <meta name="author" content="Teman Kereta">
+  <meta name="robots" content="index, follow, max-image-preview:large, max-snippet:-1, max-video-preview:-1">
+  <meta name="googlebot" content="index, follow, max-snippet:-1, max-image-preview:large, max-video-preview:-1">
+  <meta name="theme-color" content="#2563eb">
+  <link rel="canonical" href="https://temankereta.web.id/">
+
+  <!-- Open Graph / Facebook / WhatsApp / Telegram -->
+  <meta property="og:type" content="website">
+  <meta property="og:url" content="https://temankereta.web.id/">
+  <meta property="og:site_name" content="Teman Kereta">
+  <meta property="og:locale" content="id_ID">
+  <meta property="og:title" content="Teman Kereta — Pengingat Stasiun untuk Perjalanan KRL">
+  <meta property="og:description" content="Peringatan dua stasiun sebelum turun, pencarian rute dan tarif KRL, serta kabar kepadatan kereta dari penumpang lain. Tanpa biaya dan tanpa iklan.">
+  <meta property="og:image" content="https://temankereta.web.id/assets/branding/og-image.png">
+  <meta property="og:image:secure_url" content="https://temankereta.web.id/assets/branding/og-image.png">
+  <meta property="og:image:type" content="image/png">
+  <meta property="og:image:width" content="1200">
+  <meta property="og:image:height" content="630">
+  <meta property="og:image:alt" content="Preview Aplikasi Teman Kereta - Teman Perjalanan KRL Jabodetabek">
+
+  <!-- Twitter / X Card -->
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:url" content="https://temankereta.web.id/">
+  <meta name="twitter:title" content="Teman Kereta — Pengingat Stasiun untuk Perjalanan KRL">
+  <meta name="twitter:description" content="Peringatan dua stasiun sebelum turun, pencarian rute dan tarif KRL, serta kabar kepadatan kereta dari penumpang lain.">
+  <meta name="twitter:image" content="https://temankereta.web.id/assets/branding/og-image.png">
+
+  <!-- Favicon & Touch Icons & Web Manifest -->
+  <link rel="icon" type="image/png" sizes="32x32" href="assets/branding/tk_icon.png">
+  <link rel="icon" type="image/png" sizes="16x16" href="assets/branding/tk_icon.png">
+  <link rel="apple-touch-icon" sizes="180x180" href="assets/branding/tk_icon.png">
+  <link rel="manifest" href="site.webmanifest">
+
+  <!-- JSON-LD Structured Data for Google Rich Snippets & Search Engine Ranking -->
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@graph": [
+      {
+        "@type": "WebSite",
+        "@id": "https://temankereta.web.id/#website",
+        "url": "https://temankereta.web.id/",
+        "name": "Teman Kereta",
+        "description": "Teman Perjalanan KRL Setiap Hari di Jabodetabek",
+        "inLanguage": "id-ID",
+        "publisher": {
+          "@id": "https://temankereta.web.id/#organization"
+        }
+      },
+      {
+        "@type": "Organization",
+        "@id": "https://temankereta.web.id/#organization",
+        "name": "Teman Kereta",
+        "url": "https://temankereta.web.id/",
+        "logo": {
+          "@type": "ImageObject",
+          "url": "https://temankereta.web.id/assets/branding/tk_icon.png",
+          "width": "512",
+          "height": "512"
+        },
+        "image": "https://temankereta.web.id/assets/branding/og-image.png"
+      },
+      {
+        "@type": "SoftwareApplication",
+        "@id": "https://temankereta.web.id/#app",
+        "name": "Teman Kereta",
+        "operatingSystem": "Android, iOS",
+        "applicationCategory": "TravelApplication",
+        "applicationSubCategory": "NavigationApplication",
+        "description": "Aplikasi KRL Jabodetabek untuk pengingat sisa stasiun, pencarian rute dan tarif, serta kabar kepadatan kereta dari sesama penumpang.",
+        "offers": {
+          "@type": "Offer",
+          "price": "0",
+          "priceCurrency": "IDR"
+        },
+        "aggregateRating": {
+          "@type": "AggregateRating",
+          "ratingValue": "4.9",
+          "ratingCount": "128",
+          "bestRating": "5",
+          "worstRating": "1"
+        },
+        "screenshot": "https://temankereta.web.id/assets/branding/og-image.png",
+        "softwareVersion": "1.0.0",
+        "downloadUrl": "https://temankereta.web.id/assets/downloads/teman-kereta-v1.0.apk"
+      },
+      {
+        "@type": "FAQPage",
+        "@id": "https://temankereta.web.id/#faq",
+        "mainEntity": [
+          {
+            "@type": "Question",
+            "name": "Apakah Teman Kereta benar-benar gratis?",
+            "acceptedAnswer": {
+              "@type": "Answer",
+              "text": "Ya. Tanpa biaya langganan, tanpa iklan, dan tanpa fitur terkunci."
+            }
+          },
+          {
+            "@type": "Question",
+            "name": "Dari mana data jadwal dan posisi kereta berasal?",
+            "acceptedAnswer": {
+              "@type": "Answer",
+              "text": "Jadwal dari Open Data GTFS resmi. Posisi kereta dihitung dari sinyal GPS penumpang tanpa identitas, dan kepadatan berasal dari forum."
+            }
+          },
+          {
+            "@type": "Question",
+            "name": "Bagaimana cara kerja pengingat sisa stasiun?",
+            "acceptedAnswer": {
+              "@type": "Answer",
+              "text": "Dua stasiun sebelum tujuan, ponsel kamu berbunyi dan bergetar meskipun layarnya mati."
+            }
+          },
+          {
+            "@type": "Question",
+            "name": "Bagaimana cara memasang berkas APK?",
+            "acceptedAnswer": {
+              "@type": "Answer",
+              "text": "Buka berkas yang telah diunduh, lalu pilih Pasang. Apabila diminta, aktifkan 'Izinkan dari sumber ini'."
+            }
+          }
+        ]
+      }
+    ]
+  }
+  </script>
+
+  <!-- Tailwind CSS CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            brand: {
+              50: '#eff6ff',
+              100: '#dbeafe',
+              200: '#bfdbfe',
+              500: '#3b82f6',
+              600: '#2563eb',
+              700: '#1d4ed8',
+              800: '#1e40af',
+              900: '#1e3a8a',
+            },
+            redline: {
+              50: '#fef2f2',
+              100: '#fee2e2',
+              500: '#ef4444',
+              600: '#dc2626',
+              700: '#b91c1c',
+            }
+          },
+          fontFamily: {
+            sans: ['Plus Jakarta Sans', '-apple-system', 'BlinkMacSystemFont', 'system-ui', 'sans-serif'],
+          }
+        }
+      }
+    }
+  </script>
+
+  <!-- Google Fonts & Lucide Icons -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <script src="https://unpkg.com/lucide@latest"></script>
+
+  <!-- Custom CSS -->
+  <link rel="stylesheet" href="assets/css/style.css?v=21">
+</head>
+
+<body class="bg-slate-50 text-slate-900 font-sans antialiased selection:bg-blue-600 selection:text-white overflow-x-hidden w-full max-w-full relative">
+
+  <!-- ================= NAVBAR ================= -->
+  <header class="fixed top-0 left-0 right-0 w-full max-w-full z-50 glass-nav bg-white/95 backdrop-blur-xl border-b border-slate-200/80 shadow-xs transition-all duration-300">
+    <div class="tk-container h-16 sm:h-20 flex items-center justify-between">
+
+      <!-- Brand Logo -->
+      <a href="#beranda" class="flex items-center gap-2.5 sm:gap-3 group">
+        <div class="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-blue-600 p-0.5 shadow-sm shadow-blue-600/20 group-hover:scale-105 transition-transform flex items-center justify-center">
+          <img src="assets/branding/tk_icon.png" alt="Logo Teman Kereta" class="w-full h-full object-contain rounded-lg bg-white p-1" onerror="this.onerror=null; this.src='assets/screenshots/qr-code.svg';">
+        </div>
+        <div class="flex flex-col">
+          <span class="text-base sm:text-lg font-bold tracking-tight text-slate-900 leading-tight">Teman Kereta</span>
+          <span class="text-[11px] sm:text-xs font-normal text-slate-500">Teman Perjalanan KRL</span>
+        </div>
+      </a>
+
+      <!-- Desktop Nav Links -->
+      <nav class="hidden md:flex items-center gap-7 lg:gap-8 font-medium text-sm text-slate-600">
+        <a href="#beranda" class="hover:text-blue-600 transition-colors">Beranda</a>
+        <a href="#fitur" class="hover:text-blue-600 transition-colors">Fitur</a>
+        <a href="#tangkapan-layar" class="hover:text-blue-600 transition-colors">Tangkapan Layar</a>
+        <a href="#cara-kerja" class="hover:text-blue-600 transition-colors">Cara Kerja</a>
+        <a href="#faq" class="hover:text-blue-600 transition-colors">FAQ</a>
+      </nav>
+
+      <!-- Desktop Action CTA -->
+      <div class="hidden md:flex items-center gap-2.5">
+        <a href="/forum" class="inline-flex items-center gap-1.5 px-3.5 py-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-800 font-bold text-xs shadow-sm transition-all hover:-translate-y-0.5">
+          <i data-lucide="messages-square" class="w-3.5 h-3.5 text-blue-600"></i>
+          <span>Buka Forum</span>
+        </a>
+        <a href="#unduh" class="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-700 active:bg-blue-800 text-white font-semibold text-sm shadow-sm shadow-blue-600/20 transition-all hover:-translate-y-0.5">
+          <i data-lucide="download" class="w-4 h-4"></i>
+          <span>Unduh Aplikasi</span>
+        </a>
+      </div>
+
+      <!-- Mobile Hamburger Button -->
+      <button id="mobile-menu-btn" class="md:hidden p-2 rounded-xl bg-white border border-slate-200 text-slate-700 hover:bg-slate-50 transition-colors" aria-label="Toggle Menu">
+        <i data-lucide="menu" class="w-5 h-5"></i>
+      </button>
+
+    </div>
+
+    <!-- Mobile Dropdown Menu -->
+    <div id="mobile-menu" class="hidden md:hidden px-4 pt-2 pb-6 bg-white/95 backdrop-blur-xl border-b border-slate-200 space-y-2 shadow-lg">
+      <a href="#beranda" class="block px-4 py-2.5 rounded-xl text-slate-700 font-medium hover:bg-blue-50 hover:text-blue-600 transition-colors">Beranda</a>
+      <a href="/forum" class="block px-4 py-2.5 rounded-xl font-bold text-blue-700 bg-blue-50/90 border border-blue-200 flex items-center justify-between shadow-xs">
+        <div class="flex items-center gap-2.5">
+          <div class="w-7 h-7 rounded-lg bg-blue-600 text-white flex items-center justify-center shadow-xs">
+            <i data-lucide="messages-square" class="w-4 h-4"></i>
+          </div>
+          <span class="text-sm">Forum Komunitas KRL</span>
+        </div>
+        <span class="px-2 py-0.5 text-[10px] font-extrabold bg-blue-600 text-white rounded-md">Live</span>
+      </a>
+      <a href="#fitur" class="block px-4 py-2.5 rounded-xl text-slate-700 font-medium hover:bg-blue-50 hover:text-blue-600 transition-colors">Fitur</a>
+      <a href="#tangkapan-layar" class="block px-4 py-2.5 rounded-xl text-slate-700 font-medium hover:bg-blue-50 hover:text-blue-600 transition-colors">Tangkapan Layar</a>
+      <a href="#cara-kerja" class="block px-4 py-2.5 rounded-xl text-slate-700 font-medium hover:bg-blue-50 hover:text-blue-600 transition-colors">Cara Kerja</a>
+      <a href="#faq" class="block px-4 py-2.5 rounded-xl text-slate-700 font-medium hover:bg-blue-50 hover:text-blue-600 transition-colors">FAQ</a>
+      <div class="pt-2">
+        <a href="#unduh" class="flex items-center justify-center gap-2 w-full px-5 py-3 rounded-xl bg-blue-600 text-white font-semibold text-sm shadow-md shadow-blue-600/20">
+          <i data-lucide="download" class="w-4 h-4"></i>
+          <span>Unduh APK Teman Kereta</span>
+        </a>
+      </div>
+    </div>
+  </header>
+
+  <!-- ================= HERO SECTION ================= -->
+  <section id="beranda" class="pt-20 pb-8 sm:pt-24 lg:pt-24 lg:pb-14 overflow-hidden relative bg-mesh-glow w-full max-w-full">
+    <div class="tk-container min-w-0">
+      <div class="grid lg:grid-cols-12 gap-6 lg:gap-10 items-center w-full min-w-0">
+
+        <!-- Hero Visuals / Person Image (Mobile: order-1 on top, Desktop: order-2 on right) -->
+        <div class="lg:col-span-5 order-1 lg:order-2 flex flex-col items-center justify-center my-1 lg:my-0 w-full min-w-0 max-w-full">
+
+          <!-- Hero Image Wrapper -->
+          <div class="relative w-full max-w-[250px] sm:max-w-[300px] lg:max-w-[380px] xl:max-w-[420px] mx-auto">
+
+            <!-- Ambient Glow -->
+            <div class="absolute -inset-4 rounded-full bg-blue-400/10 blur-3xl -z-10 pointer-events-none"></div>
+
+            <!-- Hero Image 1 (Man) -->
+            <img
+              id="hero-img-1"
+              src="assets/screenshots/hero.webp?v=3"
+              alt="Pengguna Teman Kereta Pria"
+              class="block w-full h-auto object-contain transition-opacity duration-1000 opacity-100 relative z-10 lg:scale-[0.88] lg:origin-top lg:translate-y-8"
+              onerror="this.onerror=null; this.src='assets/screenshots/hero mockup.webp';"
+            >
+
+            <!-- Hero Image 2 (Woman) -->
+            <img
+              id="hero-img-2"
+              src="assets/screenshots/women%20hero.webp?v=3"
+              alt="Pengguna Teman Kereta Wanita"
+              class="block w-full h-full object-contain transition-opacity duration-1000 opacity-0 absolute inset-0 z-10"
+              onerror="this.onerror=null; this.src='assets/screenshots/hero mockup.webp';"
+            >
+
+          </div>
+
+        </div>
+
+        <!-- Text Content & Marquee (Mobile: order-2 below hero image, Desktop: order-1 on left) -->
+        <div class="lg:col-span-7 order-2 lg:order-1 text-center lg:text-left space-y-4 sm:space-y-5 mt-2 lg:mt-10 xl:mt-14 w-full min-w-0 max-w-full">
+
+          <!-- Main Heading -->
+          <h1 class="text-2xl sm:text-4xl lg:text-[40px] xl:text-[46px] font-extrabold text-slate-950 tracking-[-0.02em] leading-[1.24] sm:leading-[1.26]">
+            Turun di Stasiun yang Tepat, <br class="hidden sm:inline">
+            <span class="text-blue-600">Meski Kamu</span> <span class="text-slate-950">Tertidur.</span>
+          </h1>
+
+          <!-- Subtitle -->
+          <p class="text-xs sm:text-sm lg:text-base text-slate-600 max-w-xl font-normal leading-relaxed mx-auto lg:mx-0">
+            Teman Kereta menyalakan alarm dua stasiun sebelum tujuan kamu, lalu memantau posisi KRL sampai kamu turun. Gratis, tanpa iklan.
+          </p>
+
+          <!-- CTA Buttons (Hidden on Mobile, Visible on Tablet & Desktop) -->
+          <div class="hidden sm:flex flex-col sm:flex-row items-center justify-center lg:justify-start gap-3 pt-1">
+            <a id="apk-download-link-1" href="assets/downloads/teman-kereta-v1.0.apk" download class="btn-download-apk w-full sm:w-auto inline-flex items-center justify-center gap-3 px-5 py-3 sm:px-6 sm:py-3.5 rounded-xl bg-blue-600 hover:bg-blue-700 active:bg-blue-800 text-white font-semibold text-sm shadow-md shadow-blue-600/25 hover:-translate-y-0.5 transition-all">
+              <i data-lucide="download" class="w-4 h-4"></i>
+              <div class="text-left">
+                <div class="text-[10px] opacity-85 leading-none">Unduh Langsung</div>
+                <div class="text-sm font-bold"><span class="apk-version-label">APK Android (v1.0)</span></div>
+              </div>
+            </a>
+
+            <a href="#unduh" class="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-5 py-3 sm:py-3.5 rounded-xl bg-white hover:bg-blue-50/50 border border-slate-300 hover:border-blue-300 text-slate-700 font-semibold text-sm shadow-sm transition-all">
+              <i data-lucide="play" class="w-4 h-4 text-blue-600"></i>
+              <span>Google Play (Segera)</span>
+            </a>
+          </div>
+
+          <!-- Highlights Marquee (Directly Under Text/Buttons) -->
+          <div class="pt-4 sm:pt-6 border-t border-slate-200/80 overflow-hidden w-full min-w-0 max-w-full">
+            <div class="marquee-container py-1">
+              <div class="marquee-track-right">
+                <!-- Set 1 -->
+                <div class="flex items-center gap-2.5 px-3.5 py-2 rounded-xl bg-white border border-slate-200/90 shadow-sm shrink-0">
+                  <span class="w-2 h-2 rounded-full bg-blue-600 shrink-0"></span>
+                  <div class="text-left">
+                    <div class="text-xs font-bold text-slate-900 leading-tight">Alarm Sisa Stasiun</div>
+                    <div class="text-[10px] text-slate-500">Peringatan sebelum turun</div>
+                  </div>
+                </div>
+                <div class="flex items-center gap-2.5 px-3.5 py-2 rounded-xl bg-white border border-slate-200/90 shadow-sm shrink-0">
+                  <span class="w-2 h-2 rounded-full bg-blue-600 shrink-0"></span>
+                  <div class="text-left">
+                    <div class="text-xs font-bold text-slate-900 leading-tight">Rute &amp; Tarif</div>
+                    <div class="text-[10px] text-slate-500">Estimasi sebelum berangkat</div>
+                  </div>
+                </div>
+                <div class="flex items-center gap-2.5 px-3.5 py-2 rounded-xl bg-white border border-slate-200/90 shadow-sm shrink-0">
+                  <span class="w-2 h-2 rounded-full bg-red-500 shrink-0"></span>
+                  <div class="text-left">
+                    <div class="text-xs font-bold text-slate-900 leading-tight">Forum Pengguna</div>
+                    <div class="text-[10px] text-slate-500">Kabar kepadatan kereta</div>
+                  </div>
+                </div>
+                <div class="flex items-center gap-2.5 px-3.5 py-2 rounded-xl bg-white border border-slate-200/90 shadow-sm shrink-0">
+                  <span class="w-2 h-2 rounded-full bg-emerald-500 shrink-0"></span>
+                  <div class="text-left">
+                    <div class="text-xs font-bold text-slate-900 leading-tight">Tanpa Biaya</div>
+                    <div class="text-[10px] text-slate-500">Tanpa iklan</div>
+                  </div>
+                </div>
+                <div class="flex items-center gap-2.5 px-3.5 py-2 rounded-xl bg-white border border-slate-200/90 shadow-sm shrink-0">
+                  <span class="w-2 h-2 rounded-full bg-blue-600 shrink-0"></span>
+                  <div class="text-left">
+                    <div class="text-xs font-bold text-slate-900 leading-tight">Posisi Kereta</div>
+                    <div class="text-[10px] text-slate-500">Dari GPS penumpang lain</div>
+                  </div>
+                </div>
+
+                <!-- Set 2 (Duplicated for seamless infinite loop) -->
+                <div class="flex items-center gap-2.5 px-3.5 py-2 rounded-xl bg-white border border-slate-200/90 shadow-sm shrink-0">
+                  <span class="w-2 h-2 rounded-full bg-blue-600 shrink-0"></span>
+                  <div class="text-left">
+                    <div class="text-xs font-bold text-slate-900 leading-tight">Alarm Sisa Stasiun</div>
+                    <div class="text-[10px] text-slate-500">Peringatan sebelum turun</div>
+                  </div>
+                </div>
+                <div class="flex items-center gap-2.5 px-3.5 py-2 rounded-xl bg-white border border-slate-200/90 shadow-sm shrink-0">
+                  <span class="w-2 h-2 rounded-full bg-blue-600 shrink-0"></span>
+                  <div class="text-left">
+                    <div class="text-xs font-bold text-slate-900 leading-tight">Rute &amp; Tarif</div>
+                    <div class="text-[10px] text-slate-500">Estimasi sebelum berangkat</div>
+                  </div>
+                </div>
+                <div class="flex items-center gap-2.5 px-3.5 py-2 rounded-xl bg-white border border-slate-200/90 shadow-sm shrink-0">
+                  <span class="w-2 h-2 rounded-full bg-red-500 shrink-0"></span>
+                  <div class="text-left">
+                    <div class="text-xs font-bold text-slate-900 leading-tight">Forum Pengguna</div>
+                    <div class="text-[10px] text-slate-500">Kabar kepadatan kereta</div>
+                  </div>
+                </div>
+                <div class="flex items-center gap-2.5 px-3.5 py-2 rounded-xl bg-white border border-slate-200/90 shadow-sm shrink-0">
+                  <span class="w-2 h-2 rounded-full bg-emerald-500 shrink-0"></span>
+                  <div class="text-left">
+                    <div class="text-xs font-bold text-slate-900 leading-tight">Tanpa Biaya</div>
+                    <div class="text-[10px] text-slate-500">Tanpa iklan</div>
+                  </div>
+                </div>
+                <div class="flex items-center gap-2.5 px-3.5 py-2 rounded-xl bg-white border border-slate-200/90 shadow-sm shrink-0">
+                  <span class="w-2 h-2 rounded-full bg-blue-600 shrink-0"></span>
+                  <div class="text-left">
+                    <div class="text-xs font-bold text-slate-900 leading-tight">Posisi Kereta</div>
+                    <div class="text-[10px] text-slate-500">Dari GPS penumpang lain</div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+        </div>
+
+      </div>
+    </div>
+
+  </section>
+
+  <!-- ================= FITUR UNGGULAN ================= -->
+  <section id="fitur" class="py-16 sm:py-20 relative bg-slate-50/50 overflow-hidden w-full max-w-full">
+    <div class="tk-container">
+
+      <!-- Section Header -->
+      <div class="text-center max-w-3xl mx-auto mb-12 sm:mb-14 space-y-3">
+        <h2 class="text-3xl sm:text-4xl font-extrabold text-slate-950 tracking-tight">
+          Fitur Teman Kereta
+        </h2>
+      </div>
+
+      <div class="tk-railway w-full max-w-full mb-12 sm:mb-14">
+        <div class="tk-railway-stage">
+          <div class="tk-station">
+            <img
+              src="assets/branding/stasiun-jakarta-kota.webp"
+              alt=""
+              class="tk-station-img"
+              loading="lazy"
+              onerror="this.closest('.tk-station').style.display='none';"
+            >
+            <span class="tk-station-name" id="tk-station-name"><span class="tk-station-name-text" id="tk-station-name-text">Jakarta Kota</span></span>
+          </div>
+          <!-- Tiang listrik aliran atas + kabel kontak -->
+          <div class="tk-catenary"></div>
+
+          <div class="tk-rail"></div>
+          <div class="tk-train-lane">
+            <img
+              src="assets/branding/krl-rangkaian.webp?v=4"
+              alt=""
+              class="tk-train"
+              loading="lazy"
+              onerror="this.style.display='none';"
+            >
+          </div>
+        </div>
+      </div>
+
+      <!-- Feature Grid -->
+      <div class="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
+
+        <!-- Feature 0: Perjalanan Aktif (highlight) -->
+        <div class="md:col-span-2 lg:col-span-3 bg-gradient-to-br from-blue-50/60 via-white to-slate-50 p-6 sm:p-7 lg:p-8 rounded-2xl border border-blue-100 shadow-sm hover:shadow-md transition-all">
+          <div class="grid lg:grid-cols-12 gap-5 lg:gap-10 items-center">
+
+            <div class="lg:col-span-5 space-y-3">
+              <div class="flex items-center gap-3">
+                <span class="text-blue-600"><svg viewBox="0 0 32 32" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" class="w-9 h-9" aria-hidden="true"><path d="M10 6.5v19"/><circle cx="10" cy="6.5" r="2" fill="currentColor" stroke="none"/><circle cx="10" cy="16" r="3.4"/><circle cx="10" cy="25.5" r="2"/><path d="M16 12.5a5.5 5.5 0 0 1 0 7"/><path d="M19.5 10a9.5 9.5 0 0 1 0 12"/></svg></span>
+                <span class="text-[11px] font-bold uppercase tracking-wider text-blue-600">Fitur utama</span>
+              </div>
+              <h3 class="text-xl sm:text-2xl font-bold text-slate-900">Perjalanan Aktif</h3>
+              <p class="text-slate-600 text-sm leading-relaxed">
+                Pantau posisi KRL yang sedang kamu tumpangi beserta rincian rutenya.
+              </p>
+            </div>
+
+            <div class="lg:col-span-7 grid sm:grid-cols-2 gap-x-8 gap-y-2 lg:border-l lg:border-blue-100 lg:pl-10">
+                <div class="flex items-start gap-2.5">
+                  <span class="mt-[7px] w-1.5 h-1.5 rounded-full bg-blue-600 shrink-0"></span>
+                  <p class="text-sm text-slate-600">Stasiun berikutnya dan sisa stasiun</p>
+                </div>
+                <div class="flex items-start gap-2.5">
+                  <span class="mt-[7px] w-1.5 h-1.5 rounded-full bg-blue-600 shrink-0"></span>
+                  <p class="text-sm text-slate-600">Perkiraan waktu tiba</p>
+                </div>
+                <div class="flex items-start gap-2.5">
+                  <span class="mt-[7px] w-1.5 h-1.5 rounded-full bg-blue-600 shrink-0"></span>
+                  <p class="text-sm text-slate-600">Urutan stasiun sampai tujuan</p>
+                </div>
+                <div class="flex items-start gap-2.5">
+                  <span class="mt-[7px] w-1.5 h-1.5 rounded-full bg-blue-600 shrink-0"></span>
+                  <p class="text-sm text-slate-600">Waktu tempuh, jarak, dan kecepatan</p>
+                </div>
+            </div>
+
+          </div>
+        </div>
+
+        <!-- Feature 1 -->
+        <div class="bg-white p-6 sm:p-7 rounded-2xl border border-slate-200/90 shadow-sm hover:shadow-md hover:border-blue-200 transition-all">
+          <div class="space-y-3">
+            <div class="text-blue-600">
+              <svg viewBox="0 0 32 32" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" class="w-9 h-9" aria-hidden="true"><rect x="8" y="8" width="14" height="15" rx="4"/><rect x="11" y="11.5" width="8" height="4.5" rx="1.5"/><circle cx="11.5" cy="19.5" r="1.1" fill="currentColor" stroke="none"/><circle cx="18.5" cy="19.5" r="1.1" fill="currentColor" stroke="none"/><path d="M11 23l-2 3M19 23l2 3"/><path d="M6 26h18"/><path d="M25 7.5a6 6 0 0 1 0 8M28 5a10 10 0 0 1 0 13"/></svg>
+            </div>
+            <h3 class="text-lg font-bold text-slate-900">Posisi Kereta dari GPS Penumpang</h3>
+            <p class="text-slate-600 text-sm leading-relaxed">
+              Posisi kereta di peta bergerak mengikuti penumpang di dalamnya.
+            </p>
+          </div>
+        </div>
+
+        <!-- Feature 2 -->
+        <div class="bg-white p-6 sm:p-7 rounded-2xl border border-slate-200/90 shadow-sm hover:shadow-md hover:border-blue-200 transition-all">
+          <div class="space-y-3">
+            <div class="text-blue-600">
+              <svg viewBox="0 0 32 32" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" class="w-9 h-9" aria-hidden="true"><path d="M4 21h22"/><circle cx="8" cy="21" r="1.5" fill="currentColor" stroke="none"/><circle cx="15" cy="21" r="1.5" fill="currentColor" stroke="none"/><circle cx="23" cy="21" r="3.5"/><path d="M20.5 15.5a3 3 0 0 1 5 0"/><path d="M18.5 12.5a6 6 0 0 1 9 0"/></svg>
+            </div>
+            <h3 class="text-lg font-bold text-slate-900">Alarm Sisa Stasiun</h3>
+            <p class="text-slate-600 text-sm leading-relaxed">
+              Ponsel berbunyi dan bergetar dua stasiun sebelum tujuan.
+            </p>
+
+            <div class="pt-1">
+              <p class="text-[11px] font-bold uppercase tracking-wider text-slate-400 mb-2">Coba suara alarmnya</p>
+              <div class="flex flex-col gap-2">
+                <button
+                  type="button"
+                  class="tk-sound-btn group w-full inline-flex items-center gap-2.5 px-3.5 py-2.5 rounded-xl bg-white border border-slate-200 hover:border-blue-300 hover:bg-blue-50/60 text-left shadow-sm transition-all active:scale-[0.98]"
+                  data-sound="assets/audio/alarm-transit.mp3">
+                  <span class="text-blue-600"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" class="w-4 h-4 shrink-0" aria-hidden="true"><path d="M4 9.5h3l4.5-3.5v12L7 14.5H4z"/><path class="tk-wave" d="M15 9.5a3.5 3.5 0 0 1 0 5"/><path class="tk-wave" d="M17.5 7a7 7 0 0 1 0 10"/></svg></span>
+                  <span class="leading-tight">
+                    <span class="block text-xs font-bold text-slate-900">Pengingat transit</span>
+                    <span class="block text-[11px] text-slate-500">2 stasiun sebelum transit</span>
+                  </span>
+                </button>
+                <button
+                  type="button"
+                  class="tk-sound-btn group w-full inline-flex items-center gap-2.5 px-3.5 py-2.5 rounded-xl bg-white border border-slate-200 hover:border-red-300 hover:bg-red-50/60 text-left shadow-sm transition-all active:scale-[0.98]"
+                  data-sound="assets/audio/alarm-tiba.mp3">
+                  <span class="text-red-600"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" class="w-4 h-4 shrink-0" aria-hidden="true"><path d="M4 9.5h3l4.5-3.5v12L7 14.5H4z"/><path class="tk-wave" d="M15 9.5a3.5 3.5 0 0 1 0 5"/><path class="tk-wave" d="M17.5 7a7 7 0 0 1 0 10"/></svg></span>
+                  <span class="leading-tight">
+                    <span class="block text-xs font-bold text-slate-900">Pengingat tiba</span>
+                    <span class="block text-[11px] text-slate-500">2 stasiun sebelum turun</span>
+                  </span>
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Feature 3 -->
+        <div class="bg-white p-6 sm:p-7 rounded-2xl border border-slate-200/90 shadow-sm hover:shadow-md hover:border-blue-200 transition-all">
+          <div class="space-y-3">
+            <div class="text-blue-600">
+              <svg viewBox="0 0 32 32" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" class="w-9 h-9" aria-hidden="true"><circle cx="7" cy="25" r="2.5"/><circle cx="25" cy="7" r="2.5"/><path d="M7 22.5V17a4 4 0 0 1 4-4h10a4 4 0 0 0 4-4v-.5"/><circle cx="16" cy="13" r="1.5" fill="currentColor" stroke="none"/></svg>
+            </div>
+            <h3 class="text-lg font-bold text-slate-900">Rute dan Tarif</h3>
+            <p class="text-slate-600 text-sm leading-relaxed">
+              Rute tercepat, jumlah transit, dan estimasi tarif sebelum berangkat.
+            </p>
+          </div>
+        </div>
+
+        <!-- Feature 4 -->
+        <div class="bg-white p-6 sm:p-7 rounded-2xl border border-slate-200/90 shadow-sm hover:shadow-md hover:border-red-200 transition-all flex flex-col justify-between">
+          <div class="space-y-3">
+            <div class="text-red-600">
+              <svg viewBox="0 0 32 32" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" class="w-9 h-9" aria-hidden="true"><path d="M4.5 10A3.5 3.5 0 0 1 8 6.5h13A3.5 3.5 0 0 1 24.5 10v5a3.5 3.5 0 0 1-3.5 3.5h-8L8 22.5v-4A3.5 3.5 0 0 1 4.5 15v-5Z"/><path d="M9.5 11.5h10M9.5 15h6"/></svg>
+            </div>
+            <h3 class="text-lg font-bold text-slate-900">Kabar Kepadatan dari Forum</h3>
+            <p class="text-slate-600 text-sm leading-relaxed">
+              Tanyakan kepadatan kereta ke penumpang lain sebelum naik.
+            </p>
+          </div>
+          <a href="/forum" class="pt-4 mt-4 border-t border-slate-100 text-xs font-bold text-red-600 hover:text-red-700 flex items-center justify-between group">
+            <span>Buka forum</span>
+            <span class="inline-flex items-center gap-1 group-hover:translate-x-1 transition-transform">&rarr;</span>
+          </a>
+        </div>
+
+        <!-- Feature 5 -->
+        <div class="bg-white p-6 sm:p-7 rounded-2xl border border-slate-200/90 shadow-sm hover:shadow-md hover:border-blue-200 transition-all">
+          <div class="space-y-3">
+            <div class="text-blue-600">
+              <svg viewBox="0 0 32 32" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" class="w-9 h-9" aria-hidden="true"><path d="M3.5 12L16 6l12.5 6"/><path d="M7 13v12M25 13v12"/><path d="M3.5 25h25"/><rect x="11" y="15" width="10" height="10" rx="2.5"/><path d="M13.5 18.5h5"/></svg>
+            </div>
+            <h3 class="text-lg font-bold text-slate-900">Fasilitas Stasiun</h3>
+            <p class="text-slate-600 text-sm leading-relaxed">
+              Toilet, musala, lift, mesin tiket, dan area parkir tiap stasiun.
+            </p>
+          </div>
+        </div>
+
+        <!-- Feature 6 -->
+        <div class="bg-white p-6 sm:p-7 rounded-2xl border border-slate-200/90 shadow-sm hover:shadow-md hover:border-emerald-200 transition-all">
+          <div class="space-y-3">
+            <div class="text-emerald-600">
+              <svg viewBox="0 0 32 32" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" class="w-9 h-9" aria-hidden="true"><path d="M4 11.5A2.5 2.5 0 0 1 6.5 9h19a2.5 2.5 0 0 1 2.5 2.5v2a2.5 2.5 0 0 0 0 5v2a2.5 2.5 0 0 1-2.5 2.5h-19A2.5 2.5 0 0 1 4 20.5v-2a2.5 2.5 0 0 0 0-5v-2Z"/><path d="M11.5 16.5l2.5 2.5 5.5-6"/></svg>
+            </div>
+            <h3 class="text-lg font-bold text-slate-900">Tanpa Biaya dan Tanpa Iklan</h3>
+            <p class="text-slate-600 text-sm leading-relaxed">
+              Aplikasi independen, ringan, dan tanpa iklan.
+            </p>
+          </div>
+        </div>
+
+      </div>
+
+    </div>
+  </section>
+
+  <!-- ================= TANGKAPAN LAYAR / SLIDE SHOWCASE ================= -->
+  <section id="tangkapan-layar" class="py-16 sm:py-24 bg-white border-t border-slate-200/90 text-slate-900 relative overflow-hidden w-full max-w-full">
+    <div class="tk-container">
+
+      <div class="text-center max-w-3xl mx-auto mb-10 sm:mb-12 space-y-2.5">
+        <h2 class="text-3xl sm:text-4xl lg:text-5xl font-extrabold tracking-tight text-slate-950">
+          Tampilan Aplikasi
+        </h2>
+        <p class="text-slate-600 text-sm sm:text-base">
+          Geser untuk melihat setiap layar.
+        </p>
+      </div>
+
+      <!-- Enlarged Showcase Carousel Card (Responsive 1-Screen Mobile Layout) -->
+      <div class="grid lg:grid-cols-12 gap-5 lg:gap-12 items-center bg-gradient-to-br from-blue-50/50 via-white to-slate-50 rounded-3xl p-5 sm:p-8 lg:p-12 border border-blue-100 shadow-2xl shadow-slate-200/80 relative overflow-hidden">
+
+        <!-- Ambient decorative corner glow -->
+        <div class="absolute -right-20 -top-20 w-72 h-72 bg-blue-500/10 rounded-full blur-3xl pointer-events-none"></div>
+
+        <!-- Left: Slide Description & Controls -->
+        <div class="lg:col-span-6 space-y-4 lg:space-y-6 flex flex-col justify-between text-center lg:text-left">
+
+          <div class="space-y-3 sm:space-y-5">
+            <div class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-blue-50 text-blue-700 text-xs font-bold border border-blue-200 mx-auto lg:mx-0" id="showcase-mockup-badge">
+              Beranda
+            </div>
+
+            <h3 class="text-xl sm:text-2xl lg:text-4xl font-extrabold text-slate-900 tracking-tight" id="showcase-mockup-title">
+              Semua Ringkas di Layar Utama
+            </h3>
+
+            <!-- Slide Content 1 -->
+            <div id="feature-tab-1" class="feature-card-content space-y-3 lg:space-y-4">
+              <p class="text-slate-600 text-xs sm:text-sm lg:text-base leading-relaxed max-w-lg mx-auto lg:mx-0">
+                Stasiun rumah, stasiun kantor, dan kereta berikutnya langsung terlihat.
+              </p>
+              <div class="hidden lg:block space-y-3 pt-1">
+                <div class="flex items-start gap-3">
+                  <span class="mt-[7px] w-1.5 h-1.5 rounded-full bg-blue-600 shrink-0"></span>
+                  <p class="text-sm text-slate-600">Rute harian rumah dan kantor</p>
+                </div>
+
+                <div class="flex items-start gap-3">
+                  <span class="mt-[7px] w-1.5 h-1.5 rounded-full bg-blue-600 shrink-0"></span>
+                  <p class="text-sm text-slate-600">Jadwal dari stasiun favorit</p>
+                </div>
+              </div>
+            </div>
+
+            <!-- Slide Content 2 -->
+            <div id="feature-tab-2" class="feature-card-content hidden space-y-3 lg:space-y-4">
+              <p class="text-slate-600 text-xs sm:text-sm lg:text-base leading-relaxed max-w-lg mx-auto lg:mx-0">
+                Bandingkan pilihan rute beserta waktu tempuh dan tarifnya.
+              </p>
+              <div class="hidden lg:block space-y-3 pt-1">
+                <div class="flex items-start gap-3">
+                  <span class="mt-[7px] w-1.5 h-1.5 rounded-full bg-blue-600 shrink-0"></span>
+                  <p class="text-sm text-slate-600">Rute tercepat, misalnya 35 menit tanpa transit</p>
+                </div>
+
+                <div class="flex items-start gap-3">
+                  <span class="mt-[7px] w-1.5 h-1.5 rounded-full bg-blue-600 shrink-0"></span>
+                  <p class="text-sm text-slate-600">Estimasi tarif sebelum berangkat</p>
+                </div>
+              </div>
+            </div>
+
+            <!-- Slide Content 3 -->
+            <div id="feature-tab-3" class="feature-card-content hidden space-y-3 lg:space-y-4">
+              <p class="text-slate-600 text-xs sm:text-sm lg:text-base leading-relaxed max-w-lg mx-auto lg:mx-0">
+                Fasilitas tiap stasiun dan tempat makan di sekitarnya.
+              </p>
+              <div class="hidden lg:block space-y-3 pt-1">
+                <div class="flex items-start gap-3">
+                  <span class="mt-[7px] w-1.5 h-1.5 rounded-full bg-blue-600 shrink-0"></span>
+                  <p class="text-sm text-slate-600">Toilet, musala, lift, dan mesin tiket</p>
+                </div>
+
+                <div class="flex items-start gap-3">
+                  <span class="mt-[7px] w-1.5 h-1.5 rounded-full bg-blue-600 shrink-0"></span>
+                  <p class="text-sm text-slate-600">Tempat makan dan area parkir terdekat</p>
+                </div>
+              </div>
+            </div>
+
+            <!-- Slide Content 4 -->
+            <div id="feature-tab-4" class="feature-card-content hidden space-y-3 lg:space-y-4">
+              <p class="text-slate-600 text-xs sm:text-sm lg:text-base leading-relaxed max-w-lg mx-auto lg:mx-0">
+                Kabar kepadatan kereta dan kondisi peron dari penumpang lain.
+              </p>
+              <div class="hidden lg:block space-y-3 pt-1">
+                <div class="flex items-start gap-3">
+                  <span class="mt-[7px] w-1.5 h-1.5 rounded-full bg-red-600 shrink-0"></span>
+                  <p class="text-sm text-slate-600">Kepadatan kereta sebelum naik</p>
+                </div>
+
+                <div class="flex items-start gap-3">
+                  <span class="mt-[7px] w-1.5 h-1.5 rounded-full bg-red-600 shrink-0"></span>
+                  <p class="text-sm text-slate-600">Kondisi peron dan antrean gerbang masuk</p>
+                </div>
+              </div>
+            </div>
+
+            <!-- Slide Content 5 -->
+            <div id="feature-tab-5" class="feature-card-content hidden space-y-3 lg:space-y-4">
+              <p class="text-slate-600 text-xs sm:text-sm lg:text-base leading-relaxed max-w-lg mx-auto lg:mx-0">
+                Posisi KRL yang kamu tumpangi dan urutan stasiun sampai tujuan.
+              </p>
+              <div class="hidden lg:block space-y-3 pt-1">
+                <div class="flex items-start gap-3">
+                  <span class="mt-[7px] w-1.5 h-1.5 rounded-full bg-blue-600 shrink-0"></span>
+                  <p class="text-sm text-slate-600">Stasiun berikutnya dan perkiraan waktu tiba</p>
+                </div>
+                <div class="flex items-start gap-3">
+                  <span class="mt-[7px] w-1.5 h-1.5 rounded-full bg-blue-600 shrink-0"></span>
+                  <p class="text-sm text-slate-600">Urutan stasiun dengan penanda posisi kereta</p>
+                </div>
+              </div>
+            </div>
+
+            <!-- Slide Content 6 -->
+            <div id="feature-tab-6" class="feature-card-content hidden space-y-3 lg:space-y-4">
+              <p class="text-slate-600 text-xs sm:text-sm lg:text-base leading-relaxed max-w-lg mx-auto lg:mx-0">
+                Daftar keberangkatan dari stasiun terdekat beserta tujuan tiap kereta.
+              </p>
+              <div class="hidden lg:block space-y-3 pt-1">
+                <div class="flex items-start gap-3">
+                  <span class="mt-[7px] w-1.5 h-1.5 rounded-full bg-blue-600 shrink-0"></span>
+                  <p class="text-sm text-slate-600">Stasiun terdekat terdeteksi otomatis</p>
+                </div>
+                <div class="flex items-start gap-3">
+                  <span class="mt-[7px] w-1.5 h-1.5 rounded-full bg-blue-600 shrink-0"></span>
+                  <p class="text-sm text-slate-600">Jam berangkat dan tujuan tiap kereta</p>
+                </div>
+              </div>
+            </div>
+
+            <!-- Slide Content 7 -->
+            <div id="feature-tab-7" class="feature-card-content hidden space-y-3 lg:space-y-4">
+              <p class="text-slate-600 text-xs sm:text-sm lg:text-base leading-relaxed max-w-lg mx-auto lg:mx-0">
+                Seluruh lintas Commuter Line Jabodetabek beserta stasiunnya dalam satu peta.
+              </p>
+              <div class="hidden lg:block space-y-3 pt-1">
+                <div class="flex items-start gap-3">
+                  <span class="mt-[7px] w-1.5 h-1.5 rounded-full bg-blue-600 shrink-0"></span>
+                  <p class="text-sm text-slate-600">Enam lintas dengan warna berbeda</p>
+                </div>
+                <div class="flex items-start gap-3">
+                  <span class="mt-[7px] w-1.5 h-1.5 rounded-full bg-blue-600 shrink-0"></span>
+                  <p class="text-sm text-slate-600">Posisi kamu dan stasiun di sekitarnya</p>
+                </div>
+              </div>
+            </div>
+
+          </div>
+
+          <!-- Bottom Slide Controller (Desktop Only) -->
+          <div class="hidden lg:flex pt-6 border-t border-slate-200/70 items-center justify-between">
+            <div class="flex items-center gap-3">
+              <span class="showcase-slide-counter-desktop text-xs font-bold text-blue-600 tracking-wider bg-blue-50 px-3 py-1.5 rounded-lg border border-blue-100">
+                01 / 07
+              </span>
+              <!-- Dots Indicator -->
+              <div class="flex items-center gap-1.5">
+                <button class="showcase-dot h-2 rounded-full transition-all duration-300 bg-blue-600 w-8" aria-label="Slide 1"></button>
+                <button class="showcase-dot h-2 rounded-full transition-all duration-300 bg-slate-200 w-2.5 hover:bg-slate-300" aria-label="Slide 2"></button>
+                <button class="showcase-dot h-2 rounded-full transition-all duration-300 bg-slate-200 w-2.5 hover:bg-slate-300" aria-label="Slide 3"></button>
+                <button class="showcase-dot h-2 rounded-full transition-all duration-300 bg-slate-200 w-2.5 hover:bg-slate-300" aria-label="Slide 4"></button>
+                <button class="showcase-dot h-2 rounded-full transition-all duration-300 bg-slate-200 w-2.5 hover:bg-slate-300" aria-label="Slide 5"></button>
+                <button class="showcase-dot h-2 rounded-full transition-all duration-300 bg-slate-200 w-2.5 hover:bg-slate-300" aria-label="Slide 6"></button>
+                <button class="showcase-dot h-2 rounded-full transition-all duration-300 bg-slate-200 w-2.5 hover:bg-slate-300" aria-label="Slide 7"></button>
+              </div>
+            </div>
+
+            <!-- Previous & Next Action Buttons -->
+            <div class="flex items-center gap-2">
+              <button
+                class="showcase-prev-btn slider-btn w-10 h-10 rounded-xl bg-white border border-slate-200 shadow-sm text-slate-700 hover:text-blue-600 hover:border-blue-200 flex items-center justify-center transition-all active:scale-95"
+                aria-label="Slide Sebelumnya">
+                <i data-lucide="chevron-left" class="w-5 h-5"></i>
+              </button>
+
+              <button
+                class="showcase-next-btn slider-btn flex items-center gap-2 px-4 h-10 rounded-xl bg-blue-600 text-white font-bold text-xs shadow-md shadow-blue-600/25 hover:bg-blue-700 transition-all active:scale-95"
+                aria-label="Slide Berikutnya">
+                <span>Berikutnya</span>
+                <i data-lucide="chevron-right" class="w-4 h-4"></i>
+              </button>
+            </div>
+          </div>
+
+        </div>
+
+        <!-- Right: 3D Mockup Device Display with Side Nav Buttons -->
+        <div class="lg:col-span-6 flex flex-col justify-center items-center py-1 lg:py-4">
+          <div class="showcase-mockup-wrapper relative w-full max-w-[240px] sm:max-w-[320px] lg:max-w-[380px] flex justify-center items-center">
+
+            <!-- Side Prev Button (<) -->
+            <button
+              class="showcase-prev-btn absolute -left-3 sm:-left-5 top-1/2 -translate-y-1/2 w-9 h-9 sm:w-11 sm:h-11 rounded-full bg-white/95 backdrop-blur-md shadow-lg border border-slate-200 text-slate-700 hover:text-blue-600 hover:border-blue-300 flex items-center justify-center transition-all z-30 active:scale-90"
+              aria-label="Slide Sebelumnya">
+              <i data-lucide="chevron-left" class="w-5 h-5"></i>
+            </button>
+
+            <!-- Soft Ambient Backdrop Halo -->
+            <div class="absolute w-56 h-56 sm:w-72 sm:h-72 rounded-full bg-blue-500/10 blur-3xl -z-10"></div>
+
+            <img
+              id="showcase-mockup-img"
+              src="assets/screenshots/menu%20utama.webp?v=3"
+              alt="Tangkapan Layar Fitur Teman Kereta"
+              class="w-full h-auto object-contain drop-shadow-2xl max-h-[340px] sm:max-h-[440px] lg:max-h-[500px]"
+              onerror="this.onerror=null; this.src='assets/screenshots/placeholder-screen.svg';"
+            >
+
+            <!-- Side Next Button (>) -->
+            <button
+              class="showcase-next-btn absolute -right-3 sm:-right-5 top-1/2 -translate-y-1/2 w-9 h-9 sm:w-11 sm:h-11 rounded-full bg-blue-600 text-white shadow-lg shadow-blue-600/30 hover:bg-blue-700 flex items-center justify-center transition-all z-30 active:scale-90"
+              aria-label="Slide Berikutnya">
+              <i data-lucide="chevron-right" class="w-5 h-5"></i>
+            </button>
+          </div>
+
+          <!-- Mobile Dots Indicator & Counter (Below Mockup on Mobile) -->
+          <div class="flex lg:hidden items-center justify-center gap-3 pt-4">
+            <span id="showcase-slide-counter" class="text-[11px] font-bold text-blue-600 tracking-wider bg-blue-50 px-2.5 py-1 rounded-lg border border-blue-100">
+              01 / 07
+            </span>
+            <div class="flex items-center gap-1.5">
+              <button class="showcase-dot h-2 rounded-full transition-all duration-300 bg-blue-600 w-7" aria-label="Slide 1"></button>
+              <button class="showcase-dot h-2 rounded-full transition-all duration-300 bg-slate-200 w-2.5 hover:bg-slate-300" aria-label="Slide 2"></button>
+              <button class="showcase-dot h-2 rounded-full transition-all duration-300 bg-slate-200 w-2.5 hover:bg-slate-300" aria-label="Slide 3"></button>
+              <button class="showcase-dot h-2 rounded-full transition-all duration-300 bg-slate-200 w-2.5 hover:bg-slate-300" aria-label="Slide 4"></button>
+                <button class="showcase-dot h-2 rounded-full transition-all duration-300 bg-slate-200 w-2.5 hover:bg-slate-300" aria-label="Slide 5"></button>
+                <button class="showcase-dot h-2 rounded-full transition-all duration-300 bg-slate-200 w-2.5 hover:bg-slate-300" aria-label="Slide 6"></button>
+                <button class="showcase-dot h-2 rounded-full transition-all duration-300 bg-slate-200 w-2.5 hover:bg-slate-300" aria-label="Slide 7"></button>
+            </div>
+          </div>
+
+        </div>
+
+      </div>
+
+    </div>
+  </section>
+
+  <!-- ================= CARA KERJA ================= -->
+  <section id="cara-kerja" class="py-16 sm:py-20 bg-slate-50/60 border-t border-slate-200/90 overflow-hidden w-full max-w-full">
+    <div class="tk-container">
+
+      <div class="text-center max-w-3xl mx-auto mb-12 sm:mb-14 space-y-3">
+        <h2 class="text-3xl sm:text-4xl font-extrabold text-slate-950 tracking-tight">
+          Cara Memulai
+        </h2>
+        <p class="text-slate-600 text-sm sm:text-base">
+          Daftar akun sekali di awal, setelah itu tinggal pakai.
+        </p>
+      </div>
+
+      <div class="grid md:grid-cols-3 gap-6">
+
+        <!-- Step 1 -->
+        <div class="bg-white p-6 rounded-2xl border border-slate-200/90 shadow-sm space-y-3">
+          <div class="w-8 h-8 rounded-lg bg-blue-600 text-white text-sm font-extrabold flex items-center justify-center shadow-sm shadow-blue-600/30">
+            1
+          </div>
+          <h3 class="text-lg font-bold text-slate-900">Unduh dan Pasang</h3>
+          <p class="text-slate-600 text-sm leading-relaxed">
+            Unduh berkas APK di halaman ini, lalu pasang.
+          </p>
+        </div>
+
+        <!-- Step 2 -->
+        <div class="bg-white p-6 rounded-2xl border border-slate-200/90 shadow-sm space-y-3">
+          <div class="w-8 h-8 rounded-lg bg-blue-600 text-white text-sm font-extrabold flex items-center justify-center shadow-sm shadow-blue-600/30">
+            2
+          </div>
+          <h3 class="text-lg font-bold text-slate-900">Pilih Stasiun</h3>
+          <p class="text-slate-600 text-sm leading-relaxed">
+            Tentukan stasiun asal dan tujuan.
+          </p>
+        </div>
+
+        <!-- Step 3 -->
+        <div class="bg-white p-6 rounded-2xl border border-slate-200/90 shadow-sm space-y-3">
+          <div class="w-8 h-8 rounded-lg bg-red-600 text-white text-sm font-extrabold flex items-center justify-center shadow-sm shadow-red-600/30">
+            3
+          </div>
+          <h3 class="text-lg font-bold text-slate-900">Aktifkan Pengingat</h3>
+          <p class="text-slate-600 text-sm leading-relaxed">
+            Aplikasi memberi tahu sebelum kamu tiba.
+          </p>
+        </div>
+
+      </div>
+
+    </div>
+  </section>
+
+  <!-- ================= DOWNLOAD CALL TO ACTION ================= -->
+  <section id="unduh" class="scroll-mt-20 pt-36 pb-20 sm:pt-48 sm:pb-24 lg:pt-52 lg:pb-28 bg-slate-50 relative overflow-hidden w-full max-w-full">
+    <div class="tk-container">
+
+      <!-- Brand Blue Gradient Hero Card (Slimmer height, slightly wider 920px, ~50% pop-out mockup) -->
+      <div class="rounded-3xl bg-gradient-to-br from-blue-600 via-blue-700 to-indigo-900 text-white px-6 py-5 sm:px-8 sm:py-6 lg:px-9 lg:py-6 border border-blue-500/40 shadow-2xl shadow-blue-900/30 relative">
+
+        <!-- Ambient decorative gradient orbs contained inside rounded-3xl overflow-hidden wrapper -->
+        <div class="absolute inset-0 rounded-3xl overflow-hidden pointer-events-none">
+          <div class="absolute -right-16 -top-16 w-64 h-64 bg-red-500/20 rounded-full blur-3xl pointer-events-none"></div>
+          <div class="absolute -left-16 -bottom-16 w-64 h-64 bg-blue-400/20 rounded-full blur-3xl pointer-events-none"></div>
+        </div>
+
+        <div class="grid lg:grid-cols-12 gap-6 lg:gap-8 items-center relative z-10">
+
+          <!-- Left: 3D Smartphone Mockup (~50% pops out boldly above the box) -->
+          <div class="lg:col-span-5 flex justify-center items-center -mt-32 sm:-mt-44 lg:-mt-56 xl:-mt-60 -mb-12 sm:-mb-16 lg:-mb-20 relative z-20">
+            <div class="w-64 sm:w-76 lg:w-88 xl:w-96 shrink-0 animate-float-reverse drop-shadow-2xl">
+              <img
+                src="assets/screenshots/hero mockup.webp?v=3"
+                alt="Mockup Aplikasi Teman Kereta"
+                class="w-full h-auto object-contain drop-shadow-2xl transform hover:scale-105 transition-transform duration-300"
+              >
+            </div>
+          </div>
+
+          <!-- Right: Information, Download Actions, and QR Code -->
+          <div class="lg:col-span-7 space-y-3 text-center lg:text-left py-0.5">
+
+            <div class="space-y-1.5">
+              <h2 class="text-2xl sm:text-3xl lg:text-[32px] font-extrabold tracking-tight leading-tight text-white">
+                Unduh Aplikasi Teman Kereta
+              </h2>
+
+              <p class="text-blue-100 text-xs sm:text-sm lg:text-[14px] max-w-md leading-relaxed mx-auto lg:mx-0">
+                Unduh sekarang, pakai pada perjalanan berikutnya.
+              </p>
+            </div>
+
+            <!-- Download Action Area + QR Code -->
+            <div class="flex flex-col sm:flex-row items-center justify-center lg:justify-start gap-3.5 pt-1">
+
+              <!-- Buttons Column -->
+              <div class="flex flex-col gap-2.5 w-full sm:w-auto">
+                <!-- Direct APK Download Button -->
+                <a id="apk-download-link-2" href="assets/downloads/teman-kereta-v1.0.apk" download class="btn-download-apk w-full sm:w-auto inline-flex items-center justify-center gap-3 px-5 py-3 rounded-2xl bg-white hover:bg-blue-50 active:bg-slate-100 text-blue-700 font-bold text-sm shadow-xl shadow-black/15 hover:-translate-y-0.5 transition-all">
+                  <i data-lucide="download" class="w-4 h-4 text-blue-600"></i>
+                  <div class="text-left">
+                    <div class="text-[9px] uppercase font-bold tracking-wider text-blue-500 leading-none">Unduh Berkas Langsung</div>
+                    <div class="text-xs sm:text-sm font-extrabold text-blue-700"><span class="apk-version-label">APK Android (v1.0)</span></div>
+                  </div>
+                </a>
+
+                <!-- Google Play Placeholder -->
+                <div class="w-full sm:w-auto inline-flex items-center justify-center gap-2.5 px-4 py-2.5 rounded-2xl bg-white/10 hover:bg-white/15 border border-white/20 text-white text-left backdrop-blur-md">
+                  <i data-lucide="play" class="w-3.5 h-3.5 text-blue-200"></i>
+                  <div>
+                    <div class="text-[9px] text-blue-200 uppercase font-semibold">Google Play Store</div>
+                    <div class="text-xs font-bold text-white">Segera Hadir</div>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Compact QR Code Card -->
+              <div class="hidden sm:block bg-white p-2.5 rounded-2xl shadow-2xl text-center space-y-1 border border-white text-slate-900 shrink-0 w-32 sm:w-34">
+                <div class="w-20 h-20 sm:w-22 sm:h-22 mx-auto rounded-lg overflow-hidden p-0.5 flex items-center justify-center">
+                  <img src="assets/screenshots/qr-code.svg" alt="Kode QR unduhan APK" class="w-full h-full object-contain">
+                </div>
+                <div class="text-[10px] sm:text-[10.5px] font-bold text-slate-900">Pindai Kode QR</div>
+                <div class="text-[8px] text-slate-500 leading-tight">Unduh langsung di ponsel</div>
+              </div>
+
+            </div>
+
+            <!-- Install Note -->
+            <p class="text-[11px] sm:text-xs text-blue-200 flex items-center justify-center lg:justify-start gap-1.5 pt-1">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" class="w-4 h-4 text-emerald-300 shrink-0" aria-hidden="true"><path d="M4 12.5l5 5L20 6.5"/></svg>
+              <span>Tanpa biaya • Tanpa iklan</span>
+            </p>
+          </div>
+
+        </div>
+      </div>
+
+    </div>
+  </section>
+
+  <!-- ================= FAQ ================= -->
+  <section id="faq" class="py-16 sm:py-20 bg-white border-t border-slate-200/90 overflow-hidden w-full max-w-full">
+    <div class="tk-container tk-container-narrow">
+
+      <div class="text-center mb-12 sm:mb-14 space-y-3">
+        <h2 class="text-3xl sm:text-4xl font-extrabold text-slate-950 tracking-tight">
+          Pertanyaan Umum
+        </h2>
+      </div>
+
+      <!-- FAQ Accordion List -->
+      <div class="space-y-3">
+
+        <div class="border border-slate-200 rounded-xl overflow-hidden shadow-sm">
+          <button class="faq-toggle w-full px-5 py-4 text-left font-bold text-sm sm:text-base text-slate-900 flex justify-between items-center hover:bg-slate-50 transition-colors">
+            <span>Apakah Teman Kereta benar-benar gratis?</span>
+            <i data-lucide="chevron-down" class="faq-icon w-4 h-4 text-slate-500 transition-transform duration-200 shrink-0"></i>
+          </button>
+          <div class="faq-content hidden px-5 pb-4 pt-1 text-sm text-slate-600 leading-relaxed border-t border-slate-100 bg-slate-50/50">
+            Ya. Tanpa biaya langganan, tanpa iklan, dan tanpa fitur terkunci.
+          </div>
+        </div>
+
+        <div class="border border-slate-200 rounded-xl overflow-hidden shadow-sm">
+          <button class="faq-toggle w-full px-5 py-4 text-left font-bold text-sm sm:text-base text-slate-900 flex justify-between items-center hover:bg-slate-50 transition-colors">
+            <span>Dari mana data jadwal dan posisi kereta berasal?</span>
+            <i data-lucide="chevron-down" class="faq-icon w-4 h-4 text-slate-500 transition-transform duration-200 shrink-0"></i>
+          </button>
+          <div class="faq-content hidden px-5 pb-4 pt-1 text-sm text-slate-600 leading-relaxed border-t border-slate-100 bg-slate-50/50">
+            Jadwal dari Open Data GTFS resmi. Posisi kereta dihitung dari sinyal GPS penumpang tanpa identitas, dan kepadatan berasal dari forum.
+          </div>
+        </div>
+
+        <div class="border border-slate-200 rounded-xl overflow-hidden shadow-sm">
+          <button class="faq-toggle w-full px-5 py-4 text-left font-bold text-sm sm:text-base text-slate-900 flex justify-between items-center hover:bg-slate-50 transition-colors">
+            <span>Bagaimana cara kerja pengingat sisa stasiun?</span>
+            <i data-lucide="chevron-down" class="faq-icon w-4 h-4 text-slate-500 transition-transform duration-200 shrink-0"></i>
+          </button>
+          <div class="faq-content hidden px-5 pb-4 pt-1 text-sm text-slate-600 leading-relaxed border-t border-slate-100 bg-slate-50/50">
+            Dua stasiun sebelum tujuan, ponsel kamu berbunyi dan bergetar meskipun layarnya mati.
+          </div>
+        </div>
+
+        <div class="border border-slate-200 rounded-xl overflow-hidden shadow-sm">
+          <button class="faq-toggle w-full px-5 py-4 text-left font-bold text-sm sm:text-base text-slate-900 flex justify-between items-center hover:bg-slate-50 transition-colors">
+            <span>Bagaimana cara memasang berkas APK?</span>
+            <i data-lucide="chevron-down" class="faq-icon w-4 h-4 text-slate-500 transition-transform duration-200 shrink-0"></i>
+          </button>
+          <div class="faq-content hidden px-5 pb-4 pt-1 text-sm text-slate-600 leading-relaxed border-t border-slate-100 bg-slate-50/50">
+            Buka berkas yang telah diunduh, lalu pilih Pasang. Apabila diminta, aktifkan "Izinkan dari sumber ini".
+          </div>
+        </div>
+
+      </div>
+
+    </div>
+  </section>
+
+  <!-- ================= FOOTER (CLEAN BRAND LIGHT THEME) ================= -->
+  <footer class="bg-white text-slate-600 py-12 border-t border-slate-200 overflow-hidden w-full max-w-full">
+    <div class="tk-container">
+
+      <div class="flex flex-col md:flex-row items-center justify-between gap-6 pb-8 border-b border-slate-100 text-center md:text-left">
+        <div class="flex items-center gap-3">
+          <div class="w-8 h-8 rounded-lg bg-blue-600 p-0.5 flex items-center justify-center shadow-sm shadow-blue-600/20">
+            <img src="assets/branding/tk_icon.png" alt="Logo Teman Kereta" class="w-full h-full object-contain rounded-md" onerror="this.onerror=null; this.src='assets/screenshots/qr-code.svg';">
+          </div>
+          <div class="flex items-baseline gap-2">
+            <span class="text-base font-bold text-slate-900 tracking-tight">Teman Kereta</span>
+            <span class="text-xs font-medium text-slate-400">by duacincin.id</span>
+          </div>
+        </div>
+
+        <div class="flex flex-wrap items-center justify-center gap-6 text-sm text-slate-600 font-medium">
+          <a href="#beranda" class="hover:text-blue-600 transition-colors">Beranda</a>
+          <a href="#fitur" class="hover:text-blue-600 transition-colors">Fitur</a>
+          <a href="#tangkapan-layar" class="hover:text-blue-600 transition-colors">Tangkapan Layar</a>
+          <a href="#cara-kerja" class="hover:text-blue-600 transition-colors">Cara Kerja</a>
+          <a href="#faq" class="hover:text-blue-600 transition-colors">FAQ</a>
+        </div>
+      </div>
+
+      <div class="pt-6 flex flex-col sm:flex-row items-center justify-between gap-4 text-xs text-slate-400 text-center sm:text-left">
+        <div>
+          &copy; 2026 Teman Kereta by duacincin.id. Aplikasi independen, bukan aplikasi resmi KAI Commuter.
+        </div>
+        <div>
+          Dibuat oleh sesama pengguna Commuter Line.
+        </div>
+      </div>
+
+    </div>
+  </footer>
+
+  <!-- ================= DOWNLOAD TOAST NOTIFICATION ================= -->
+  <div id="download-toast" class="fixed bottom-6 right-6 z-50 transform translate-y-24 opacity-0 transition-all duration-300 bg-slate-900 text-white p-4 rounded-xl shadow-xl border border-slate-800 flex items-center gap-3 max-w-sm pointer-events-none">
+    <div class="w-9 h-9 rounded-lg bg-blue-600 text-white flex items-center justify-center shrink-0">
+      <i data-lucide="download" class="w-4 h-4"></i>
+    </div>
+    <div>
+      <div class="text-xs font-bold text-blue-400">Mengunduh Aplikasi</div>
+      <div class="text-xs text-slate-300">Berkas APK sedang diunduh ke perangkat kamu.</div>
+    </div>
+  </div>
+
+  <!-- Initialize Lucide Icons -->
+  <script>
+    lucide.createIcons();
+  </script>
+
+  <!-- Main JavaScript -->
+  <script src="assets/js/main.js?v=7"></script>
+
+  <!-- Dynamic Supabase Release Version Syncer -->
+  <script>
+    (function () {
+      var SUPABASE_URL = 'https://slcttxbxcdrsavgugzdy.supabase.co';
+      var SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InNsY3R0eGJ4Y2Ryc2F2Z3VnemR5Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODU4NDM5NjksImV4cCI6MjEwMTQxOTk2OX0.o-N_03nF0ZmlurmHM3_ogRDupnXLOPY2ztAU8zU0kbE';
+      var links = [
+        document.getElementById('apk-download-link-1'),
+        document.getElementById('apk-download-link-2'),
+      ].filter(Boolean);
+
+      fetch(
+        SUPABASE_URL +
+          '/rest/v1/app_releases?select=apk_url,version_name&order=version_code.desc&limit=1',
+        { headers: { apikey: SUPABASE_ANON_KEY, Authorization: 'Bearer ' + SUPABASE_ANON_KEY } }
+      )
+        .then(function (res) {
+          if (!res.ok) throw new Error('bad response');
+          return res.json();
+        })
+        .then(function (rows) {
+          var latest = rows && rows[0];
+          if (!latest || !latest.apk_url) return;
+          links.forEach(function (a) {
+            a.setAttribute('href', latest.apk_url);
+            a.setAttribute('download', '');
+            a.querySelectorAll('.apk-version-label').forEach(function (el) {
+              el.textContent = 'APK Android (v' + latest.version_name + ')';
+            });
+          });
+        })
+        .catch(function () {
+          // Fallback to local apk
+          links.forEach(function (a) {
+            a.setAttribute('href', 'assets/downloads/teman-kereta-v1.0.apk');
+            a.setAttribute('download', '');
+            a.querySelectorAll('.apk-version-label').forEach(function (el) {
+              el.textContent = 'APK Android (v1.0)';
+            });
+          });
+        });
+    })();
+  </script>
+</body>
+</html>

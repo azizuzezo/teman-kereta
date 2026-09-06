@@ -11,6 +11,7 @@ import '../../../core/widgets/tk_logo.dart';
 import 'forum_controller.dart';
 import 'forum_models.dart';
 import 'widgets/forum_post_card.dart';
+import 'widgets/mentions.dart';
 
 class ForumPostDetailPage extends ConsumerStatefulWidget {
   const ForumPostDetailPage({required this.postId, super.key});
@@ -130,13 +131,21 @@ class _ForumPostDetailPageState extends ConsumerState<ForumPostDetailPage> {
                     child: Row(
                       children: <Widget>[
                         Expanded(
-                          child: TextField(
-                            controller: _commentController,
-                            maxLength: 1000,
-                            decoration: const InputDecoration(
-                              hintText: 'Tulis komentar...',
-                              counterText: '',
-                            ),
+                          child: Column(
+                            mainAxisSize: MainAxisSize.min,
+                            children: <Widget>[
+                              MentionSuggestions(
+                                controller: _commentController,
+                              ),
+                              TextField(
+                                controller: _commentController,
+                                maxLength: 1000,
+                                decoration: const InputDecoration(
+                                  hintText: 'Tulis komentar… ketik @ untuk menandai',
+                                  counterText: '',
+                                ),
+                              ),
+                            ],
                           ),
                         ),
                         const SizedBox(width: 8),
@@ -336,7 +345,7 @@ class _CommentTileState extends ConsumerState<_CommentTile> {
                     ],
                   ),
                 ] else
-                  Text(comment.body),
+                  MentionText(comment.body),
               ],
             ),
           ),

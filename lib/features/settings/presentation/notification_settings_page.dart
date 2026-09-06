@@ -2,8 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
-import '../../../data/providers/provider_registry.dart';
-import '../../premium/presentation/subscription_controller.dart';
 import 'settings_controller.dart';
 
 class NotificationSettingsPage extends ConsumerWidget {
@@ -13,8 +11,6 @@ class NotificationSettingsPage extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final settings = ref.watch(settingsControllerProvider);
     final controller = ref.read(settingsControllerProvider.notifier);
-    final entitlement = ref.watch(subscriptionControllerProvider);
-    final isEntitled = entitlement.isEntitledAt(ref.read(clockProvider).now());
 
     return Scaffold(
       appBar: AppBar(title: const Text('Pengaturan notifikasi')),
@@ -43,51 +39,44 @@ class NotificationSettingsPage extends ConsumerWidget {
                     secondary: const Icon(Icons.volume_up_outlined),
                     title: const Text('Suara'),
                   ),
+                  const Divider(height: 1),
+                  ListTile(
+                    leading: const Icon(Icons.play_circle_outline_rounded),
+                    title: const Text('Tes suara peringatan'),
+                    subtitle: const Text(
+                      'Dengarkan nada tiap peringatan sebelum perjalanan asli.',
+                    ),
+                    trailing: const Icon(Icons.chevron_right_rounded),
+                    onTap: () => context.push('/settings/sound-test'),
+                  ),
                 ],
               ),
             ),
             const SizedBox(height: 24),
-            Row(
-              children: <Widget>[
-                Expanded(
-                  child: Text(
-                    'Waktu peringatan sebelum tujuan',
-                    style: Theme.of(context).textTheme.titleLarge,
-                  ),
-                ),
-                if (!isEntitled)
-                  const Icon(Icons.workspace_premium_rounded, color: Colors.amber),
-              ],
+            Text(
+              'Waktu peringatan sebelum tujuan',
+              style: Theme.of(context).textTheme.titleLarge,
             ),
             const SizedBox(height: 6),
-            Text(
-              isEntitled
-                  ? 'Notifikasi akan dikirim berturut-turut mulai dari jumlah stasiun ini.'
-                  : 'Fitur premium — berlangganan untuk mengaktifkan pengingat otomatis ini.',
+            const Text(
+              'Notifikasi akan dikirim berturut-turut mulai dari jumlah stasiun ini.',
             ),
             const SizedBox(height: 10),
             Card(
-              child: isEntitled
-                  ? Column(
-                      children: <int>[5, 3, 2, 1].map((threshold) {
-                        return RadioListTile<int>(
-                          value: threshold,
-                          groupValue: settings.stopAlertThreshold,
-                          onChanged: (value) {
-                            if (value != null) {
-                              controller.setStopAlertThreshold(value);
-                            }
-                          },
-                          title: Text('$threshold stasiun sebelum tujuan'),
-                        );
-                      }).toList(growable: false),
-                    )
-                  : ListTile(
-                      leading: const Icon(Icons.lock_outline_rounded),
-                      title: const Text('Lihat harga & berlangganan'),
-                      trailing: const Icon(Icons.chevron_right_rounded),
-                      onTap: () => context.push('/premium/paywall'),
-                    ),
+              child: Column(
+                children: <int>[5, 3, 2, 1].map((threshold) {
+                  return RadioListTile<int>(
+                    value: threshold,
+                    groupValue: settings.stopAlertThreshold,
+                    onChanged: (value) {
+                      if (value != null) {
+                        controller.setStopAlertThreshold(value);
+                      }
+                    },
+                    title: Text('$threshold stasiun sebelum tujuan'),
+                  );
+                }).toList(growable: false),
+              ),
             ),
           ],
         ),

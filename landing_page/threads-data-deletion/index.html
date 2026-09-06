@@ -1,0 +1,52 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="robots" content="noindex, nofollow">
+  <title>Status Penghapusan Data Threads — Teman Kereta</title>
+  <style>
+    body { font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+           background: #f8fafc; color: #0f172a; margin: 0;
+           display: grid; place-items: center; min-height: 100vh; padding: 24px; }
+    .card { background: #fff; border: 1px solid #e2e8f0; border-radius: 16px;
+            padding: 28px; max-width: 560px; width: 100%;
+            box-shadow: 0 1px 3px rgb(15 23 42 / 0.06); }
+    h1 { font-size: 18px; margin: 0 0 12px; }
+    p { color: #475569; font-size: 14px; line-height: 1.65; margin: 0 0 14px; }
+    .badge { display: inline-block; background: #dcfce7; color: #166534;
+             border-radius: 999px; padding: 4px 12px; font-size: 12px;
+             font-weight: 700; margin-bottom: 14px; }
+    code { background: #f1f5f9; border: 1px solid #e2e8f0; border-radius: 8px;
+           padding: 3px 8px; font-size: 13px; word-break: break-all; }
+    a { color: #2563eb; }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <span class="badge">Selesai</span>
+    <h1>Permintaan penghapusan data Threads</h1>
+    <p>
+      Permintaan penghapusan data kamu sudah diproses dan selesai. Kode
+      konfirmasinya: <code id="code">—</code>
+    </p>
+    <p>
+      Teman Kereta tidak menyimpan data Threads milik pengguna. Integrasi
+      Threads pada layanan ini hanya dipakai untuk memposting pengumuman ke
+      akun Threads resmi Teman Kereta sendiri. Satu-satunya data yang pernah
+      tersimpan adalah token akses akun tersebut, dan token itu sudah dihapus
+      saat permintaan ini diterima.
+    </p>
+    <p>
+      Ada pertanyaan? Hubungi kami lewat
+      <a href="https://temankereta.web.id">temankereta.web.id</a>.
+    </p>
+  </div>
+  <script>
+    (function () {
+      var code = new URLSearchParams(window.location.search).get('code');
+      document.getElementById('code').textContent = code || 'tidak disertakan';
+    })();
+  </script>
+</body>
+</html>

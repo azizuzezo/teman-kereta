@@ -51,15 +51,20 @@ sender_name = "Teman Kereta Local"
 
 [storage]
 enabled = true
-file_size_limit = "10MiB"
+file_size_limit = "250MiB"
 
 [auth]
 enabled = true
-site_url = "http://127.0.0.1:3000"
+# Deep link scheme for the Flutter app — confirmation and password-reset emails
+# will redirect here so the app (not the admin web panel) handles them.
+site_url = "temankereta://app"
 additional_redirect_urls = [
+  "temankereta://app",
+  "temankereta://app/account/reset-password",
   "http://127.0.0.1:3000",
   "http://localhost:3000",
   "io.supabase.temankereta://login-callback/",
+  "https://www.temankereta.web.id",
 ]
 jwt_expiry = 3600
 enable_refresh_token_rotation = true
@@ -84,3 +89,10 @@ enable_confirmations = false
 enabled = true
 policy = "oneshot"
 inspector_port = 8083
+
+# Webhook deauthorize/data-deletion dari Meta. Meta tidak mengirim header
+# Authorization apa pun, jadi verifikasi JWT Supabase harus dimatikan —
+# keasliannya dibuktikan lewat tanda tangan HMAC signed_request di dalam
+# fungsinya sendiri. Lihat supabase/functions/threads-callbacks/index.ts.
+[functions.threads-callbacks]
+verify_jwt = false

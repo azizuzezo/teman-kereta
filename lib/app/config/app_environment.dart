@@ -1,11 +1,11 @@
 import 'package:flutter/foundation.dart';
 
-enum TransitProviderKind { mock, gtfs, officialApi, localSupabase }
+enum TransitProviderKind { mock, officialApi, localSupabase }
 
 abstract final class AppEnvironment {
   static const String name = String.fromEnvironment(
     'APP_ENV',
-    defaultValue: 'local',
+    defaultValue: 'remote',
   );
 
   static const String apiBaseUrl = String.fromEnvironment(
@@ -15,15 +15,18 @@ abstract final class AppEnvironment {
 
   static const String supabaseUrl = String.fromEnvironment(
     'SUPABASE_URL',
-    defaultValue: 'http://127.0.0.1:54321',
+    defaultValue: 'https://slcttxbxcdrsavgugzdy.supabase.co',
   );
 
   static const String supabaseAnonKey = String.fromEnvironment(
     'SUPABASE_ANON_KEY',
+    defaultValue:
+        'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InNsY3R0eGJ4Y2Ryc2F2Z3VnemR5Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODU4NDM5NjksImV4cCI6MjEwMTQxOTk2OX0.o-N_03nF0ZmlurmHM3_ogRDupnXLOPY2ztAU8zU0kbE',
   );
 
   static const bool supabaseEnabled = bool.fromEnvironment(
     'SUPABASE_ENABLED',
+    defaultValue: true,
   );
 
   static const bool firebaseEnabled = bool.fromEnvironment(
@@ -32,42 +35,12 @@ abstract final class AppEnvironment {
 
   static const String providerName = String.fromEnvironment(
     'TRANSIT_PROVIDER',
-    defaultValue: 'mock',
+    defaultValue: 'local_supabase',
   );
 
   static const String mapStyleUrl = String.fromEnvironment('MAP_STYLE_URL');
 
-  static const String gtfsRtVehiclePositionsUrl = String.fromEnvironment(
-    'GTFS_RT_VEHICLE_POSITIONS_URL',
-  );
-
-  static const String gtfsRtTripUpdatesUrl = String.fromEnvironment(
-    'GTFS_RT_TRIP_UPDATES_URL',
-  );
-
-  static const String gtfsRtAlertsUrl = String.fromEnvironment(
-    'GTFS_RT_ALERTS_URL',
-  );
-
-  static const int gtfsRtPollSeconds = int.fromEnvironment(
-    'GTFS_RT_POLL_SECONDS',
-    defaultValue: 30,
-  );
-
   static const String sentryDsn = String.fromEnvironment('SENTRY_DSN');
-
-  /// Whether to auto-import the bundled GTFS Schedule (static) asset at
-  /// [gtfsStaticZipPath] on first launch, once, if no GTFS static feed has
-  /// been imported yet (see `main.dart`). A manual import via the "Impor
-  /// jadwal GTFS" settings page always takes precedence over/after this —
-  /// this flag only controls the automatic bootstrap.
-  static const bool gtfsStaticEnabled = bool.fromEnvironment(
-    'GTFS_STATIC_ENABLED',
-  );
-
-  static const String gtfsStaticZipPath = String.fromEnvironment(
-    'GTFS_STATIC_ZIP_PATH',
-  );
 
   static bool get isLocal => name == 'local';
 
@@ -79,14 +52,13 @@ abstract final class AppEnvironment {
   static bool get crashReportingEnabled => sentryDsn.isNotEmpty && !isLocal;
 
   static TransitProviderKind get provider => switch (providerName) {
-    'gtfs' => TransitProviderKind.gtfs,
     'official_api' => TransitProviderKind.officialApi,
     'local_supabase' => TransitProviderKind.localSupabase,
     _ => TransitProviderKind.mock,
   };
 
   static void validateLocalOnly() {
-    if (!isLocal) {
+    if (!isLocal || kReleaseMode) {
       return;
     }
 
@@ -94,11 +66,6 @@ abstract final class AppEnvironment {
       'API_BASE_URL': apiBaseUrl,
       if (supabaseEnabled) 'SUPABASE_URL': supabaseUrl,
       if (mapStyleUrl.isNotEmpty) 'MAP_STYLE_URL': mapStyleUrl,
-      if (gtfsRtVehiclePositionsUrl.isNotEmpty)
-        'GTFS_RT_VEHICLE_POSITIONS_URL': gtfsRtVehiclePositionsUrl,
-      if (gtfsRtTripUpdatesUrl.isNotEmpty)
-        'GTFS_RT_TRIP_UPDATES_URL': gtfsRtTripUpdatesUrl,
-      if (gtfsRtAlertsUrl.isNotEmpty) 'GTFS_RT_ALERTS_URL': gtfsRtAlertsUrl,
     }.entries) {
       final uri = Uri.tryParse(entry.value);
       if (uri == null || !_isLocalHost(uri.host)) {

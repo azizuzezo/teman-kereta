@@ -20,6 +20,13 @@ abstract class Station with _$Station {
     @Default(<String>[]) List<String> lineIds,
     @Default(<String>[]) List<String> facilities,
     @Default(false) bool wheelchairAccessible,
+    // Per-line stop order (`{lineCode: stopOrder}`), used to draw each
+    // line's real geographic polyline in station-sequence order on the live
+    // map. Only `SupabaseTransitProvider` populates this from the
+    // `station_lines` join's `stop_order` column — every other provider
+    // (mock/demo/GTFS importer) defaults to empty, since they don't need
+    // route-accurate map rendering.
+    @Default(<String, int>{}) Map<String, int> stopOrderByLine,
   }) = _Station;
 
   factory Station.fromJson(Map<String, Object?> json) =>
@@ -62,10 +69,8 @@ abstract class TripLeg with _$TripLeg {
     String? transferInstruction,
     // The raw GTFS trip_id + service date backing this leg's physical
     // vehicle, when the originating provider actually has one (real feed
-    // data, not Data Demo/mock) — the shared identifier crowd-sourced
-    // position reports key off, since it's the one thing every provider
-    // (`gtfs`/`local_supabase`) agrees on regardless of which one is
-    // active. Null for mock/demo legs, which never report a position.
+    // data, not mock) — the shared identifier crowd-sourced position
+    // reports key off. Null for mock legs, which never report a position.
     String? externalTripId,
     DateTime? serviceDate,
   }) = _TripLeg;
