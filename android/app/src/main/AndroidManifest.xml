@@ -9,9 +9,21 @@
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_LOCATION" />
 
+    <!-- Lets the app ask to be exempted from Doze/App Standby battery
+         optimization, so ActiveTripLocationService is less likely to be
+         killed mid-trip. The exemption itself is opt-in via a system
+         dialog (Settings > Pengaturan lokasi in-app), never requested
+         silently. -->
+    <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
+
     <!-- Android 10+ runtime permission for the ride-detection confidence engine (PRD §9).
          Requested only when the user turns on auto-detection in Settings, never on launch. -->
     <uses-permission android:name="android.permission.ACTIVITY_RECOGNITION" />
+
+    <!-- Normal permission, granted automatically at install, no runtime
+         prompt. Needed by AlarmService's AudioContext, so audioplayers'
+         setMode()/setSpeakerphoneOn() calls don't get silently denied. -->
+    <uses-permission android:name="android.permission.MODIFY_AUDIO_SETTINGS" />
 
     <application
         android:label="@string/app_name"

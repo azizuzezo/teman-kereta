@@ -6,12 +6,17 @@ import '../../domain/entities/active_trip.dart';
 import '../../domain/entities/ride_detection.dart';
 import '../../domain/entities/transit_models.dart';
 
+class PinAppWidgetResult {
+  const PinAppWidgetResult({required this.supported, required this.requested});
+
+  final bool supported;
+  final bool requested;
+}
+
 class NativeTripService {
   const NativeTripService();
 
-  static const _channel = MethodChannel(
-    'id.temankereta.teman_kereta/native',
-  );
+  static const _channel = MethodChannel('id.temankereta.teman_kereta/native');
 
   Future<Map<String, Object?>> getCapabilities() async {
     try {
@@ -24,14 +29,37 @@ class NativeTripService {
     }
   }
 
-  Future<void> start(
+  /// Asks the launcher to add [widgetId] (one of the ids listed under
+  /// `homeScreenWidgets` in [getCapabilities]) to the home screen directly,
+  /// skipping the manual "long-press home screen, find Widgets, scroll to
+  /// find the app" hunt. [PinAppWidgetResult.supported] is false on Android
+  /// versions/launchers without pinning support (below Android 8, or a
+  /// launcher that doesn't implement it) — the caller should fall back to
+  /// telling the rider to add it manually. `requested: true` only means the
+  /// system placement dialog was shown, not that the rider went through with
+  /// it; there's no callback for the final outcome.
+  Future<PinAppWidgetResult> requestPinAppWidget(String widgetId) async {
+    final map = await _invokeMap('requestPinAppWidget', <String, Object?>{
+      'widgetId': widgetId,
+    });
+    return PinAppWidgetResult(
+      supported: map?['supported'] == true,
+      requested: map?['requested'] == true,
+    );
+  }
+
+  /// Returns any non-fatal warnings native flagged while starting (e.g. the
+  /// device isn't exempt from battery optimization) — the trip starts
+  /// either way, this is only ever something to nudge the rider about
+  /// afterwards. See [batteryOptimizationWarning].
+  Future<List<String>> start(
     ActiveTripSession session, {
     required List<Station> stations,
     required int stopAlertThreshold,
     required bool vibrationEnabled,
     required bool soundEnabled,
   }) async {
-    await _invoke(
+    final result = await _invokeMap(
       'startActiveTrip',
       _payload(
         session,
@@ -41,6 +69,10 @@ class NativeTripService {
         soundEnabled: soundEnabled,
       ),
     );
+    return (result?['warnings'] as List<Object?>?)?.whereType<String>().toList(
+          growable: false,
+        ) ??
+        const <String>[];
   }
 
   Future<void> stop() async {
@@ -203,6 +235,27 @@ class NativeTripService {
     return await _invokeMap('getPermissionStatus') ?? <String, Object?>{};
   }
 
+  /// Matches the marker native adds to [start]'s `warnings` when the device
+  /// isn't exempt from battery optimization yet — not a real Android
+  /// permission string like the others in that list, just shared with them.
+  static const batteryOptimizationWarning = 'BATTERY_OPTIMIZATION_NOT_IGNORED';
+
+  /// Opens the system "allow this app to ignore battery optimizations?"
+  /// dialog. A no-op (no dialog shown) if it's already granted.
+  Future<void> requestIgnoreBatteryOptimizations() async {
+    await _invoke('requestIgnoreBatteryOptimizations');
+  }
+
+  /// Best-effort OEM autostart/background-app allowlist screen (Xiaomi,
+  /// Oppo/Realme, Vivo/iQOO) — falls back to the app's own "App info"
+  /// screen when this ROM doesn't have one. Returns true when an
+  /// OEM-specific screen was actually found, only so the caller can adjust
+  /// its confirmation copy ("dibuka" vs "dibuka pengaturan aplikasi").
+  Future<bool> openManufacturerBatterySettings() async {
+    final map = await _invokeMap('openManufacturerBatterySettings');
+    return (map?['oem'] as bool?) ?? false;
+  }
+
   Future<ActivityEvent?> getLastActivityEvent() async {
     final map = await _invokeMap('getLastActivityEvent');
     final occurredAtMs = map?['occurredAtEpochMs'] as int?;
@@ -238,10 +291,7 @@ class NativeTripService {
     Map<String, Object?>? arguments,
   ]) async {
     try {
-      return await _channel.invokeMapMethod<String, Object?>(
-        method,
-        arguments,
-      );
+      return await _channel.invokeMapMethod<String, Object?>(method, arguments);
     } on MissingPluginException {
       return null;
     } on PlatformException {
@@ -317,7 +367,10 @@ class NativeTripService {
     if (id == null) {
       return null;
     }
-    return demoStations.where((station) => station.id == id).firstOrNull?.name ??
+    return demoStations
+            .where((station) => station.id == id)
+            .firstOrNull
+            ?.name ??
         id;
   }
 }

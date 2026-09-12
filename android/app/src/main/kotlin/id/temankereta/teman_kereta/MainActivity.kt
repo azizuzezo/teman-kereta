@@ -1,6 +1,8 @@
 package id.temankereta.teman_kereta
 
 import android.Manifest
+import android.appwidget.AppWidgetManager
+import android.content.ComponentName
 import android.content.pm.PackageManager
 import android.os.Build
 import androidx.core.app.ActivityCompat
@@ -38,6 +40,9 @@ class MainActivity : FlutterActivity() {
             "updateActiveTripWidget" -> updateActiveTripWidget(call.argumentsMap(), result)
             "requestActivityRecognitionUpdates" -> requestActivityRecognitionUpdates(result)
             "stopActivityRecognitionUpdates" -> activityRecognitionManager.stopTransitionUpdates(result)
+            "requestIgnoreBatteryOptimizations" -> requestIgnoreBatteryOptimizations(result)
+            "openManufacturerBatterySettings" -> openManufacturerBatterySettings(result)
+            "requestPinAppWidget" -> requestPinAppWidget(call.argumentsMap(), result)
             else -> result.notImplemented()
         }
     }
@@ -111,6 +116,14 @@ class MainActivity : FlutterActivity() {
             ActiveTripLocationService.start(this)
             val warnings = buildList {
                 if (!hasNotificationPermission()) add(Manifest.permission.POST_NOTIFICATIONS)
+                // Not a missing-permission case (the trip does start), but an
+                // OEM battery manager can still kill the foreground service
+                // outright later — surfaced so Dart can nudge the rider
+                // toward Settings once, instead of a trip silently going
+                // quiet with no explanation.
+                if (!BatteryOptimization.isIgnoringBatteryOptimizations(this@MainActivity)) {
+                    add(WARNING_BATTERY_OPTIMIZATION)
+                }
             }
             result.success(
                 mapOf(
@@ -308,6 +321,38 @@ class MainActivity : FlutterActivity() {
         )
     }
 
+    /// Asks the launcher to add one of this app's four home-screen widgets
+    /// directly, via `AppWidgetManager.requestPinAppWidget` (Android 8+) —
+    /// skips the "long-press home screen, find Widgets, scroll to find the
+    /// app" hunt that leaves these widgets undiscovered in practice. Falls
+    /// back to `supported: false` on older Android or launchers that don't
+    /// implement pinning, so the caller can show manual instructions instead.
+    private fun requestPinAppWidget(arguments: Map<*, *>?, result: MethodChannel.Result) {
+        val widgetId = arguments?.get("widgetId") as? String
+        val provider = when (widgetId) {
+            "nextDeparture" -> NextDepartureWidgetProvider::class.java
+            "activeTrip" -> ActiveTripWidgetProvider::class.java
+            "dailyRoute" -> DailyRouteWidgetProvider::class.java
+            "serviceStatus" -> ServiceStatusWidgetProvider::class.java
+            else -> null
+        }
+        if (provider == null) {
+            result.error("UNKNOWN_WIDGET", "Widget id tidak dikenal: $widgetId", null)
+            return
+        }
+        val appWidgetManager = AppWidgetManager.getInstance(this)
+        if (!appWidgetManager.isRequestPinAppWidgetSupported) {
+            result.success(mapOf("supported" to false, "requested" to false))
+            return
+        }
+        val requested = appWidgetManager.requestPinAppWidget(
+            ComponentName(this, provider),
+            null,
+            null,
+        )
+        result.success(mapOf("supported" to true, "requested" to requested))
+    }
+
     private fun nativeCapabilities(): Map<String, Any> = mapOf(
         "channel" to NATIVE_CHANNEL,
         "foregroundLocationService" to true,
@@ -326,6 +371,37 @@ class MainActivity : FlutterActivity() {
         "automaticNetworkRefresh" to false,
     )
 
+    private fun requestIgnoreBatteryOptimizations(result: MethodChannel.Result) {
+        if (BatteryOptimization.isIgnoringBatteryOptimizations(this)) {
+            result.success(mapOf("alreadyIgnoring" to true))
+            return
+        }
+        try {
+            startActivity(BatteryOptimization.requestIgnoreIntent(this))
+            result.success(mapOf("alreadyIgnoring" to false, "opened" to true))
+        } catch (error: android.content.ActivityNotFoundException) {
+            // Some ROMs strip this system dialog entirely; fall back to the
+            // app's own details screen so the rider still has somewhere to go.
+            startActivity(BatteryOptimization.appDetailsIntent(this))
+            result.success(mapOf("alreadyIgnoring" to false, "opened" to true, "fallback" to true))
+        }
+    }
+
+    /// Best-effort OEM "autostart"/battery-manager screen (Xiaomi/Oppo/Vivo).
+    /// Always resolves to *some* screen: the OEM one if this ROM has it, else
+    /// the app's own details screen, so the rider is never left with a dead
+    /// button. `opened.oem` tells Dart which one actually happened, purely
+    /// for the "berhasil dibuka" vs "dibuka pengaturan aplikasi" label.
+    private fun openManufacturerBatterySettings(result: MethodChannel.Result) {
+        val oemIntent = BatteryOptimization.manufacturerSettingsIntent(this)
+        try {
+            startActivity(oemIntent ?: BatteryOptimization.appDetailsIntent(this))
+            result.success(mapOf("opened" to true, "oem" to (oemIntent != null)))
+        } catch (error: android.content.ActivityNotFoundException) {
+            result.success(mapOf("opened" to false, "oem" to false))
+        }
+    }
+
     private fun permissionStatus(): Map<String, Any> {
         val fine = checkSelfPermission(Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED
         val coarse = checkSelfPermission(Manifest.permission.ACCESS_COARSE_LOCATION) == PackageManager.PERMISSION_GRANTED
@@ -342,6 +418,8 @@ class MainActivity : FlutterActivity() {
             "canStartActiveTrip" to (fine || coarse),
             "requestAfterExplanation" to true,
             "backgroundPermissionMustBeRequestedSeparately" to (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R),
+            "batteryOptimizationIgnored" to BatteryOptimization.isIgnoringBatteryOptimizations(this),
+            "manufacturer" to BatteryOptimization.manufacturer(),
         )
     }
 
@@ -362,5 +440,10 @@ class MainActivity : FlutterActivity() {
     companion object {
         const val NATIVE_CHANNEL = "id.temankereta.teman_kereta/native"
         private const val ACTIVITY_RECOGNITION_PERMISSION_REQUEST_CODE = 52_201
+
+        /// Not an Android permission string like the others in `warnings` —
+        /// a distinct marker Dart matches on to show its own "baterai"
+        /// nudge, kept alongside them since they share the same list.
+        const val WARNING_BATTERY_OPTIMIZATION = "BATTERY_OPTIMIZATION_NOT_IGNORED"
     }
 }
