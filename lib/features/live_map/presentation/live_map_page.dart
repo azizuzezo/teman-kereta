@@ -13,11 +13,22 @@ import 'live_trip_position_controller.dart';
 
 /// Real geographic live map: OpenStreetMap tiles with each KRL line drawn as
 /// a polyline through its real stations (in real per-line stop order, via
-/// `Station.stopOrderByLine`) plus station markers and, while an Active Trip
-/// is on board, the rider's own approximate live position — see
-/// `LiveTripPositionController`. Deliberately carries NO live-train-position
-/// markers of any kind (that used to be a raster KAI map image and a
-/// hand-drawn schematic with vehicle badges; both are gone).
+/// `Station.stopOrderByLine`) plus station markers, real train markers from
+/// [vehiclePositionsProvider] (see below), and, while an Active Trip is on
+/// board, the rider's own approximate live position — see
+/// `LiveTripPositionController`.
+///
+/// The train markers are genuinely real, not the raster KAI map image or
+/// hand-drawn schematic this page used to show (both removed for being
+/// unreliable/fake-looking). They're built from `public.vehicle_positions`,
+/// which `pg_cron` refreshes every minute from two real sources: an
+/// official/GTFS feed when configured, and — always available, since it
+/// only needs this app's own riders — an anonymized, averaged fold of
+/// `crowd_position_reports` (see `CrowdPositionReporter` and
+/// `refresh_crowd_vehicle_positions()`). A marker only renders while its
+/// `recordedAt` is recent — a stale row never lingers pretending to be
+/// live — and each one's own [DataFreshnessBadge] tier (real-time,
+/// near-real-time, or estimated) is shown honestly, never smoothed over.
 class LiveMapPage extends ConsumerStatefulWidget {
   const LiveMapPage({super.key});
 
@@ -56,6 +67,9 @@ class _LiveMapPageState extends ConsumerState<LiveMapPage> {
     final youAreHere = ref.watch(liveTripPositionControllerProvider);
     final lineColors =
         ref.watch(lineColorsProvider).asData?.value ?? const <String, Color>{};
+    final vehicles =
+        ref.watch(vehiclePositionsProvider).asData?.value ??
+        const <VehiclePosition>[];
 
     return Scaffold(
       appBar: AppBar(title: const Text('Peta perjalanan')),
@@ -75,20 +89,34 @@ class _LiveMapPageState extends ConsumerState<LiveMapPage> {
                 message: 'Belum ada data stasiun.',
               );
             }
-            return _buildMap(items, youAreHere, lineColors);
+            return _buildMap(items, youAreHere, lineColors, vehicles);
           },
         ),
       ),
     );
   }
 
+  /// A vehicle position older than this is treated as stale and hidden —
+  /// belt-and-suspenders on top of `refresh_crowd_vehicle_positions()`
+  /// already deleting+rebuilding its own slice every minute from a 3-minute
+  /// lookback, so nothing here should ever actually be this old in
+  /// practice, but a stalled cron must never leave a ghost train frozen on
+  /// the map looking live.
+  static const _vehicleStaleAfter = Duration(minutes: 5);
+
   Widget _buildMap(
     List<Station> stations,
     LatLng? youAreHere,
     Map<String, Color> lineColors,
+    List<VehiclePosition> vehicles,
   ) {
     final allLineIds = stations.expand((s) => s.lineIds).toSet().toList()
       ..sort();
+    final freshVehicles = vehicles
+        .where(
+          (v) => DateTime.now().difference(v.recordedAt) <= _vehicleStaleAfter,
+        )
+        .toList(growable: false);
 
     final polylines = <Polyline<Object>>[
       for (var i = 0; i < allLineIds.length; i += 1)
@@ -171,6 +199,16 @@ class _LiveMapPageState extends ConsumerState<LiveMapPage> {
                       ),
                     ),
                   ),
+                for (final vehicle in freshVehicles)
+                  Marker(
+                    point: LatLng(vehicle.latitude, vehicle.longitude),
+                    width: 34,
+                    height: 34,
+                    child: GestureDetector(
+                      onTap: () => _showVehicleInfo(vehicle, stations),
+                      child: const _VehicleMarker(),
+                    ),
+                  ),
                 if (youAreHere != null)
                   Marker(
                     point: youAreHere,
@@ -208,6 +246,7 @@ class _LiveMapPageState extends ConsumerState<LiveMapPage> {
             labels: _lineLabels,
             colors: lineColors,
             fallbackColor: _fallbackLineColor,
+            showVehicleEntry: freshVehicles.isNotEmpty,
           ),
         ),
       ],
@@ -227,15 +266,17 @@ class _LiveMapPageState extends ConsumerState<LiveMapPage> {
   /// available, otherwise a straight-segment fallback through
   /// [_orderedLineStations] for lines OSM data hasn't been fetched for yet.
   List<LatLng> _lineTrackPoints(List<Station> stations, String lineId) {
-    final shape = railLineShapes[lineId] ?? railLineShapes[_lineIdAliases[lineId]];
+    final shape =
+        railLineShapes[lineId] ?? railLineShapes[_lineIdAliases[lineId]];
     if (shape != null) {
       return shape
           .map((point) => LatLng(point[0], point[1]))
           .toList(growable: false);
     }
-    return _orderedLineStations(stations, lineId)
-        .map((s) => LatLng(s.latitude, s.longitude))
-        .toList(growable: false);
+    return _orderedLineStations(
+      stations,
+      lineId,
+    ).map((s) => LatLng(s.latitude, s.longitude)).toList(growable: false);
   }
 
   /// Real stations on [lineId], ordered by `Station.stopOrderByLine[lineId]`
@@ -261,10 +302,7 @@ class _LiveMapPageState extends ConsumerState<LiveMapPage> {
 
   void _zoomBy(double delta) {
     final camera = _mapController.camera;
-    _mapController.move(
-      camera.center,
-      (camera.zoom + delta).clamp(9, 18),
-    );
+    _mapController.move(camera.center, (camera.zoom + delta).clamp(9, 18));
   }
 
   /// Centers the map on the device's current position, requesting location
@@ -286,7 +324,8 @@ class _LiveMapPageState extends ConsumerState<LiveMapPage> {
       if (permission == LocationPermission.denied) {
         permission = await Geolocator.requestPermission();
       }
-      final granted = permission == LocationPermission.always ||
+      final granted =
+          permission == LocationPermission.always ||
           permission == LocationPermission.whileInUse;
       if (!granted) {
         _showLocationMessage('Izin lokasi diperlukan untuk fitur ini.');
@@ -324,7 +363,51 @@ class _LiveMapPageState extends ConsumerState<LiveMapPage> {
 
   void _showStationName(Station station) {
     ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(station.name), duration: const Duration(seconds: 2)),
+      SnackBar(
+        content: Text(station.name),
+        duration: const Duration(seconds: 2),
+      ),
+    );
+  }
+
+  /// [VehiclePosition.previousStationId]/`nextStationId` already resolved to
+  /// station *codes* (not names) by `SupabaseTransitProvider`, so this looks
+  /// the real station name up the same way the station markers' labels do.
+  void _showVehicleInfo(VehiclePosition vehicle, List<Station> stations) {
+    final byCode = {for (final s in stations) s.code: s};
+    final next = vehicle.nextStationId == null
+        ? null
+        : byCode[vehicle.nextStationId];
+    final freshnessLabel = switch (vehicle.freshness) {
+      DataFreshness.realtime => 'real-time',
+      DataFreshness.nearRealtime => 'hampir real-time',
+      DataFreshness.estimated => 'estimasi',
+      DataFreshness.unavailable => 'tidak tersedia',
+    };
+    final message = next == null
+        ? 'Posisi kereta • $freshnessLabel'
+        : 'Menuju ${next.name} • $freshnessLabel';
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(message), duration: const Duration(seconds: 2)),
+    );
+  }
+}
+
+class _VehicleMarker extends StatelessWidget {
+  const _VehicleMarker();
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      decoration: BoxDecoration(
+        color: AppColors.blue,
+        shape: BoxShape.circle,
+        border: Border.all(color: Colors.white, width: 2.5),
+        boxShadow: const <BoxShadow>[
+          BoxShadow(color: Colors.black26, blurRadius: 4),
+        ],
+      ),
+      child: const Icon(Icons.train_rounded, size: 17, color: Colors.white),
     );
   }
 }
@@ -357,10 +440,10 @@ class _MyLocationMarker extends StatelessWidget {
       decoration: const BoxDecoration(
         color: Colors.blue,
         shape: BoxShape.circle,
-        border: Border.fromBorderSide(BorderSide(color: Colors.white, width: 3)),
-        boxShadow: <BoxShadow>[
-          BoxShadow(color: Colors.black26, blurRadius: 4),
-        ],
+        border: Border.fromBorderSide(
+          BorderSide(color: Colors.white, width: 3),
+        ),
+        boxShadow: <BoxShadow>[BoxShadow(color: Colors.black26, blurRadius: 4)],
       ),
     );
   }
@@ -397,7 +480,9 @@ class _MapControls extends StatelessWidget {
         const SizedBox(height: 8),
         Material(
           color: Theme.of(context).colorScheme.surface.withValues(alpha: 0.95),
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(12),
+          ),
           elevation: 2,
           child: Column(
             children: <Widget>[
@@ -448,12 +533,18 @@ class _LineLegend extends StatelessWidget {
     required this.labels,
     required this.colors,
     required this.fallbackColor,
+    required this.showVehicleEntry,
   });
 
   final List<String> lineIds;
   final Map<String, String> labels;
   final Map<String, Color> colors;
   final Color fallbackColor;
+
+  /// Only shown once at least one real train marker is on screen, so the
+  /// legend never explains a symbol that isn't there (e.g. a quiet period
+  /// with no crowd-sourced reports yet).
+  final bool showVehicleEntry;
 
   @override
   Widget build(BuildContext context) {
@@ -468,6 +559,27 @@ class _LineLegend extends StatelessWidget {
           spacing: 12,
           runSpacing: 4,
           children: <Widget>[
+            if (showVehicleEntry)
+              Row(
+                mainAxisSize: MainAxisSize.min,
+                children: <Widget>[
+                  Container(
+                    width: 14,
+                    height: 14,
+                    decoration: const BoxDecoration(
+                      color: AppColors.blue,
+                      shape: BoxShape.circle,
+                    ),
+                    child: const Icon(
+                      Icons.train_rounded,
+                      size: 10,
+                      color: Colors.white,
+                    ),
+                  ),
+                  const SizedBox(width: 6),
+                  const Text('Posisi kereta', style: TextStyle(fontSize: 11)),
+                ],
+              ),
             for (final lineId in lineIds)
               Row(
                 mainAxisSize: MainAxisSize.min,

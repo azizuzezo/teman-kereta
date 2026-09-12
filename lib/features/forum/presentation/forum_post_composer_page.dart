@@ -111,7 +111,8 @@ class _ForumPostComposerPageState extends ConsumerState<ForumPostComposerPage> {
               autofocus: true,
               onChanged: (_) => setState(() {}),
               decoration: InputDecoration(
-                hintText: 'Apa yang terjadi di perjalananmu hari ini? '
+                hintText:
+                    'Apa yang terjadi di perjalananmu hari ini? '
                     'Ketik @ untuk menandai pengguna lain.',
                 counterText: '$remaining karakter tersisa',
               ),
@@ -154,6 +155,7 @@ class _ForumPostComposerPageState extends ConsumerState<ForumPostComposerPage> {
                 if (lines.isEmpty) return const SizedBox.shrink();
                 return DropdownButtonFormField<String?>(
                   initialValue: _lineId,
+                  isExpanded: true,
                   decoration: const InputDecoration(
                     labelText: 'Tandai lintas (opsional)',
                     prefixIcon: Icon(Icons.route_outlined),
@@ -166,7 +168,7 @@ class _ForumPostComposerPageState extends ConsumerState<ForumPostComposerPage> {
                     for (final line in lines)
                       DropdownMenuItem<String?>(
                         value: line.id,
-                        child: Text(line.name),
+                        child: Text(line.name, overflow: TextOverflow.ellipsis),
                       ),
                   ],
                   onChanged: (value) => setState(() => _lineId = value),

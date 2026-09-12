@@ -40,8 +40,24 @@ class ForumFeedState {
 /// below) rather than kept in this state, since only one post's comment
 /// thread is ever open at a time.
 class ForumController extends AsyncNotifier<ForumFeedState> {
+  /// Selected line to filter the feed by, or null for every post. Kept as
+  /// controller state rather than [ForumFeedState] since it's an input to
+  /// fetching, not a fetched result — [loadMore] reads it via [_fetchPage]
+  /// exactly like it already reads `before`.
+  String? _lineFilter;
+
+  String? get lineFilter => _lineFilter;
+
   @override
   Future<ForumFeedState> build() => _fetchPage();
+
+  /// Switches the feed to only posts tagged with [lineId] (or every post, for
+  /// null) and reloads from the first page.
+  Future<void> setLineFilter(String? lineId) async {
+    if (_lineFilter == lineId) return;
+    _lineFilter = lineId;
+    await refresh();
+  }
 
   Future<ForumFeedState> _fetchPage({DateTime? before}) async {
     if (!AppEnvironment.supabaseEnabled) {
@@ -51,6 +67,9 @@ class ForumController extends AsyncNotifier<ForumFeedState> {
         .from('forum_posts')
         .select('*, $_postAuthorSelect')
         .eq('status', 'visible');
+    if (_lineFilter != null) {
+      query = query.eq('line_id', _lineFilter!);
+    }
     if (before != null) {
       query = query.lt('created_at', before.toIso8601String());
     }
@@ -373,4 +392,13 @@ final forumCommentsProvider = FutureProvider.family<List<ForumComment>, String>(
 
 final forumLineOptionsProvider = FutureProvider<List<LineOption>>((ref) {
   return ref.read(forumControllerProvider.notifier).fetchLineOptions();
+});
+
+/// [forumLineOptionsProvider], keyed by id — how [ForumPostCard] resolves a
+/// post's `lineId` to its display name/color without a linear scan per post.
+final forumLineOptionsByIdProvider = FutureProvider<Map<String, LineOption>>((
+  ref,
+) async {
+  final options = await ref.watch(forumLineOptionsProvider.future);
+  return <String, LineOption>{for (final option in options) option.id: option};
 });

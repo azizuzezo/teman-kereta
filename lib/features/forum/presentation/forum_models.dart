@@ -1,3 +1,5 @@
+import 'package:flutter/material.dart';
+
 import '../../../domain/entities/social_models.dart';
 
 /// A forum post, with an optional embedded [author] snapshot (populated via
@@ -130,4 +132,14 @@ class LineOption {
   final String name;
   final String code;
   final String? color;
+
+  /// [color] parsed to a paintable [Color], or null when missing/malformed.
+  Color? get resolvedColor {
+    final hex = color;
+    if (hex == null || hex.isEmpty) {
+      return null;
+    }
+    final parsed = int.tryParse(hex.replaceFirst('#', '0xFF'));
+    return parsed == null ? null : Color(parsed);
+  }
 }

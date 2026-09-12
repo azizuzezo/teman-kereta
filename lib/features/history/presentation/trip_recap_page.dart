@@ -106,6 +106,10 @@ class _RecapBody extends StatelessWidget {
                 value: _busiestWeekdayLabel(recap.tripsByWeekday),
                 detail: _weekdaySummary(recap.tripsByWeekday),
               ),
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+                child: _WeekdayChart(counts: recap.tripsByWeekday),
+              ),
               if (recap.longestTrip != null) ...<Widget>[
                 const Divider(height: 1),
                 _RecapTile(
@@ -114,8 +118,9 @@ class _RecapBody extends StatelessWidget {
                   value:
                       '${recap.longestTrip!.originName} → ${recap.longestTrip!.destinationName}',
                   detail: formatDuration(
-                    recap.longestTrip!.arrivedAt
-                        .difference(recap.longestTrip!.departedAt),
+                    recap.longestTrip!.arrivedAt.difference(
+                      recap.longestTrip!.departedAt,
+                    ),
                   ),
                 ),
               ],
@@ -276,6 +281,110 @@ class _RecapTile extends StatelessWidget {
           Text(detail, style: theme.textTheme.bodySmall),
         ],
       ),
+    );
+  }
+}
+
+class _WeekdayChart extends StatelessWidget {
+  const _WeekdayChart({required this.counts});
+
+  final Map<int, int> counts;
+
+  static const _order = <int>[
+    DateTime.monday,
+    DateTime.tuesday,
+    DateTime.wednesday,
+    DateTime.thursday,
+    DateTime.friday,
+    DateTime.saturday,
+    DateTime.sunday,
+  ];
+
+  static const _shortNames = <int, String>{
+    DateTime.monday: 'Sen',
+    DateTime.tuesday: 'Sel',
+    DateTime.wednesday: 'Rab',
+    DateTime.thursday: 'Kam',
+    DateTime.friday: 'Jum',
+    DateTime.saturday: 'Sab',
+    DateTime.sunday: 'Min',
+  };
+
+  @override
+  Widget build(BuildContext context) {
+    final maxCount = counts.values.fold<int>(0, (a, b) => a > b ? a : b);
+    return SizedBox(
+      height: 132,
+      child: Row(
+        children: <Widget>[
+          for (final day in _order)
+            Expanded(
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 3),
+                child: _WeekdayBar(
+                  count: counts[day] ?? 0,
+                  maxCount: maxCount,
+                  label: _shortNames[day]!,
+                  isBusiest: maxCount > 0 && (counts[day] ?? 0) == maxCount,
+                ),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+class _WeekdayBar extends StatelessWidget {
+  const _WeekdayBar({
+    required this.count,
+    required this.maxCount,
+    required this.label,
+    required this.isBusiest,
+  });
+
+  final int count;
+  final int maxCount;
+  final String label;
+  final bool isBusiest;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final fraction = maxCount == 0 ? 0.0 : count / maxCount;
+    final barColor = isBusiest
+        ? theme.colorScheme.primary
+        : theme.colorScheme.primary.withValues(alpha: 0.25);
+    return Column(
+      children: <Widget>[
+        Text(
+          count == 0 ? '' : '$count',
+          style: theme.textTheme.bodySmall?.copyWith(
+            fontWeight: FontWeight.w700,
+            color: isBusiest ? theme.colorScheme.primary : null,
+          ),
+        ),
+        const SizedBox(height: 4),
+        Expanded(
+          child: Align(
+            alignment: Alignment.bottomCenter,
+            child: FractionallySizedBox(
+              heightFactor: fraction,
+              widthFactor: 1,
+              child: DecoratedBox(
+                decoration: BoxDecoration(
+                  color: barColor,
+                  borderRadius: const BorderRadius.vertical(
+                    top: Radius.circular(6),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ),
+        const SizedBox(height: 6),
+        Text(label, style: theme.textTheme.bodySmall),
+      ],
     );
   }
 }

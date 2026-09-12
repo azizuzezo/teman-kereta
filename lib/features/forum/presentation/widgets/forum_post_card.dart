@@ -30,6 +30,47 @@ class ForumPostCard extends ConsumerStatefulWidget {
   ConsumerState<ForumPostCard> createState() => _ForumPostCardState();
 }
 
+/// Small colored chip naming the KRL line a post is tagged with, using the
+/// same per-line brand color the composer's picker and the live map use.
+/// Renders nothing while [forumLineOptionsByIdProvider] is still loading or
+/// if [lineId] doesn't resolve (a line deactivated after the post was made),
+/// rather than showing a placeholder for a tag that may not exist.
+class _ForumLineTag extends ConsumerWidget {
+  const _ForumLineTag({required this.lineId});
+
+  final String lineId;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final option = ref
+        .watch(forumLineOptionsByIdProvider)
+        .asData
+        ?.value[lineId];
+    if (option == null) {
+      return const SizedBox.shrink();
+    }
+    final color = option.resolvedColor ?? Theme.of(context).colorScheme.primary;
+    return Padding(
+      padding: const EdgeInsets.only(left: 6),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+        decoration: BoxDecoration(
+          color: color.withValues(alpha: 0.14),
+          borderRadius: BorderRadius.circular(999),
+          border: Border.all(color: color.withValues(alpha: 0.4)),
+        ),
+        child: Text(
+          option.code,
+          style: Theme.of(context).textTheme.labelSmall?.copyWith(
+            color: color,
+            fontWeight: FontWeight.w700,
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 class _ForumPostCardState extends ConsumerState<ForumPostCard>
     with SingleTickerProviderStateMixin {
   late bool _liked;
@@ -112,7 +153,9 @@ class _ForumPostCardState extends ConsumerState<ForumPostCard>
       ),
     );
     if (confirmed ?? false) {
-      await ref.read(forumControllerProvider.notifier).deletePost(widget.post.id);
+      await ref
+          .read(forumControllerProvider.notifier)
+          .deletePost(widget.post.id);
     }
   }
 
@@ -161,7 +204,9 @@ class _ForumPostCardState extends ConsumerState<ForumPostCard>
         .updatePost(widget.post.id, newBody);
     if (!context.mounted) return;
     if (error != null) {
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(error)));
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(error)));
       return;
     }
     setState(() => _body = newBody);
@@ -177,7 +222,8 @@ class _ForumPostCardState extends ConsumerState<ForumPostCard>
     final author = post.author;
     final currentUserId = Supabase.instance.client.auth.currentUser?.id;
     final isOwner = currentUserId != null && currentUserId == post.userId;
-    final hasAvatar = author?.avatarUrl != null && author!.avatarUrl!.isNotEmpty;
+    final hasAvatar =
+        author?.avatarUrl != null && author!.avatarUrl!.isNotEmpty;
     final authorName = author?.resolvedName ?? 'Pengguna Teman Kereta';
     final theme = Theme.of(context);
 
@@ -225,6 +271,7 @@ class _ForumPostCardState extends ConsumerState<ForumPostCard>
                   ),
                 ),
               ),
+              if (post.lineId != null) _ForumLineTag(lineId: post.lineId!),
               if (!isOwner) FollowButton(targetUserId: post.userId),
               if (isOwner)
                 PopupMenuButton<String>(
@@ -316,7 +363,9 @@ class _ForumPostCardState extends ConsumerState<ForumPostCard>
               IconButton(
                 onPressed: _toggleLike,
                 icon: Icon(
-                  _liked ? Icons.favorite_rounded : Icons.favorite_border_rounded,
+                  _liked
+                      ? Icons.favorite_rounded
+                      : Icons.favorite_border_rounded,
                   color: _liked ? theme.colorScheme.error : null,
                 ),
               ),
