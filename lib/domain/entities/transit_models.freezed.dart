@@ -1835,7 +1835,7 @@ as bool,
 /// @nodoc
 mixin _$NearbyPlace {
 
- String get id; String get stationId; String get name; String get category; int get distanceMeters; int get walkingMinutes; String get description; String get sourceLabel; String? get address; bool get isDemo;
+ String get id; String get stationId; String get name; String get category; int get distanceMeters; int get walkingMinutes; String get description; String get sourceLabel; String? get address; String? get imageUrl; bool get isDemo;
 /// Create a copy of NearbyPlace
 /// with the given fields replaced by the non-null parameter values.
 @JsonKey(includeFromJson: false, includeToJson: false)
@@ -1848,16 +1848,16 @@ $NearbyPlaceCopyWith<NearbyPlace> get copyWith => _$NearbyPlaceCopyWithImpl<Near
 
 @override
 bool operator ==(Object other) {
-  return identical(this, other) || (other.runtimeType == runtimeType&&other is NearbyPlace&&(identical(other.id, id) || other.id == id)&&(identical(other.stationId, stationId) || other.stationId == stationId)&&(identical(other.name, name) || other.name == name)&&(identical(other.category, category) || other.category == category)&&(identical(other.distanceMeters, distanceMeters) || other.distanceMeters == distanceMeters)&&(identical(other.walkingMinutes, walkingMinutes) || other.walkingMinutes == walkingMinutes)&&(identical(other.description, description) || other.description == description)&&(identical(other.sourceLabel, sourceLabel) || other.sourceLabel == sourceLabel)&&(identical(other.address, address) || other.address == address)&&(identical(other.isDemo, isDemo) || other.isDemo == isDemo));
+  return identical(this, other) || (other.runtimeType == runtimeType&&other is NearbyPlace&&(identical(other.id, id) || other.id == id)&&(identical(other.stationId, stationId) || other.stationId == stationId)&&(identical(other.name, name) || other.name == name)&&(identical(other.category, category) || other.category == category)&&(identical(other.distanceMeters, distanceMeters) || other.distanceMeters == distanceMeters)&&(identical(other.walkingMinutes, walkingMinutes) || other.walkingMinutes == walkingMinutes)&&(identical(other.description, description) || other.description == description)&&(identical(other.sourceLabel, sourceLabel) || other.sourceLabel == sourceLabel)&&(identical(other.address, address) || other.address == address)&&(identical(other.imageUrl, imageUrl) || other.imageUrl == imageUrl)&&(identical(other.isDemo, isDemo) || other.isDemo == isDemo));
 }
 
 @JsonKey(includeFromJson: false, includeToJson: false)
 @override
-int get hashCode => Object.hash(runtimeType,id,stationId,name,category,distanceMeters,walkingMinutes,description,sourceLabel,address,isDemo);
+int get hashCode => Object.hash(runtimeType,id,stationId,name,category,distanceMeters,walkingMinutes,description,sourceLabel,address,imageUrl,isDemo);
 
 @override
 String toString() {
-  return 'NearbyPlace(id: $id, stationId: $stationId, name: $name, category: $category, distanceMeters: $distanceMeters, walkingMinutes: $walkingMinutes, description: $description, sourceLabel: $sourceLabel, address: $address, isDemo: $isDemo)';
+  return 'NearbyPlace(id: $id, stationId: $stationId, name: $name, category: $category, distanceMeters: $distanceMeters, walkingMinutes: $walkingMinutes, description: $description, sourceLabel: $sourceLabel, address: $address, imageUrl: $imageUrl, isDemo: $isDemo)';
 }
 
 
@@ -1868,7 +1868,7 @@ abstract mixin class $NearbyPlaceCopyWith<$Res>  {
   factory $NearbyPlaceCopyWith(NearbyPlace value, $Res Function(NearbyPlace) _then) = _$NearbyPlaceCopyWithImpl;
 @useResult
 $Res call({
- String id, String stationId, String name, String category, int distanceMeters, int walkingMinutes, String description, String sourceLabel, String? address, bool isDemo
+ String id, String stationId, String name, String category, int distanceMeters, int walkingMinutes, String description, String sourceLabel, String? address, String? imageUrl, bool isDemo
 });
 
 
@@ -1885,7 +1885,7 @@ class _$NearbyPlaceCopyWithImpl<$Res>
 
 /// Create a copy of NearbyPlace
 /// with the given fields replaced by the non-null parameter values.
-@pragma('vm:prefer-inline') @override $Res call({Object? id = null,Object? stationId = null,Object? name = null,Object? category = null,Object? distanceMeters = null,Object? walkingMinutes = null,Object? description = null,Object? sourceLabel = null,Object? address = freezed,Object? isDemo = null,}) {
+@pragma('vm:prefer-inline') @override $Res call({Object? id = null,Object? stationId = null,Object? name = null,Object? category = null,Object? distanceMeters = null,Object? walkingMinutes = null,Object? description = null,Object? sourceLabel = null,Object? address = freezed,Object? imageUrl = freezed,Object? isDemo = null,}) {
   return _then(_self.copyWith(
 id: null == id ? _self.id : id // ignore: cast_nullable_to_non_nullable
 as String,stationId: null == stationId ? _self.stationId : stationId // ignore: cast_nullable_to_non_nullable
@@ -1896,6 +1896,7 @@ as int,walkingMinutes: null == walkingMinutes ? _self.walkingMinutes : walkingMi
 as int,description: null == description ? _self.description : description // ignore: cast_nullable_to_non_nullable
 as String,sourceLabel: null == sourceLabel ? _self.sourceLabel : sourceLabel // ignore: cast_nullable_to_non_nullable
 as String,address: freezed == address ? _self.address : address // ignore: cast_nullable_to_non_nullable
+as String?,imageUrl: freezed == imageUrl ? _self.imageUrl : imageUrl // ignore: cast_nullable_to_non_nullable
 as String?,isDemo: null == isDemo ? _self.isDemo : isDemo // ignore: cast_nullable_to_non_nullable
 as bool,
   ));
@@ -1982,10 +1983,10 @@ return $default(_that);case _:
 /// }
 /// ```
 
-@optionalTypeArgs TResult maybeWhen<TResult extends Object?>(TResult Function( String id,  String stationId,  String name,  String category,  int distanceMeters,  int walkingMinutes,  String description,  String sourceLabel,  String? address,  bool isDemo)?  $default,{required TResult orElse(),}) {final _that = this;
+@optionalTypeArgs TResult maybeWhen<TResult extends Object?>(TResult Function( String id,  String stationId,  String name,  String category,  int distanceMeters,  int walkingMinutes,  String description,  String sourceLabel,  String? address,  String? imageUrl,  bool isDemo)?  $default,{required TResult orElse(),}) {final _that = this;
 switch (_that) {
 case _NearbyPlace() when $default != null:
-return $default(_that.id,_that.stationId,_that.name,_that.category,_that.distanceMeters,_that.walkingMinutes,_that.description,_that.sourceLabel,_that.address,_that.isDemo);case _:
+return $default(_that.id,_that.stationId,_that.name,_that.category,_that.distanceMeters,_that.walkingMinutes,_that.description,_that.sourceLabel,_that.address,_that.imageUrl,_that.isDemo);case _:
   return orElse();
 
 }
@@ -2003,10 +2004,10 @@ return $default(_that.id,_that.stationId,_that.name,_that.category,_that.distanc
 /// }
 /// ```
 
-@optionalTypeArgs TResult when<TResult extends Object?>(TResult Function( String id,  String stationId,  String name,  String category,  int distanceMeters,  int walkingMinutes,  String description,  String sourceLabel,  String? address,  bool isDemo)  $default,) {final _that = this;
+@optionalTypeArgs TResult when<TResult extends Object?>(TResult Function( String id,  String stationId,  String name,  String category,  int distanceMeters,  int walkingMinutes,  String description,  String sourceLabel,  String? address,  String? imageUrl,  bool isDemo)  $default,) {final _that = this;
 switch (_that) {
 case _NearbyPlace():
-return $default(_that.id,_that.stationId,_that.name,_that.category,_that.distanceMeters,_that.walkingMinutes,_that.description,_that.sourceLabel,_that.address,_that.isDemo);case _:
+return $default(_that.id,_that.stationId,_that.name,_that.category,_that.distanceMeters,_that.walkingMinutes,_that.description,_that.sourceLabel,_that.address,_that.imageUrl,_that.isDemo);case _:
   throw StateError('Unexpected subclass');
 
 }
@@ -2023,10 +2024,10 @@ return $default(_that.id,_that.stationId,_that.name,_that.category,_that.distanc
 /// }
 /// ```
 
-@optionalTypeArgs TResult? whenOrNull<TResult extends Object?>(TResult? Function( String id,  String stationId,  String name,  String category,  int distanceMeters,  int walkingMinutes,  String description,  String sourceLabel,  String? address,  bool isDemo)?  $default,) {final _that = this;
+@optionalTypeArgs TResult? whenOrNull<TResult extends Object?>(TResult? Function( String id,  String stationId,  String name,  String category,  int distanceMeters,  int walkingMinutes,  String description,  String sourceLabel,  String? address,  String? imageUrl,  bool isDemo)?  $default,) {final _that = this;
 switch (_that) {
 case _NearbyPlace() when $default != null:
-return $default(_that.id,_that.stationId,_that.name,_that.category,_that.distanceMeters,_that.walkingMinutes,_that.description,_that.sourceLabel,_that.address,_that.isDemo);case _:
+return $default(_that.id,_that.stationId,_that.name,_that.category,_that.distanceMeters,_that.walkingMinutes,_that.description,_that.sourceLabel,_that.address,_that.imageUrl,_that.isDemo);case _:
   return null;
 
 }
@@ -2038,7 +2039,7 @@ return $default(_that.id,_that.stationId,_that.name,_that.category,_that.distanc
 @JsonSerializable()
 
 class _NearbyPlace implements NearbyPlace {
-  const _NearbyPlace({required this.id, required this.stationId, required this.name, required this.category, required this.distanceMeters, required this.walkingMinutes, required this.description, required this.sourceLabel, this.address, this.isDemo = false});
+  const _NearbyPlace({required this.id, required this.stationId, required this.name, required this.category, required this.distanceMeters, required this.walkingMinutes, required this.description, required this.sourceLabel, this.address, this.imageUrl, this.isDemo = false});
   factory _NearbyPlace.fromJson(Map<String, dynamic> json) => _$NearbyPlaceFromJson(json);
 
 @override final  String id;
@@ -2050,6 +2051,7 @@ class _NearbyPlace implements NearbyPlace {
 @override final  String description;
 @override final  String sourceLabel;
 @override final  String? address;
+@override final  String? imageUrl;
 @override@JsonKey() final  bool isDemo;
 
 /// Create a copy of NearbyPlace
@@ -2065,16 +2067,16 @@ Map<String, dynamic> toJson() {
 
 @override
 bool operator ==(Object other) {
-  return identical(this, other) || (other.runtimeType == runtimeType&&other is _NearbyPlace&&(identical(other.id, id) || other.id == id)&&(identical(other.stationId, stationId) || other.stationId == stationId)&&(identical(other.name, name) || other.name == name)&&(identical(other.category, category) || other.category == category)&&(identical(other.distanceMeters, distanceMeters) || other.distanceMeters == distanceMeters)&&(identical(other.walkingMinutes, walkingMinutes) || other.walkingMinutes == walkingMinutes)&&(identical(other.description, description) || other.description == description)&&(identical(other.sourceLabel, sourceLabel) || other.sourceLabel == sourceLabel)&&(identical(other.address, address) || other.address == address)&&(identical(other.isDemo, isDemo) || other.isDemo == isDemo));
+  return identical(this, other) || (other.runtimeType == runtimeType&&other is _NearbyPlace&&(identical(other.id, id) || other.id == id)&&(identical(other.stationId, stationId) || other.stationId == stationId)&&(identical(other.name, name) || other.name == name)&&(identical(other.category, category) || other.category == category)&&(identical(other.distanceMeters, distanceMeters) || other.distanceMeters == distanceMeters)&&(identical(other.walkingMinutes, walkingMinutes) || other.walkingMinutes == walkingMinutes)&&(identical(other.description, description) || other.description == description)&&(identical(other.sourceLabel, sourceLabel) || other.sourceLabel == sourceLabel)&&(identical(other.address, address) || other.address == address)&&(identical(other.imageUrl, imageUrl) || other.imageUrl == imageUrl)&&(identical(other.isDemo, isDemo) || other.isDemo == isDemo));
 }
 
 @JsonKey(includeFromJson: false, includeToJson: false)
 @override
-int get hashCode => Object.hash(runtimeType,id,stationId,name,category,distanceMeters,walkingMinutes,description,sourceLabel,address,isDemo);
+int get hashCode => Object.hash(runtimeType,id,stationId,name,category,distanceMeters,walkingMinutes,description,sourceLabel,address,imageUrl,isDemo);
 
 @override
 String toString() {
-  return 'NearbyPlace(id: $id, stationId: $stationId, name: $name, category: $category, distanceMeters: $distanceMeters, walkingMinutes: $walkingMinutes, description: $description, sourceLabel: $sourceLabel, address: $address, isDemo: $isDemo)';
+  return 'NearbyPlace(id: $id, stationId: $stationId, name: $name, category: $category, distanceMeters: $distanceMeters, walkingMinutes: $walkingMinutes, description: $description, sourceLabel: $sourceLabel, address: $address, imageUrl: $imageUrl, isDemo: $isDemo)';
 }
 
 
@@ -2085,7 +2087,7 @@ abstract mixin class _$NearbyPlaceCopyWith<$Res> implements $NearbyPlaceCopyWith
   factory _$NearbyPlaceCopyWith(_NearbyPlace value, $Res Function(_NearbyPlace) _then) = __$NearbyPlaceCopyWithImpl;
 @override @useResult
 $Res call({
- String id, String stationId, String name, String category, int distanceMeters, int walkingMinutes, String description, String sourceLabel, String? address, bool isDemo
+ String id, String stationId, String name, String category, int distanceMeters, int walkingMinutes, String description, String sourceLabel, String? address, String? imageUrl, bool isDemo
 });
 
 
@@ -2102,7 +2104,7 @@ class __$NearbyPlaceCopyWithImpl<$Res>
 
 /// Create a copy of NearbyPlace
 /// with the given fields replaced by the non-null parameter values.
-@override @pragma('vm:prefer-inline') $Res call({Object? id = null,Object? stationId = null,Object? name = null,Object? category = null,Object? distanceMeters = null,Object? walkingMinutes = null,Object? description = null,Object? sourceLabel = null,Object? address = freezed,Object? isDemo = null,}) {
+@override @pragma('vm:prefer-inline') $Res call({Object? id = null,Object? stationId = null,Object? name = null,Object? category = null,Object? distanceMeters = null,Object? walkingMinutes = null,Object? description = null,Object? sourceLabel = null,Object? address = freezed,Object? imageUrl = freezed,Object? isDemo = null,}) {
   return _then(_NearbyPlace(
 id: null == id ? _self.id : id // ignore: cast_nullable_to_non_nullable
 as String,stationId: null == stationId ? _self.stationId : stationId // ignore: cast_nullable_to_non_nullable
@@ -2113,6 +2115,7 @@ as int,walkingMinutes: null == walkingMinutes ? _self.walkingMinutes : walkingMi
 as int,description: null == description ? _self.description : description // ignore: cast_nullable_to_non_nullable
 as String,sourceLabel: null == sourceLabel ? _self.sourceLabel : sourceLabel // ignore: cast_nullable_to_non_nullable
 as String,address: freezed == address ? _self.address : address // ignore: cast_nullable_to_non_nullable
+as String?,imageUrl: freezed == imageUrl ? _self.imageUrl : imageUrl // ignore: cast_nullable_to_non_nullable
 as String?,isDemo: null == isDemo ? _self.isDemo : isDemo // ignore: cast_nullable_to_non_nullable
 as bool,
   ));

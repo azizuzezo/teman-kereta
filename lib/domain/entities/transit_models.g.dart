@@ -239,6 +239,7 @@ _NearbyPlace _$NearbyPlaceFromJson(Map<String, dynamic> json) => _NearbyPlace(
   description: json['description'] as String,
   sourceLabel: json['sourceLabel'] as String,
   address: json['address'] as String?,
+  imageUrl: json['imageUrl'] as String?,
   isDemo: json['isDemo'] as bool? ?? false,
 );
 
@@ -253,6 +254,7 @@ Map<String, dynamic> _$NearbyPlaceToJson(_NearbyPlace instance) =>
       'description': instance.description,
       'sourceLabel': instance.sourceLabel,
       'address': instance.address,
+      'imageUrl': instance.imageUrl,
       'isDemo': instance.isDemo,
     };
 

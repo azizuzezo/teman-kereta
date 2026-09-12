@@ -225,6 +225,7 @@ abstract class NearbyPlace with _$NearbyPlace {
     required String description,
     required String sourceLabel,
     String? address,
+    String? imageUrl,
     @Default(false) bool isDemo,
   }) = _NearbyPlace;
 

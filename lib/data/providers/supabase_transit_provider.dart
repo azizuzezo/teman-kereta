@@ -53,14 +53,15 @@ class SupabaseTransitProvider
 
   Station _stationFromRow(Map<String, dynamic> row) {
     final facilities = (row['facilities'] as Map<String, dynamic>?) ?? const {};
-    final stationLines = (row['station_lines'] as List<dynamic>? ?? <dynamic>[])
-        .cast<Map<String, dynamic>>()
-        .toList()
-      ..sort(
-        (a, b) => ((a['stop_order'] as int?) ?? 0).compareTo(
-          (b['stop_order'] as int?) ?? 0,
-        ),
-      );
+    final stationLines =
+        (row['station_lines'] as List<dynamic>? ?? <dynamic>[])
+            .cast<Map<String, dynamic>>()
+            .toList()
+          ..sort(
+            (a, b) => ((a['stop_order'] as int?) ?? 0).compareTo(
+              (b['stop_order'] as int?) ?? 0,
+            ),
+          );
     return Station(
       id: row['code'] as String,
       code: row['code'] as String,
@@ -70,7 +71,9 @@ class SupabaseTransitProvider
       wheelchairAccessible: row['wheelchair_accessible'] as bool? ?? false,
       facilities: _facilityTags(facilities),
       lineIds: stationLines
-          .map((sl) => (sl['lines'] as Map<String, dynamic>?)?['code'] as String?)
+          .map(
+            (sl) => (sl['lines'] as Map<String, dynamic>?)?['code'] as String?,
+          )
           .whereType<String>()
           .toList(growable: false),
       stopOrderByLine: _stopOrderByLine(stationLines),
@@ -83,7 +86,8 @@ class SupabaseTransitProvider
   Map<String, int> _stopOrderByLine(List<Map<String, dynamic>> stationLines) {
     final result = <String, int>{};
     for (final sl in stationLines) {
-      final lineCode = (sl['lines'] as Map<String, dynamic>?)?['code'] as String?;
+      final lineCode =
+          (sl['lines'] as Map<String, dynamic>?)?['code'] as String?;
       if (lineCode == null) {
         continue;
       }
@@ -137,21 +141,26 @@ class SupabaseTransitProvider
       },
     );
     if (rows.isNotEmpty) {
-      return rows.cast<Map<String, dynamic>>().map((row) {
-        final scheduled = DateTime.parse(row['scheduled_departure'] as String).toLocal();
-        return Departure(
-          id: row['trip_id'] as String,
-          stationId: stationId,
-          destination: row['headsign'] as String,
-          lineName: (row['line_name'] as String?) ?? 'Commuter Line',
-          scheduledAt: scheduled,
-          expectedAt: scheduled,
-          freshness: DataFreshness.estimated,
-          sourceLabel: 'Basis data KRL • jadwal statis',
-          tripNumber: row['trip_number'] as String?,
-          isDemo: row['data_source'] == 'demo',
-        );
-      }).toList(growable: false);
+      return rows
+          .cast<Map<String, dynamic>>()
+          .map((row) {
+            final scheduled = DateTime.parse(
+              row['scheduled_departure'] as String,
+            ).toLocal();
+            return Departure(
+              id: row['trip_id'] as String,
+              stationId: stationId,
+              destination: row['headsign'] as String,
+              lineName: (row['line_name'] as String?) ?? 'Commuter Line',
+              scheduledAt: scheduled,
+              expectedAt: scheduled,
+              freshness: DataFreshness.estimated,
+              sourceLabel: 'Basis data KRL • jadwal statis',
+              tripNumber: row['trip_number'] as String?,
+              isDemo: row['data_source'] == 'demo',
+            );
+          })
+          .toList(growable: false);
     }
     // `get_station_departures` only has rows for whatever service_date
     // window the last GTFS import covered — it rolls stale (confirmed live:
@@ -179,7 +188,10 @@ class SupabaseTransitProvider
     'Cikarang via Pasar Senen (Loop)',
   ];
 
-  Future<List<Departure>> _fallbackDepartures(String stationId, DateTime time) async {
+  Future<List<Departure>> _fallbackDepartures(
+    String stationId,
+    DateTime time,
+  ) async {
     final station = await getStation(stationId);
     if (station == null || station.lineIds.isEmpty) {
       return const <Departure>[];
@@ -195,12 +207,12 @@ class SupabaseTransitProvider
         }
         continue;
       }
-      final onLine = allStations.where((s) => s.lineIds.contains(lineCode)).toList()
-        ..sort(
-          (a, b) => (a.stopOrderByLine[lineCode] ?? 0).compareTo(
-            b.stopOrderByLine[lineCode] ?? 0,
-          ),
-        );
+      final onLine =
+          allStations.where((s) => s.lineIds.contains(lineCode)).toList()..sort(
+            (a, b) => (a.stopOrderByLine[lineCode] ?? 0).compareTo(
+              b.stopOrderByLine[lineCode] ?? 0,
+            ),
+          );
       final myIndex = onLine.indexWhere((s) => s.id == station.id);
       if (myIndex < 0 || onLine.length < 2) {
         continue;
@@ -269,14 +281,15 @@ class SupabaseTransitProvider
 
     var trips = <TransitTrip>[
       ...await Future.wait(
-        directRows
-            .cast<Map<String, dynamic>>()
-            .map((row) => _directTripFromRow(row, query, originName, destinationName)),
+        directRows.cast<Map<String, dynamic>>().map(
+          (row) => _directTripFromRow(row, query, originName, destinationName),
+        ),
       ),
       ...await Future.wait(
-        transferRows
-            .cast<Map<String, dynamic>>()
-            .map((row) => _transferTripFromRow(row, query, originName, destinationName)),
+        transferRows.cast<Map<String, dynamic>>().map(
+          (row) =>
+              _transferTripFromRow(row, query, originName, destinationName),
+        ),
       ),
     ];
 
@@ -302,7 +315,9 @@ class SupabaseTransitProvider
       } else {
         final departureOffsets = <int>[6, 18, 33];
         trips = List<TransitTrip>.generate(departureOffsets.length, (index) {
-          final departure = query.departureAt.add(Duration(minutes: departureOffsets[index]));
+          final departure = query.departureAt.add(
+            Duration(minutes: departureOffsets[index]),
+          );
           final travelMinutes = 35 + (index * 7 * legStations.length);
           final arrival = departure.add(Duration(minutes: travelMinutes));
           final legMinutes = travelMinutes ~/ legStations.length;
@@ -311,13 +326,21 @@ class SupabaseTransitProvider
           for (var legIndex = 0; legIndex < legStations.length; legIndex++) {
             final stations = legStations[legIndex];
             final isLastLeg = legIndex == legStations.length - 1;
-            final legEnd = isLastLeg ? arrival : legStart.add(Duration(minutes: legMinutes));
-            final legOriginName = legIndex == 0 ? originName : legStations[legIndex - 1].last.name;
-            final legDestinationName = isLastLeg ? destinationName : stations.last.name;
+            final legEnd = isLastLeg
+                ? arrival
+                : legStart.add(Duration(minutes: legMinutes));
+            final legOriginName = legIndex == 0
+                ? originName
+                : legStations[legIndex - 1].last.name;
+            final legDestinationName = isLastLeg
+                ? destinationName
+                : stations.last.name;
             String? transferInstruction;
             if (!isLastLeg) {
               final nextStations = legStations[legIndex + 1];
-              final nextName = nextStations.length >= 2 ? nextStations[1].name : null;
+              final nextName = nextStations.length >= 2
+                  ? nextStations[1].name
+                  : null;
               // The real station immediately before this transfer on the
               // CURRENT leg — not the trip's ultimate origin — since almost
               // no rider actually boards at one of transferPlatformInstruction's
@@ -326,7 +349,8 @@ class SupabaseTransitProvider
               // has only 2 stops, that adjacent stop and the leg's own start
               // are the same station anyway.
               final approachingFromName = stations[stations.length - 2].name;
-              transferInstruction = transferPlatformInstruction(
+              transferInstruction =
+                  transferPlatformInstruction(
                     approachingFromName: approachingFromName,
                     transferName: legDestinationName,
                     nextName: nextName,
@@ -376,15 +400,14 @@ class SupabaseTransitProvider
       for (var i = 0; i < trips.length; i++) {
         final t = trips[i];
         final offsetMins = i * 12;
-        final newDeparture = query.departureAt.add(Duration(minutes: 6 + offsetMins));
+        final newDeparture = query.departureAt.add(
+          Duration(minutes: 6 + offsetMins),
+        );
         final duration = t.arrivalAt.difference(t.departureAt);
         final durationMins = duration.inMinutes > 0 ? duration.inMinutes : 40;
         final newArrival = newDeparture.add(Duration(minutes: durationMins));
         staggered.add(
-          t.copyWith(
-            departureAt: newDeparture,
-            arrivalAt: newArrival,
-          ),
+          t.copyWith(departureAt: newDeparture, arrivalAt: newArrival),
         );
       }
       trips = staggered;
@@ -441,8 +464,12 @@ class SupabaseTransitProvider
       row['origin_sequence'] as int,
       row['destination_sequence'] as int,
     );
-    final departure = DateTime.parse(row['origin_departure'] as String).toLocal();
-    final arrival = DateTime.parse(row['destination_arrival'] as String).toLocal();
+    final departure = DateTime.parse(
+      row['origin_departure'] as String,
+    ).toLocal();
+    final arrival = DateTime.parse(
+      row['destination_arrival'] as String,
+    ).toLocal();
 
     return TransitTrip(
       id: tripId,
@@ -508,20 +535,35 @@ class SupabaseTransitProvider
     final approachingCode = outboundStationCodes.length >= 2
         ? outboundStationCodes[outboundStationCodes.length - 2]
         : null;
-    final approaching = approachingCode != null ? await getStation(approachingCode) : null;
-    final next = inboundStationCodes.length >= 2 ? await getStation(inboundStationCodes[1]) : null;
-    final transferInstruction = transferPlatformInstruction(
+    final approaching = approachingCode != null
+        ? await getStation(approachingCode)
+        : null;
+    final next = inboundStationCodes.length >= 2
+        ? await getStation(inboundStationCodes[1])
+        : null;
+    final transferInstruction =
+        transferPlatformInstruction(
           approachingFromName: approaching?.name ?? originName,
           transferName: transferName,
           nextName: next?.name,
         ) ??
         'Transit di $transferName ke arah ${row['inbound_line_name']}.';
 
-    final departure = DateTime.parse(row['outbound_origin_departure'] as String).toLocal();
-    final transferArrival = DateTime.parse(row['outbound_transfer_arrival'] as String).toLocal();
-    final transferDeparture = DateTime.parse(row['inbound_transfer_departure'] as String).toLocal();
-    final arrival = DateTime.parse(row['inbound_destination_arrival'] as String).toLocal();
-    final isDemo = row['outbound_data_source'] == 'demo' || row['inbound_data_source'] == 'demo';
+    final departure = DateTime.parse(
+      row['outbound_origin_departure'] as String,
+    ).toLocal();
+    final transferArrival = DateTime.parse(
+      row['outbound_transfer_arrival'] as String,
+    ).toLocal();
+    final transferDeparture = DateTime.parse(
+      row['inbound_transfer_departure'] as String,
+    ).toLocal();
+    final arrival = DateTime.parse(
+      row['inbound_destination_arrival'] as String,
+    ).toLocal();
+    final isDemo =
+        row['outbound_data_source'] == 'demo' ||
+        row['inbound_data_source'] == 'demo';
 
     return TransitTrip(
       id: '$outboundTripId-$inboundTripId',
@@ -543,7 +585,9 @@ class SupabaseTransitProvider
           stationIds: outboundStationCodes,
           transferInstruction: transferInstruction,
           externalTripId: row['outbound_external_trip_id'] as String?,
-          serviceDate: DateTime.tryParse(row['outbound_service_date'] as String? ?? ''),
+          serviceDate: DateTime.tryParse(
+            row['outbound_service_date'] as String? ?? '',
+          ),
         ),
         TripLeg(
           id: '$inboundTripId-rail',
@@ -556,7 +600,9 @@ class SupabaseTransitProvider
           headsign: row['inbound_headsign'] as String?,
           stationIds: inboundStationCodes,
           externalTripId: row['inbound_external_trip_id'] as String?,
-          serviceDate: DateTime.tryParse(row['inbound_service_date'] as String? ?? ''),
+          serviceDate: DateTime.tryParse(
+            row['inbound_service_date'] as String? ?? '',
+          ),
         ),
       ],
       freshness: DataFreshness.estimated,
@@ -573,9 +619,9 @@ class SupabaseTransitProvider
         .stream(primaryKey: <String>['id'])
         .asyncMap((rows) async {
           final codes = await _stationCodesById();
-          return rows.map((row) => _vehiclePositionFromRow(row, codes)).toList(
-            growable: false,
-          );
+          return rows
+              .map((row) => _vehiclePositionFromRow(row, codes))
+              .toList(growable: false);
         });
   }
 
@@ -627,29 +673,32 @@ class SupabaseTransitProvider
 
   @override
   Stream<List<ServiceAlert>> watchServiceAlerts() {
-    return _client.from('service_alerts').stream(primaryKey: <String>['id']).map(
-      (rows) => rows
-          .map(
-            (row) => ServiceAlert(
-              id: row['id'] as String,
-              title: row['title'] as String,
-              description: row['description'] as String,
-              // Alert severity (info/warning/severe/critical) is the closest
-              // proxy this schema has for a line's operational status — there
-              // is no separate "current line status" table.
-              status: _statusFromSeverity(row['severity'] as String),
-              updatedAt: DateTime.parse(
-                (row['updated_at'] ?? row['starts_at']) as String,
-              ),
-              sourceLabel:
-                  'Basis data KRL • ${_friendlySourceLabel(row['source'] as String?)}',
-              lineId: row['line_id'] as String?,
-              isOfficial: row['is_official'] as bool? ?? false,
-              isDemo: row['source'] == 'demo',
-            ),
-          )
-          .toList(growable: false),
-    );
+    return _client
+        .from('service_alerts')
+        .stream(primaryKey: <String>['id'])
+        .map(
+          (rows) => rows
+              .map(
+                (row) => ServiceAlert(
+                  id: row['id'] as String,
+                  title: row['title'] as String,
+                  description: row['description'] as String,
+                  // Alert severity (info/warning/severe/critical) is the closest
+                  // proxy this schema has for a line's operational status — there
+                  // is no separate "current line status" table.
+                  status: _statusFromSeverity(row['severity'] as String),
+                  updatedAt: DateTime.parse(
+                    (row['updated_at'] ?? row['starts_at']) as String,
+                  ),
+                  sourceLabel:
+                      'Basis data KRL • ${_friendlySourceLabel(row['source'] as String?)}',
+                  lineId: row['line_id'] as String?,
+                  isOfficial: row['is_official'] as bool? ?? false,
+                  isDemo: row['source'] == 'demo',
+                ),
+              )
+              .toList(growable: false),
+        );
   }
 
   @override
@@ -674,8 +723,15 @@ class SupabaseTransitProvider
     final rows = await _client
         .from('nearby_places')
         .select()
-        .let((query) => stationUuid == null ? query : query.eq('station_id', stationUuid))
-        .let((query) => filter.category == null ? query : query.eq('category', filter.category!));
+        .let(
+          (query) =>
+              stationUuid == null ? query : query.eq('station_id', stationUuid),
+        )
+        .let(
+          (query) => filter.category == null
+              ? query
+              : query.eq('category', filter.category!),
+        );
 
     return rows
         .cast<Map<String, dynamic>>()
@@ -687,11 +743,13 @@ class SupabaseTransitProvider
             name: row['name'] as String,
             category: row['category'] as String,
             distanceMeters: distance,
-            walkingMinutes: (row['walking_duration_minutes'] as num?)?.toInt() ?? 0,
+            walkingMinutes:
+                (row['walking_duration_minutes'] as num?)?.toInt() ?? 0,
             description: (row['description'] as String?) ?? '',
             sourceLabel:
                 'Basis data KRL • ${_friendlySourceLabel(row['source'] as String?)}',
             address: row['address'] as String?,
+            imageUrl: row['image_url'] as String?,
             isDemo: row['source'] == 'demo',
           );
         })
@@ -713,12 +771,13 @@ class SupabaseTransitProvider
     return map;
   }
 
-  static DataFreshness _freshnessFromAccuracyStatus(String status) => switch (status) {
-    'real_time' => DataFreshness.realtime,
-    'near_real_time' => DataFreshness.nearRealtime,
-    'estimated' => DataFreshness.estimated,
-    _ => DataFreshness.unavailable,
-  };
+  static DataFreshness _freshnessFromAccuracyStatus(String status) =>
+      switch (status) {
+        'real_time' => DataFreshness.realtime,
+        'near_real_time' => DataFreshness.nearRealtime,
+        'estimated' => DataFreshness.estimated,
+        _ => DataFreshness.unavailable,
+      };
 
   /// Maps a raw `source` DB column value to a human-friendly Indonesian
   /// label. Without this, admin-written rows (`source: "admin_panel"`, see
@@ -733,13 +792,14 @@ class SupabaseTransitProvider
     _ => 'Teman Kereta',
   };
 
-  static ServiceStatus _statusFromSeverity(String severity) => switch (severity) {
-    'info' => ServiceStatus.normal,
-    'warning' => ServiceStatus.delayed,
-    'severe' => ServiceStatus.limited,
-    'critical' => ServiceStatus.disrupted,
-    _ => ServiceStatus.unavailable,
-  };
+  static ServiceStatus _statusFromSeverity(String severity) =>
+      switch (severity) {
+        'info' => ServiceStatus.normal,
+        'warning' => ServiceStatus.delayed,
+        'severe' => ServiceStatus.limited,
+        'critical' => ServiceStatus.disrupted,
+        _ => ServiceStatus.unavailable,
+      };
 }
 
 extension _Let<T> on T {

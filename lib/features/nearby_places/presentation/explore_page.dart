@@ -1,9 +1,15 @@
+import 'dart:typed_data';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:geolocator/geolocator.dart';
 import 'package:go_router/go_router.dart';
+import 'package:image_picker/image_picker.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:uuid/uuid.dart';
 
 import '../../../app/config/app_environment.dart';
+import '../../../core/widgets/auth_guard.dart';
 import '../../../core/widgets/empty_state.dart';
 import '../../../data/providers/provider_registry.dart';
 import '../../../domain/entities/transit_models.dart';
@@ -34,9 +40,8 @@ class _ExplorePageState extends ConsumerState<ExplorePage> {
           children: <Widget>[
             stations.when(
               loading: () => const LinearProgressIndicator(),
-              error: (error, stack) => const Text(
-                'Pilihan stasiun belum tersedia.',
-              ),
+              error: (error, stack) =>
+                  const Text('Pilihan stasiun belum tersedia.'),
               data: (items) {
                 final validValue = items.any((item) => item.id == _stationId)
                     ? _stationId
@@ -111,7 +116,8 @@ class _ExplorePageState extends ConsumerState<ExplorePage> {
                       AppEmptyState(
                         icon: Icons.travel_explore_outlined,
                         title: 'Belum ada tempat terdaftar',
-                        message: 'Belum ada destinasi terdaftar untuk stasiun ini.',
+                        message:
+                            'Belum ada destinasi terdaftar untuk stasiun ini.',
                         action: OutlinedButton(
                           onPressed: () => context.push('/station/$_stationId'),
                           child: const Text('Lihat detail stasiun'),
@@ -137,7 +143,11 @@ class _ExplorePageState extends ConsumerState<ExplorePage> {
         ),
       ),
       floatingActionButton: FloatingActionButton.extended(
-        onPressed: () => _showAddPlaceDialog(context),
+        onPressed: () => checkAuthOrPrompt(
+          context,
+          featureName: 'menambah tempat',
+          onAllowed: () => _showAddPlaceDialog(context),
+        ),
         icon: const Icon(Icons.add_location_alt_rounded),
         label: const Text('Tambah Tempat'),
       ),
@@ -147,10 +157,13 @@ class _ExplorePageState extends ConsumerState<ExplorePage> {
   void _showAddPlaceDialog(BuildContext context) {
     final nameController = TextEditingController();
     final descriptionController = TextEditingController();
-    final photoUrlController = TextEditingController();
 
     // Default to selected station coordinates
-    final station = ref.read(stationListProvider).asData?.value.firstWhere(
+    final station = ref
+        .read(stationListProvider)
+        .asData
+        ?.value
+        .firstWhere(
           (s) => s.id == _stationId,
           orElse: () => const Station(
             id: 'SUD',
@@ -169,302 +182,329 @@ class _ExplorePageState extends ConsumerState<ExplorePage> {
       text: station?.longitude.toStringAsFixed(5) ?? '106.82280',
     );
     String category = 'Kuliner';
-    String? selectedPhotoPreview;
+    Uint8List? photoBytes;
+    var locatingGps = false;
+    var submitting = false;
 
     showDialog<void>(
       context: context,
       builder: (dialogContext) => StatefulBuilder(
-        builder: (context, setDialogState) => AlertDialog(
-          title: const Text('Tambah Tempat Sekitar'),
-          content: SingleChildScrollView(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: <Widget>[
-                TextField(
-                  controller: nameController,
-                  decoration: const InputDecoration(
-                    labelText: 'Nama Tempat',
-                    hintText: 'Contoh: Kuliner Malam Stasiun',
-                  ),
-                ),
-                const SizedBox(height: 10),
-                DropdownButtonFormField<String>(
-                  initialValue: category,
-                  decoration: const InputDecoration(labelText: 'Kategori'),
-                  items: const <DropdownMenuItem<String>>[
-                    DropdownMenuItem(value: 'Kuliner', child: Text('Kuliner')),
-                    DropdownMenuItem(value: 'Wisata', child: Text('Wisata')),
-                    DropdownMenuItem(value: 'Taman', child: Text('Taman')),
-                    DropdownMenuItem(value: 'Belanja', child: Text('Belanja')),
-                    DropdownMenuItem(value: 'Fasilitas', child: Text('Fasilitas')),
-                  ],
-                  onChanged: (val) {
-                    if (val != null) setDialogState(() => category = val);
-                  },
-                ),
-                const SizedBox(height: 10),
-                TextField(
-                  controller: descriptionController,
-                  maxLines: 2,
-                  decoration: const InputDecoration(
-                    labelText: 'Deskripsi',
-                    hintText: 'Informasi singkat tempat ini',
-                  ),
-                ),
-                const SizedBox(height: 14),
-                // ── Foto Kamera HP Section ──────────────────────────────────
-                const Text(
-                  'Foto Destinasi',
-                  style: TextStyle(fontWeight: FontWeight.w600, fontSize: 13),
-                ),
-                const SizedBox(height: 6),
-                if (selectedPhotoPreview != null || photoUrlController.text.isNotEmpty)
-                  ClipRRect(
-                    borderRadius: BorderRadius.circular(10),
-                    child: Image.network(
-                      selectedPhotoPreview ?? photoUrlController.text,
-                      height: 120,
-                      width: double.infinity,
-                      fit: BoxFit.cover,
-                      errorBuilder: (_, _, _) => Container(
-                        height: 60,
-                        color: Colors.grey.shade200,
-                        alignment: Alignment.center,
-                        child: const Text('📷 Preview Foto Terpilih'),
-                      ),
-                    ),
-                  ),
-                const SizedBox(height: 6),
-                Row(
-                  children: <Widget>[
-                    Expanded(
-                      child: OutlinedButton.icon(
-                        onPressed: () {
-                          // Simulate Camera Capture
-                          const sampleCameraPhoto =
-                              'https://images.unsplash.com/photo-1555396273-367ea4eb4db5?auto=format&fit=crop&w=400&q=80';
-                          setDialogState(() {
-                            selectedPhotoPreview = sampleCameraPhoto;
-                            photoUrlController.text = sampleCameraPhoto;
-                          });
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(
-                              content: Text('Foto berhasil diambil dari kamera! 📷'),
-                            ),
-                          );
-                        },
-                        icon: const Icon(Icons.camera_alt_rounded, size: 18),
-                        label: const Text('Ambil Kamera'),
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 14),
-                // ── GPS Realtime Section ─────────────────────────────────────
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: <Widget>[
-                    const Text(
-                      'Koordinat GPS',
-                      style: TextStyle(fontWeight: FontWeight.w600, fontSize: 13),
-                    ),
-                    TextButton.icon(
-                      style: TextButton.styleFrom(visualDensity: VisualDensity.compact),
-                      onPressed: () {
-                        // Auto generate realtime GPS coordinates near station
-                        final latVal = (station?.latitude ?? -6.2088) +
-                            ((DateTime.now().millisecondsSinceEpoch % 100) / 100000.0);
-                        final lngVal = (station?.longitude ?? 106.8228) +
-                            ((DateTime.now().millisecondsSinceEpoch % 100) / 100000.0);
-                        setDialogState(() {
-                          latController.text = latVal.toStringAsFixed(5);
-                          lngController.text = lngVal.toStringAsFixed(5);
-                        });
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(
-                            content: Text('Koordinat GPS realtime terdeteksi! 📍'),
-                          ),
-                        );
-                      },
-                      icon: const Icon(Icons.my_location_rounded, size: 16),
-                      label: const Text('GPS Realtime'),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 4),
-                Row(
-                  children: <Widget>[
-                    Expanded(
-                      child: TextField(
-                        controller: latController,
-                        readOnly: true,
-                        decoration: const InputDecoration(
-                          labelText: 'Latitude',
-                          prefixIcon: Icon(Icons.location_on_outlined, size: 18),
-                        ),
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: TextField(
-                        controller: lngController,
-                        readOnly: true,
-                        decoration: const InputDecoration(
-                          labelText: 'Longitude',
-                          prefixIcon: Icon(Icons.location_on_outlined, size: 18),
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ],
-            ),
-          ),
-          actions: <Widget>[
-            TextButton(
-              onPressed: () => Navigator.of(dialogContext).pop(),
-              child: const Text('Batal'),
-            ),
-            FilledButton(
-              onPressed: () async {
-                final name = nameController.text.trim();
-                if (name.isEmpty) return;
-                try {
-                  if (AppEnvironment.supabaseEnabled) {
-                    final lat = double.tryParse(latController.text.trim()) ?? 0.0;
-                    final lng = double.tryParse(lngController.text.trim()) ?? 0.0;
-                    await Supabase.instance.client.from('nearby_places').insert({
-                      'station_id': _stationId,
-                      'name': name,
-                      'category': category,
-                      'description': descriptionController.text.trim(),
-                      'photo_url': photoUrlController.text.trim(),
-                      'latitude': lat,
-                      'longitude': lng,
-                      'source': 'community',
-                    });
-                  }
-                } on Object catch (e) {
-                  debugPrint('Insert place error: $e');
+        builder: (context, setDialogState) {
+          Future<void> pickPhoto() async {
+            final picked = await ImagePicker().pickImage(
+              source: ImageSource.gallery,
+              imageQuality: 80,
+              maxWidth: 1600,
+            );
+            if (picked == null) return;
+            final bytes = await picked.readAsBytes();
+            setDialogState(() => photoBytes = bytes);
+          }
+
+          Future<void> fetchGpsLocation() async {
+            setDialogState(() => locatingGps = true);
+            String? errorMessage;
+            try {
+              if (!await Geolocator.isLocationServiceEnabled()) {
+                errorMessage = 'Aktifkan layanan lokasi di perangkat kamu.';
+              } else {
+                var permission = await Geolocator.checkPermission();
+                if (permission == LocationPermission.denied) {
+                  permission = await Geolocator.requestPermission();
                 }
-                if (dialogContext.mounted) {
-                  Navigator.of(dialogContext).pop();
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(
-                      content: Text('Tempat baru berhasil ditambahkan! 🎉'),
+                final granted =
+                    permission == LocationPermission.always ||
+                    permission == LocationPermission.whileInUse;
+                if (!granted) {
+                  errorMessage = 'Izin lokasi diperlukan untuk fitur ini.';
+                } else {
+                  final position = await Geolocator.getCurrentPosition(
+                    locationSettings: const LocationSettings(
+                      accuracy: LocationAccuracy.high,
+                      timeLimit: Duration(seconds: 8),
                     ),
                   );
-                  ref.invalidate(nearbyPlacesProvider(_stationId));
+                  latController.text = position.latitude.toStringAsFixed(5);
+                  lngController.text = position.longitude.toStringAsFixed(5);
                 }
-              },
-              child: const Text('Simpan'),
+              }
+            } on Object {
+              errorMessage = 'Lokasi tidak dapat dibaca. Coba lagi.';
+            }
+            setDialogState(() => locatingGps = false);
+            if (errorMessage != null && context.mounted) {
+              ScaffoldMessenger.of(
+                context,
+              ).showSnackBar(SnackBar(content: Text(errorMessage)));
+            }
+          }
+
+          Future<void> submit() async {
+            final name = nameController.text.trim();
+            if (name.isEmpty) return;
+            final userId = Supabase.instance.client.auth.currentUser?.id;
+            if (!AppEnvironment.supabaseEnabled || userId == null) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(
+                  content: Text('Fitur ini butuh koneksi ke server komunitas.'),
+                ),
+              );
+              return;
+            }
+            setDialogState(() => submitting = true);
+            try {
+              String? photoUrl;
+              if (photoBytes != null) {
+                final path = '$userId/${const Uuid().v4()}.jpg';
+                await Supabase.instance.client.storage
+                    .from('nearby-place-images')
+                    .uploadBinary(
+                      path,
+                      photoBytes!,
+                      fileOptions: const FileOptions(contentType: 'image/jpeg'),
+                    );
+                photoUrl = Supabase.instance.client.storage
+                    .from('nearby-place-images')
+                    .getPublicUrl(path);
+              }
+              final lat = double.tryParse(latController.text.trim()) ?? 0.0;
+              final lng = double.tryParse(lngController.text.trim()) ?? 0.0;
+              await Supabase.instance.client.from('nearby_places').insert({
+                'station_id': _stationId,
+                'name': name,
+                'category': category,
+                'description': descriptionController.text.trim(),
+                'image_url': ?photoUrl,
+                'latitude': lat,
+                'longitude': lng,
+                'source': 'community',
+                'submitted_by': userId,
+              });
+              if (!dialogContext.mounted) return;
+              Navigator.of(dialogContext).pop();
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(
+                  content: Text('Tempat baru berhasil ditambahkan.'),
+                ),
+              );
+              ref.invalidate(nearbyPlacesProvider(_stationId));
+            } on Object {
+              setDialogState(() => submitting = false);
+              if (context.mounted) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(
+                    content: Text('Gagal menyimpan tempat. Coba lagi.'),
+                  ),
+                );
+              }
+            }
+          }
+
+          return AlertDialog(
+            title: const Text('Tambah Tempat Sekitar'),
+            content: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: <Widget>[
+                  TextField(
+                    controller: nameController,
+                    decoration: const InputDecoration(
+                      labelText: 'Nama Tempat',
+                      hintText: 'Contoh: Kuliner Malam Stasiun',
+                    ),
+                  ),
+                  const SizedBox(height: 10),
+                  DropdownButtonFormField<String>(
+                    initialValue: category,
+                    decoration: const InputDecoration(labelText: 'Kategori'),
+                    items: const <DropdownMenuItem<String>>[
+                      DropdownMenuItem(
+                        value: 'Kuliner',
+                        child: Text('Kuliner'),
+                      ),
+                      DropdownMenuItem(value: 'Wisata', child: Text('Wisata')),
+                      DropdownMenuItem(value: 'Taman', child: Text('Taman')),
+                      DropdownMenuItem(
+                        value: 'Belanja',
+                        child: Text('Belanja'),
+                      ),
+                      DropdownMenuItem(
+                        value: 'Fasilitas',
+                        child: Text('Fasilitas'),
+                      ),
+                    ],
+                    onChanged: (val) {
+                      if (val != null) setDialogState(() => category = val);
+                    },
+                  ),
+                  const SizedBox(height: 10),
+                  TextField(
+                    controller: descriptionController,
+                    maxLines: 2,
+                    decoration: const InputDecoration(
+                      labelText: 'Deskripsi',
+                      hintText: 'Informasi singkat tempat ini',
+                    ),
+                  ),
+                  const SizedBox(height: 14),
+                  const Text(
+                    'Foto Destinasi (opsional)',
+                    style: TextStyle(fontWeight: FontWeight.w600, fontSize: 13),
+                  ),
+                  const SizedBox(height: 6),
+                  if (photoBytes != null)
+                    ClipRRect(
+                      borderRadius: BorderRadius.circular(10),
+                      child: Image.memory(
+                        photoBytes!,
+                        height: 120,
+                        width: double.infinity,
+                        fit: BoxFit.cover,
+                      ),
+                    ),
+                  const SizedBox(height: 6),
+                  OutlinedButton.icon(
+                    onPressed: pickPhoto,
+                    icon: const Icon(Icons.photo_library_outlined, size: 18),
+                    label: Text(
+                      photoBytes == null ? 'Pilih Foto' : 'Ganti Foto',
+                    ),
+                  ),
+                  const SizedBox(height: 14),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: <Widget>[
+                      const Text(
+                        'Koordinat GPS',
+                        style: TextStyle(
+                          fontWeight: FontWeight.w600,
+                          fontSize: 13,
+                        ),
+                      ),
+                      TextButton.icon(
+                        style: TextButton.styleFrom(
+                          visualDensity: VisualDensity.compact,
+                        ),
+                        onPressed: locatingGps ? null : fetchGpsLocation,
+                        icon: locatingGps
+                            ? const SizedBox.square(
+                                dimension: 14,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                ),
+                              )
+                            : const Icon(Icons.my_location_rounded, size: 16),
+                        label: Text(
+                          locatingGps
+                              ? 'Mencari lokasi...'
+                              : 'Pakai lokasi saya',
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 4),
+                  Row(
+                    children: <Widget>[
+                      Expanded(
+                        child: TextField(
+                          controller: latController,
+                          readOnly: true,
+                          decoration: const InputDecoration(
+                            labelText: 'Latitude',
+                            prefixIcon: Icon(
+                              Icons.location_on_outlined,
+                              size: 18,
+                            ),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: TextField(
+                          controller: lngController,
+                          readOnly: true,
+                          decoration: const InputDecoration(
+                            labelText: 'Longitude',
+                            prefixIcon: Icon(
+                              Icons.location_on_outlined,
+                              size: 18,
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
             ),
-          ],
-        ),
+            actions: <Widget>[
+              TextButton(
+                onPressed: () => Navigator.of(dialogContext).pop(),
+                child: const Text('Batal'),
+              ),
+              FilledButton(
+                onPressed: submitting ? null : submit,
+                child: submitting
+                    ? const SizedBox.square(
+                        dimension: 16,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
+                    : const Text('Simpan'),
+              ),
+            ],
+          );
+        },
       ),
     );
   }
 }
 
-class _PlaceCard extends StatefulWidget {
+class _PlaceCard extends StatelessWidget {
   const _PlaceCard({required this.place});
 
   final NearbyPlace place;
 
   @override
-  State<_PlaceCard> createState() => _PlaceCardState();
-}
-
-class _PlaceCardState extends State<_PlaceCard> {
-  final List<Map<String, dynamic>> _reviews = <Map<String, dynamic>>[
-    {
-      'name': 'Budi Santoso',
-      'rating': 5,
-      'comment': 'Tempatnya sangat bagus, akses dekat dari stasiun!',
-      'date': 'Kemarin',
-    },
-    {
-      'name': 'Siti Rahma',
-      'rating': 4,
-      'comment': 'Makanan enak dan suasana ramah.',
-      'date': '3 hari lalu',
-    },
-  ];
-
-  void _addReview(int rating, String comment) {
-    setState(() {
-      _reviews.insert(0, {
-        'name': 'Pengguna Teman Kereta',
-        'rating': rating,
-        'comment': comment,
-        'date': 'Baru saja',
-      });
-    });
-  }
-
-  @override
   Widget build(BuildContext context) {
-    final place = widget.place;
-    final avgRating = _reviews.isEmpty
-        ? 4.8
-        : (_reviews.fold<double>(0, (sum, r) => sum + (r['rating'] as int)) /
-            _reviews.length);
-
     return Card(
       child: InkWell(
         borderRadius: BorderRadius.circular(18),
-        onTap: () => _showPlaceDetailsBottomSheet(context, avgRating),
+        onTap: () => _showPlaceDetailsBottomSheet(context),
         child: Padding(
           padding: const EdgeInsets.all(16),
           child: Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: <Widget>[
-              CircleAvatar(
-                child: Icon(_iconFor(place.category)),
-              ),
+              if (place.imageUrl != null)
+                ClipRRect(
+                  borderRadius: BorderRadius.circular(12),
+                  child: Image.network(
+                    place.imageUrl!,
+                    width: 48,
+                    height: 48,
+                    fit: BoxFit.cover,
+                    errorBuilder: (_, _, _) =>
+                        CircleAvatar(child: Icon(_iconFor(place.category))),
+                  ),
+                )
+              else
+                CircleAvatar(child: Icon(_iconFor(place.category))),
               const SizedBox(width: 14),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: <Widget>[
-                    Row(
-                      children: <Widget>[
-                        Expanded(
-                          child: Text(
-                            place.name,
-                            style: const TextStyle(fontWeight: FontWeight.w700),
-                          ),
-                        ),
-                        Container(
-                          padding: const EdgeInsets.symmetric(
-                              horizontal: 6, vertical: 2),
-                          decoration: BoxDecoration(
-                            color: Colors.amber.withValues(alpha: 0.15),
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                          child: Row(
-                            children: <Widget>[
-                              const Icon(Icons.star_rounded,
-                                  color: Colors.amber, size: 14),
-                              const SizedBox(width: 2),
-                              Text(
-                                avgRating.toStringAsFixed(1),
-                                style: const TextStyle(
-                                  fontSize: 11,
-                                  fontWeight: FontWeight.bold,
-                                  color: Colors.amber,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ],
+                    Text(
+                      place.name,
+                      style: const TextStyle(fontWeight: FontWeight.w700),
                     ),
                     const SizedBox(height: 4),
-                    Text('${place.category} • ${place.walkingMinutes} menit jalan'),
                     Text(
-                      '${place.distanceMeters} meter • ${_reviews.length} ulasan',
+                      '${place.category} • ${place.walkingMinutes} menit jalan',
+                    ),
+                    Text(
+                      '${place.distanceMeters} meter',
                       style: Theme.of(context).textTheme.bodySmall,
                     ),
                   ],
@@ -478,184 +518,66 @@ class _PlaceCardState extends State<_PlaceCard> {
     );
   }
 
-  void _showPlaceDetailsBottomSheet(BuildContext context, double avgRating) {
+  void _showPlaceDetailsBottomSheet(BuildContext context) {
     showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
       showDragHandle: true,
-      builder: (bottomSheetContext) => StatefulBuilder(
-        builder: (context, setSheetState) => DraggableScrollableSheet(
-          initialChildSize: 0.7,
-          minChildSize: 0.4,
-          maxChildSize: 0.95,
-          expand: false,
-          builder: (context, scrollController) => ListView(
-            controller: scrollController,
-            padding: const EdgeInsets.fromLTRB(20, 8, 20, 24),
-            children: <Widget>[
-              Text(
-                widget.place.name,
-                style: Theme.of(context).textTheme.headlineSmall,
-              ),
-              const SizedBox(height: 4),
-              Row(
-                children: <Widget>[
-                  const Icon(Icons.star_rounded, color: Colors.amber, size: 18),
-                  const SizedBox(width: 4),
-                  Text(
-                    '${avgRating.toStringAsFixed(1)} (${_reviews.length} Ulasan)',
-                    style: const TextStyle(fontWeight: FontWeight.bold),
-                  ),
-                  const SizedBox(width: 12),
-                  Chip(
-                    label: Text(widget.place.category),
-                    visualDensity: VisualDensity.compact,
-                  ),
-                ],
-              ),
-              const SizedBox(height: 12),
-              Text(
-                widget.place.description.isEmpty
-                    ? 'Destinasi populer sekitar stasiun.'
-                    : widget.place.description,
-              ),
-              const SizedBox(height: 18),
-
-              // ── Ulasan Komunitas ───────────────────────────────────────
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: <Widget>[
-                  Text(
-                    'Ulasan Komunitas',
-                    style: Theme.of(context).textTheme.titleMedium,
-                  ),
-                  FilledButton.icon(
-                    style: FilledButton.styleFrom(
-                      visualDensity: VisualDensity.compact,
-                    ),
-                    onPressed: () {
-                      _showAddReviewDialog(context, () {
-                        setSheetState(() {});
-                        setState(() {});
-                      });
-                    },
-                    icon: const Icon(Icons.rate_review_outlined, size: 16),
-                    label: const Text('Tulis Ulasan'),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 12),
-
-              for (final review in _reviews) ...<Widget>[
-                Card(
-                  color: Theme.of(context).colorScheme.surfaceContainerLow,
-                  child: Padding(
-                    padding: const EdgeInsets.all(12),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: <Widget>[
-                        Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                          children: <Widget>[
-                            Text(
-                              review['name'] as String,
-                              style: const TextStyle(
-                                fontWeight: FontWeight.bold,
-                              ),
-                            ),
-                            Row(
-                              children: <Widget>[
-                                for (var i = 1; i <= 5; i++)
-                                  Icon(
-                                    Icons.star_rounded,
-                                    size: 14,
-                                    color: i <= (review['rating'] as int)
-                                        ? Colors.amber
-                                        : Colors.grey.shade300,
-                                  ),
-                              ],
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: 4),
-                        Text(review['comment'] as String),
-                        const SizedBox(height: 4),
-                        Text(
-                          review['date'] as String,
-                          style: TextStyle(
-                            fontSize: 10,
-                            color: Theme.of(context).colorScheme.outline,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
+      builder: (bottomSheetContext) => DraggableScrollableSheet(
+        initialChildSize: 0.5,
+        minChildSize: 0.3,
+        maxChildSize: 0.9,
+        expand: false,
+        builder: (context, scrollController) => ListView(
+          controller: scrollController,
+          padding: const EdgeInsets.fromLTRB(20, 8, 20, 24),
+          children: <Widget>[
+            if (place.imageUrl != null) ...<Widget>[
+              ClipRRect(
+                borderRadius: BorderRadius.circular(14),
+                child: Image.network(
+                  place.imageUrl!,
+                  height: 160,
+                  width: double.infinity,
+                  fit: BoxFit.cover,
                 ),
-                const SizedBox(height: 8),
+              ),
+              const SizedBox(height: 14),
+            ],
+            Text(place.name, style: Theme.of(context).textTheme.headlineSmall),
+            const SizedBox(height: 4),
+            Row(
+              children: <Widget>[
+                Chip(
+                  label: Text(place.category),
+                  visualDensity: VisualDensity.compact,
+                ),
+                const SizedBox(width: 8),
+                Text(
+                  '${place.distanceMeters} meter • ${place.walkingMinutes} menit jalan',
+                  style: Theme.of(context).textTheme.bodySmall,
+                ),
               ],
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
-  void _showAddReviewDialog(BuildContext context, VoidCallback onAdded) {
-    int rating = 5;
-    final reviewController = TextEditingController();
-
-    showDialog<void>(
-      context: context,
-      builder: (reviewDialogContext) => StatefulBuilder(
-        builder: (context, setReviewState) => AlertDialog(
-          title: const Text('Berikan Ulasan & Rating'),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: <Widget>[
-              Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: <Widget>[
-                  for (var i = 1; i <= 5; i++)
-                    IconButton(
-                      icon: Icon(
-                        Icons.star_rounded,
-                        size: 32,
-                        color: i <= rating ? Colors.amber : Colors.grey.shade300,
-                      ),
-                      onPressed: () => setReviewState(() => rating = i),
-                    ),
-                ],
-              ),
-              const SizedBox(height: 10),
-              TextField(
-                controller: reviewController,
-                maxLines: 3,
-                decoration: const InputDecoration(
-                  labelText: 'Ulasan Anda',
-                  hintText: 'Bagikan pengalaman Anda mengunjungi tempat ini...',
-                ),
-              ),
-            ],
-          ),
-          actions: <Widget>[
-            TextButton(
-              onPressed: () => Navigator.of(reviewDialogContext).pop(),
-              child: const Text('Batal'),
             ),
-            FilledButton(
-              onPressed: () {
-                final comment = reviewController.text.trim();
-                if (comment.isEmpty) return;
-                _addReview(rating, comment);
-                onAdded();
-                Navigator.of(reviewDialogContext).pop();
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(
-                    content: Text('Ulasan Anda telah dipublikasikan! ⭐'),
-                  ),
-                );
-              },
-              child: const Text('Kirim Ulasan'),
+            const SizedBox(height: 12),
+            Text(
+              place.description.isEmpty
+                  ? 'Destinasi populer sekitar stasiun.'
+                  : place.description,
+            ),
+            if (place.address != null) ...<Widget>[
+              const SizedBox(height: 8),
+              Text(
+                place.address!,
+                style: Theme.of(context).textTheme.bodySmall,
+              ),
+            ],
+            const SizedBox(height: 12),
+            Text(
+              place.sourceLabel,
+              style: Theme.of(
+                context,
+              ).textTheme.bodySmall?.copyWith(fontStyle: FontStyle.italic),
             ),
           ],
         ),
