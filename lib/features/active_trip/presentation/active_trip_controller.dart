@@ -18,6 +18,7 @@ import '../../../domain/entities/active_trip.dart';
 import '../../../domain/entities/transit_models.dart';
 import '../../live_map/presentation/native_gps_fix.dart';
 import '../../settings/presentation/settings_controller.dart';
+import 'trip_battery_warning.dart';
 import 'trip_signal_gap.dart';
 
 /// How often the rider's own position is reported while onBoard, when
@@ -101,11 +102,13 @@ class ActiveTripController extends Notifier<ActiveTripSession?> {
       return;
     }
     unawaited(
-      ref.read(nativeTripServiceProvider).updateSettings(
-        stopAlertThreshold: next.stopAlertThreshold,
-        vibrationEnabled: next.vibrationEnabled,
-        soundEnabled: next.soundEnabled,
-      ),
+      ref
+          .read(nativeTripServiceProvider)
+          .updateSettings(
+            stopAlertThreshold: next.stopAlertThreshold,
+            vibrationEnabled: next.vibrationEnabled,
+            soundEnabled: next.soundEnabled,
+          ),
     );
   }
 
@@ -138,7 +141,9 @@ class ActiveTripController extends Notifier<ActiveTripSession?> {
     if (current == null || !_isTrackedState(current.state)) {
       return;
     }
-    final native = await ref.read(nativeTripServiceProvider).getActiveTripFullState();
+    final native = await ref
+        .read(nativeTripServiceProvider)
+        .getActiveTripFullState();
     if (!ref.mounted) return;
     final latest = state;
     if (latest == null || !_isTrackedState(latest.state)) {
@@ -159,8 +164,11 @@ class ActiveTripController extends Notifier<ActiveTripSession?> {
     if (nativeIndex != null && nativeIndex >= latest.currentStationIndex) {
       final parsedState = nativeStateName == null
           ? null
-          : ActiveTripState.values.where((s) => s.name == nativeStateName).firstOrNull;
-      if (nativeIndex != latest.currentStationIndex || parsedState != latest.state) {
+          : ActiveTripState.values
+                .where((s) => s.name == nativeStateName)
+                .firstOrNull;
+      if (nativeIndex != latest.currentStationIndex ||
+          parsedState != latest.state) {
         updated = updated.copyWith(
           currentStationIndex: nativeIndex,
           state: parsedState ?? updated.state,
@@ -210,15 +218,18 @@ class ActiveTripController extends Notifier<ActiveTripSession?> {
     final lng = (native['longitude'] as num?)?.toDouble();
     final locationAtMs = native['locationAtEpochMs'] as int?;
     if (lat != null && lng != null && locationAtMs != null) {
-      ref.read(latestNativeGpsFixProvider.notifier).set(
-        NativeGpsFix(
-          latitude: lat,
-          longitude: lng,
-          at: DateTime.fromMillisecondsSinceEpoch(locationAtMs),
-          speedMetersPerSecond: (native['speedMetersPerSecond'] as num?)?.toDouble(),
-          bearingDegrees: (native['bearingDegrees'] as num?)?.toDouble(),
-        ),
-      );
+      ref
+          .read(latestNativeGpsFixProvider.notifier)
+          .set(
+            NativeGpsFix(
+              latitude: lat,
+              longitude: lng,
+              at: DateTime.fromMillisecondsSinceEpoch(locationAtMs),
+              speedMetersPerSecond: (native['speedMetersPerSecond'] as num?)
+                  ?.toDouble(),
+              bearingDegrees: (native['bearingDegrees'] as num?)?.toDouble(),
+            ),
+          );
     }
   }
 
@@ -272,7 +283,8 @@ class ActiveTripController extends Notifier<ActiveTripSession?> {
         .firstOrNull;
     final nextState = switch (boundary) {
       final b? when b.index == nextIndex => ActiveTripState.transferring,
-      final b? when b.index - nextIndex <= 3 => ActiveTripState.approachingTransfer,
+      final b? when b.index - nextIndex <= 3 =>
+        ActiveTripState.approachingTransfer,
       _ when remaining <= 0 => ActiveTripState.arrived,
       _ when remaining <= 3 => ActiveTripState.approachingDestination,
       _ => ActiveTripState.onBoard,
@@ -300,51 +312,62 @@ class ActiveTripController extends Notifier<ActiveTripSession?> {
       // with the recap and finishes the trip, rather than parking on an
       // "arrived" screen waiting to be dismissed.
       unawaited(
-        ref.read(localNotificationServiceProvider).showArrivalAlert(
-          destination: _stationName(current.trip.destinationStationId),
-          duration: now.difference(current.startedAt),
-          distanceMeters: updated.distanceMeters,
-          vibrate: settings.vibrationEnabled,
-          sound: settings.soundEnabled,
-        ),
+        ref
+            .read(localNotificationServiceProvider)
+            .showArrivalAlert(
+              destination: _stationName(current.trip.destinationStationId),
+              duration: now.difference(current.startedAt),
+              distanceMeters: updated.distanceMeters,
+              vibrate: settings.vibrationEnabled,
+              sound: settings.soundEnabled,
+            ),
       );
       await complete();
       return;
     }
     if (nextState == ActiveTripState.transferring) {
       unawaited(
-        ref.read(localNotificationServiceProvider).showTransferAlert(
-          stationName: _stationName(current.trip.stationIds[nextIndex]),
-          instruction: boundary?.instruction,
-          isDemo: current.trip.isDemo,
-          vibrate: settings.vibrationEnabled,
-          sound: settings.soundEnabled,
-        ),
+        ref
+            .read(localNotificationServiceProvider)
+            .showTransferAlert(
+              stationName: _stationName(current.trip.stationIds[nextIndex]),
+              instruction: boundary?.instruction,
+              isDemo: current.trip.isDemo,
+              vibrate: settings.vibrationEnabled,
+              sound: settings.soundEnabled,
+            ),
       );
     } else if (boundary != null) {
       // Repeating countdown at 3/2/1 stops before the transfer boundary,
       // mirroring the destination countdown below.
       final stopsToTransfer = boundary.index - nextIndex;
-      if (stopsToTransfer > 0 && stopsToTransfer <= settings.stopAlertThreshold) {
+      if (stopsToTransfer > 0 &&
+          stopsToTransfer <= settings.stopAlertThreshold) {
         unawaited(
-          ref.read(localNotificationServiceProvider).showTransferApproachingAlert(
-            remainingStops: stopsToTransfer,
-            stationName: _stationName(current.trip.stationIds[boundary.index]),
-            isDemo: current.trip.isDemo,
-            vibrate: settings.vibrationEnabled,
-            sound: settings.soundEnabled,
-          ),
+          ref
+              .read(localNotificationServiceProvider)
+              .showTransferApproachingAlert(
+                remainingStops: stopsToTransfer,
+                stationName: _stationName(
+                  current.trip.stationIds[boundary.index],
+                ),
+                isDemo: current.trip.isDemo,
+                vibrate: settings.vibrationEnabled,
+                sound: settings.soundEnabled,
+              ),
         );
       }
     } else if (remaining <= settings.stopAlertThreshold) {
       unawaited(
-        ref.read(localNotificationServiceProvider).showStopAlert(
-          remainingStops: remaining,
-          destination: _stationName(current.trip.destinationStationId),
-          isDemo: current.trip.isDemo,
-          vibrate: settings.vibrationEnabled,
-          sound: settings.soundEnabled,
-        ),
+        ref
+            .read(localNotificationServiceProvider)
+            .showStopAlert(
+              remainingStops: remaining,
+              destination: _stationName(current.trip.destinationStationId),
+              isDemo: current.trip.isDemo,
+              vibrate: settings.vibrationEnabled,
+              sound: settings.soundEnabled,
+            ),
       );
     }
   }
@@ -360,7 +383,10 @@ class ActiveTripController extends Notifier<ActiveTripSession?> {
   }) async {
     List<Station> stations;
     try {
-      stations = await ref.read(stationProvider).getStations();
+      // `stationListProvider`, not the raw `stationProvider` — this falls
+      // back to the locally cached station list (PRD §19) when there's no
+      // signal, instead of always needing a live Supabase round trip.
+      stations = await ref.read(stationListProvider.future);
     } on Object {
       // A station-lookup failure must never block the manual "Lanjut"
       // fallback from advancing — just skip the distance/speed estimate.
@@ -394,12 +420,14 @@ class ActiveTripController extends Notifier<ActiveTripSession?> {
     await _persistAndSync(updated);
     final settings = ref.read(settingsControllerProvider);
     unawaited(
-      ref.read(localNotificationServiceProvider).showMissedDestinationAlert(
-        destination: _stationName(current.trip.destinationStationId),
-        isDemo: current.trip.isDemo,
-        vibrate: settings.vibrationEnabled,
-        sound: settings.soundEnabled,
-      ),
+      ref
+          .read(localNotificationServiceProvider)
+          .showMissedDestinationAlert(
+            destination: _stationName(current.trip.destinationStationId),
+            isDemo: current.trip.isDemo,
+            vibrate: settings.vibrationEnabled,
+            sound: settings.soundEnabled,
+          ),
     );
   }
 
@@ -448,20 +476,22 @@ class ActiveTripController extends Notifier<ActiveTripSession?> {
         .whereType<String>()
         .firstOrNull;
     try {
-      await ref.read(appDatabaseProvider).logCompletedTrip(
-        CompletedTripsCompanion.insert(
-          id: session.id,
-          originStationId: trip.originStationId,
-          originName: _stationName(trip.originStationId),
-          destinationStationId: trip.destinationStationId,
-          destinationName: _stationName(trip.destinationStationId),
-          lineName: Value(lineName),
-          departedAt: trip.departureAt,
-          arrivedAt: trip.arrivalAt,
-          isDemo: Value(trip.isDemo),
-          completedAt: ref.read(clockProvider).now(),
-        ),
-      );
+      await ref
+          .read(appDatabaseProvider)
+          .logCompletedTrip(
+            CompletedTripsCompanion.insert(
+              id: session.id,
+              originStationId: trip.originStationId,
+              originName: _stationName(trip.originStationId),
+              destinationStationId: trip.destinationStationId,
+              destinationName: _stationName(trip.destinationStationId),
+              lineName: Value(lineName),
+              departedAt: trip.departureAt,
+              arrivedAt: trip.arrivalAt,
+              isDemo: Value(trip.isDemo),
+              completedAt: ref.read(clockProvider).now(),
+            ),
+          );
     } on Object {
       // History is a convenience, not load-bearing — losing one row must
       // never block the user from finishing their trip.
@@ -554,20 +584,34 @@ class ActiveTripController extends Notifier<ActiveTripSession?> {
   /// block the trip itself from starting/advancing locally. Native tracking
   /// (continuous GPS distance/notifications) is an enhancement on top of the
   /// core Dart-side trip flow, not a dependency of it.
-  Future<void> _syncToNative(ActiveTripSession session, {bool isStart = false}) async {
+  Future<void> _syncToNative(
+    ActiveTripSession session, {
+    bool isStart = false,
+  }) async {
     try {
-      final stations = await ref.read(stationProvider).getStations();
+      // `stationListProvider`, not the raw `stationProvider`: a live
+      // Supabase call here has no offline fallback, and failing right at
+      // `isStart` (no signal at the exact moment "Mulai perjalanan" is
+      // tapped — the common case on a KRL platform) used to mean native
+      // GPS tracking and stop notifications never started at all, silently.
+      // `stationListProvider` falls back to the locally cached station list
+      // (PRD §19) so a bad-signal start still gets native tracking running.
+      final stations = await ref.read(stationListProvider.future);
       if (!ref.mounted) return;
       final settings = ref.read(settingsControllerProvider);
       final native = ref.read(nativeTripServiceProvider);
       if (isStart) {
-        await native.start(
+        final warnings = await native.start(
           session,
           stations: stations,
           stopAlertThreshold: settings.stopAlertThreshold,
           vibrationEnabled: settings.vibrationEnabled,
           soundEnabled: settings.soundEnabled,
         );
+        if (ref.mounted &&
+            warnings.contains(NativeTripService.batteryOptimizationWarning)) {
+          ref.read(tripBatteryWarningProvider.notifier).set(true);
+        }
       } else {
         await native.update(
           session,

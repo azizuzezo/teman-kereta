@@ -46,7 +46,17 @@ void main() {
         // provider instead of the app's real default (Supabase-backed),
         // which isn't initialized in a unit-test process.
         stationProvider.overrideWith((ref) => ref.watch(mockTransitProvider)),
-        transitScheduleProvider.overrideWith((ref) => ref.watch(mockTransitProvider)),
+        transitScheduleProvider.overrideWith(
+          (ref) => ref.watch(mockTransitProvider),
+        ),
+        // `ActiveTripController._syncToNative` reads this (not the raw
+        // `stationProvider`) so a trip can still start natively offline —
+        // overridden here too so starting a trip in these tests doesn't
+        // reach for the real offline-cache database, which isn't set up in
+        // this unit-test process.
+        stationListProvider.overrideWith(
+          (ref) => ref.watch(mockTransitProvider).getStations(),
+        ),
       ],
     );
   });
@@ -61,95 +71,111 @@ void main() {
     expect(container.read(rideDetectionControllerProvider), isNull);
   });
 
+  test('a station exit + in-vehicle activity + a saved home->work route '
+      'crosses the strong threshold and can start a matching trip', () async {
+    final settings = container.read(settingsControllerProvider.notifier);
+    await settings.setRideDetectionEnabled(true);
+    await settings.setHomeStation('BOO');
+    await settings.setWorkStation('SUD');
+
+    final detection = container.read(rideDetectionControllerProvider.notifier);
+
+    // Near BOO first (ENTER-equivalent) so the controller has a station to
+    // register an exit from.
+    geolocator.position = fakePosition(_booLat, _booLng);
+    await detection.checkNow();
+    expect(
+      container.read(rideDetectionControllerProvider)?.state,
+      ActiveTripState.nearStation,
+    );
+
+    // Now far from BOO (EXIT-equivalent) with in-vehicle activity — should
+    // cross the strong threshold via the saved home->work route match.
+    native.activityEvent = ActivityEvent(
+      type: RideActivityType.inVehicle,
+      confidencePercent: 100,
+      occurredAt: DateTime.now(),
+    );
+    geolocator.position = fakePosition(_farFromBooLat, _farFromBooLng);
+    await detection.checkNow();
+
+    final phase = container.read(rideDetectionControllerProvider);
+    expect(phase, isNotNull);
+    expect(phase!.state, ActiveTripState.confirmingTrip);
+    final assessment = phase.assessment;
+    expect(assessment, isNotNull);
+    expect(assessment!.level, RideDetectionLevel.strong);
+    expect(assessment.suggestedDestinationId, 'SUD');
+    expect(
+      notifications.rideDetectedAlerts,
+      0,
+    ); // watcher owns the alert, not the controller
+
+    await detection.confirmStart();
+
+    // A real trip now owns the journey state, so ride detection steps aside.
+    expect(container.read(rideDetectionControllerProvider), isNull);
+    final activeTrip = container.read(activeTripControllerProvider);
+    expect(activeTrip, isNotNull);
+    expect(activeTrip!.state, ActiveTripState.onBoard);
+    expect(activeTrip.trip.originStationId, 'BOO');
+    expect(activeTrip.trip.destinationStationId, 'SUD');
+  });
+
   test(
-    'a station exit + in-vehicle activity + a saved home->work route '
-    'crosses the strong threshold and can start a matching trip',
+    'newly near a station without a pending exit is a subtle nearStation phase',
+    () async {
+      final settings = container.read(settingsControllerProvider.notifier);
+      await settings.setRideDetectionEnabled(true);
+      await settings.setHomeStation('BOO');
+
+      geolocator.position = fakePosition(_booLat, _booLng);
+
+      final detection = container.read(
+        rideDetectionControllerProvider.notifier,
+      );
+      await detection.checkNow();
+
+      final phase = container.read(rideDetectionControllerProvider);
+      expect(phase, isNotNull);
+      expect(phase!.state, ActiveTripState.nearStation);
+      expect(phase.stationId, 'BOO');
+      expect(
+        phase.assessment,
+        isNull,
+      ); // never a user-visible prompt at this phase
+    },
+  );
+
+  test(
+    'the same exit is not re-evaluated on a later poll at the same distance',
     () async {
       final settings = container.read(settingsControllerProvider.notifier);
       await settings.setRideDetectionEnabled(true);
       await settings.setHomeStation('BOO');
       await settings.setWorkStation('SUD');
 
-      final detection = container.read(rideDetectionControllerProvider.notifier);
-
-      // Near BOO first (ENTER-equivalent) so the controller has a station to
-      // register an exit from.
-      geolocator.position = fakePosition(_booLat, _booLng);
-      await detection.checkNow();
-      expect(container.read(rideDetectionControllerProvider)?.state, ActiveTripState.nearStation);
-
-      // Now far from BOO (EXIT-equivalent) with in-vehicle activity — should
-      // cross the strong threshold via the saved home->work route match.
       native.activityEvent = ActivityEvent(
         type: RideActivityType.inVehicle,
         confidencePercent: 100,
         occurredAt: DateTime.now(),
       );
-      geolocator.position = fakePosition(_farFromBooLat, _farFromBooLng);
+
+      final detection = container.read(
+        rideDetectionControllerProvider.notifier,
+      );
+      geolocator.position = fakePosition(_booLat, _booLng);
       await detection.checkNow();
+      geolocator.position = fakePosition(_farFromBooLat, _farFromBooLng);
+      await detection.checkNow(); // triggers the exit evaluation
+      detection.dismiss();
+      await detection.checkNow(); // still far away, must not re-evaluate
 
       final phase = container.read(rideDetectionControllerProvider);
       expect(phase, isNotNull);
-      expect(phase!.state, ActiveTripState.confirmingTrip);
-      final assessment = phase.assessment;
-      expect(assessment, isNotNull);
-      expect(assessment!.level, RideDetectionLevel.strong);
-      expect(assessment.suggestedDestinationId, 'SUD');
-      expect(notifications.rideDetectedAlerts, 0); // watcher owns the alert, not the controller
-
-      await detection.confirmStart();
-
-      // A real trip now owns the journey state, so ride detection steps aside.
-      expect(container.read(rideDetectionControllerProvider), isNull);
-      final activeTrip = container.read(activeTripControllerProvider);
-      expect(activeTrip, isNotNull);
-      expect(activeTrip!.state, ActiveTripState.onBoard);
-      expect(activeTrip.trip.originStationId, 'BOO');
-      expect(activeTrip.trip.destinationStationId, 'SUD');
+      expect(phase!.state, ActiveTripState.idle);
     },
   );
-
-  test('newly near a station without a pending exit is a subtle nearStation phase', () async {
-    final settings = container.read(settingsControllerProvider.notifier);
-    await settings.setRideDetectionEnabled(true);
-    await settings.setHomeStation('BOO');
-
-    geolocator.position = fakePosition(_booLat, _booLng);
-
-    final detection = container.read(rideDetectionControllerProvider.notifier);
-    await detection.checkNow();
-
-    final phase = container.read(rideDetectionControllerProvider);
-    expect(phase, isNotNull);
-    expect(phase!.state, ActiveTripState.nearStation);
-    expect(phase.stationId, 'BOO');
-    expect(phase.assessment, isNull); // never a user-visible prompt at this phase
-  });
-
-  test('the same exit is not re-evaluated on a later poll at the same distance', () async {
-    final settings = container.read(settingsControllerProvider.notifier);
-    await settings.setRideDetectionEnabled(true);
-    await settings.setHomeStation('BOO');
-    await settings.setWorkStation('SUD');
-
-    native.activityEvent = ActivityEvent(
-      type: RideActivityType.inVehicle,
-      confidencePercent: 100,
-      occurredAt: DateTime.now(),
-    );
-
-    final detection = container.read(rideDetectionControllerProvider.notifier);
-    geolocator.position = fakePosition(_booLat, _booLng);
-    await detection.checkNow();
-    geolocator.position = fakePosition(_farFromBooLat, _farFromBooLng);
-    await detection.checkNow(); // triggers the exit evaluation
-    detection.dismiss();
-    await detection.checkNow(); // still far away, must not re-evaluate
-
-    final phase = container.read(rideDetectionControllerProvider);
-    expect(phase, isNotNull);
-    expect(phase!.state, ActiveTripState.idle);
-  });
 
   test('dismissForToday suppresses even a brand-new exit today', () async {
     final settings = container.read(settingsControllerProvider.notifier);
