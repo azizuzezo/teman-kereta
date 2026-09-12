@@ -109,6 +109,19 @@ class _SoundTestPageState extends ConsumerState<SoundTestPage> {
         ),
       ),
       _SoundTestEntry(
+        key: 'transit_2',
+        title: '2 stasiun lagi menuju transit',
+        subtitle: 'Hitung mundur khusus perjalanan yang perlu ganti kereta.',
+        icon: Icons.swap_calls_rounded,
+        play: () => notifications.showTransferApproachingAlert(
+          remainingStops: 2,
+          stationName: 'Manggarai',
+          isDemo: false,
+          vibrate: vibrate,
+          log: false,
+        ),
+      ),
+      _SoundTestEntry(
         key: 'transit_1',
         title: '1 stasiun lagi menuju transit',
         subtitle: 'Peringatan terakhir sebelum bersiap transit.',

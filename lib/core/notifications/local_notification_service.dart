@@ -7,6 +7,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../database/app_database.dart';
 import '../database/database_provider.dart';
 import '../utils/geo.dart';
+import 'alarm_service.dart';
 import 'tts_service.dart';
 
 class LocalNotificationService {
@@ -14,6 +15,7 @@ class LocalNotificationService {
     FlutterLocalNotificationsPlugin? plugin,
     this.onShown,
     this._tts,
+    this._alarm,
   }) : _plugin = plugin ?? FlutterLocalNotificationsPlugin();
 
   final FlutterLocalNotificationsPlugin _plugin;
@@ -22,6 +24,26 @@ class LocalNotificationService {
   /// call [TtsService.speak] alongside `_plugin.show`, gated on the same
   /// `sound` flag as the notification itself (no separate voice toggle).
   final TtsService? _tts;
+
+  /// Optional — when supplied, plays `assets/alarm.mp3` after the spoken
+  /// notification sound finishes, for alerts that pass `alarmDelay` (see
+  /// [_showAndLog]).
+  final AlarmService? _alarm;
+
+  /// Length of `remaining_station_1.wav` — the pre-recorded "1 stasiun lagi
+  /// menuju ..." voice line played as that alert's notification sound (see
+  /// `android/app/src/main/res/raw` and `ios/Runner/Sounds`). There is no
+  /// platform callback for "notification sound finished playing", so the
+  /// alarm cue is simply delayed by the clip's known length instead.
+  static const _remainingStationOneVoiceDuration = Duration(
+    milliseconds: 6920,
+  );
+
+  /// Same idea as [_remainingStationOneVoiceDuration], for
+  /// `remaining_transit_1.wav`.
+  static const _remainingTransitOneVoiceDuration = Duration(
+    milliseconds: 4520,
+  );
 
   /// Called after a notification is shown, so the caller (see
   /// [localNotificationServiceProvider]) can keep "Pusat notifikasi"
@@ -62,7 +84,16 @@ class LocalNotificationService {
         requestBadgePermission: false,
       ),
     );
-    await _plugin.initialize(settings: settings);
+    await _plugin.initialize(
+      settings: settings,
+      // Covers both "tapped the notification body" and "tapped its
+      // 'Matikan alarm' action" — either way, the rider has noticed, so the
+      // alarm cue (see [AlarmService]) should stop. Harmless no-op if
+      // nothing is playing.
+      onDidReceiveNotificationResponse: (response) {
+        unawaited(_alarm?.stop());
+      },
+    );
     _initialized = true;
   }
 
@@ -129,6 +160,9 @@ class LocalNotificationService {
       sound: sound,
       customSoundResource: customSound,
       spokenText: spokenText,
+      alarmDelay: remainingStops == 1
+          ? _remainingStationOneVoiceDuration
+          : null,
       log: log,
     );
   }
@@ -165,6 +199,9 @@ class LocalNotificationService {
       customSoundResource: customSound,
       spokenText:
           '$remainingStops stasiun lagi menuju transit di $stationName.',
+      alarmDelay: remainingStops == 1
+          ? _remainingTransitOneVoiceDuration
+          : null,
       log: log,
     );
   }
@@ -273,7 +310,7 @@ class LocalNotificationService {
       id: 4300,
       title: '${prefix}Sepertinya kamu melewati $destination',
       body: 'Buka aplikasi untuk mencari rute kembali ke $destination.',
-      channelId: 'trip_alert_alert_terlewat',
+      channelId: 'trip_alert_terlewat',
       channelName: 'Tujuan terlewat',
       channelDescription: 'Peringatan stasiun tujuan dan transit',
       payload: '/active-trip',
@@ -281,7 +318,7 @@ class LocalNotificationService {
       priority: Priority.max,
       vibrate: vibrate,
       sound: sound,
-      customSoundResource: 'alert_terlewat',
+      customSoundResource: 'terlewat',
       log: log,
     );
   }
@@ -342,6 +379,11 @@ class LocalNotificationService {
     bool sound = true,
     String? customSoundResource,
     String? spokenText,
+    /// When set, plays the bundled alarm cue (see [AlarmService]) after this
+    /// delay — used for the "1 stasiun lagi" transfer/arrival countdowns,
+    /// timed to land after their spoken notification sound finishes (see
+    /// [_remainingStationOneVoiceDuration]).
+    Duration? alarmDelay,
     /// False for the in-app "Tes suara peringatan" previews — they should
     /// sound exactly like the real thing but must not leave a trail in
     /// "Pusat notifikasi", which is a record of real trip events.
@@ -372,12 +414,34 @@ class LocalNotificationService {
           sound: (sound && customSoundResource != null)
               ? RawResourceAndroidNotificationSound(customSoundResource)
               : null,
+          // A quick way to silence the alarm cue without unlocking into the
+          // app — tapping it fires the same
+          // `onDidReceiveNotificationResponse` callback as tapping the
+          // notification body (see [initialize]). `showsUserInterface: true`
+          // is required here: Android otherwise delivers the tap as a
+          // background broadcast, which a backgrounded/frozen app process
+          // (see Android's cached-app freezer) may not act on before the
+          // alarm has already played through — confirmed on-device, tapping
+          // the action did nothing until this was set.
+          actions: (sound && alarmDelay != null)
+              ? const <AndroidNotificationAction>[
+                  AndroidNotificationAction(
+                    'stop_alarm',
+                    'Matikan alarm',
+                    cancelNotification: false,
+                    showsUserInterface: true,
+                  ),
+                ]
+              : null,
         ),
       ),
       payload: payload,
     );
     if (sound && spokenText != null) {
       unawaited(_tts?.speak(spokenText));
+    }
+    if (sound && alarmDelay != null) {
+      unawaited(Future<void>.delayed(alarmDelay, () => _alarm?.play()));
     }
     if (log) {
       onShown?.call(type, title, body);
@@ -387,13 +451,15 @@ class LocalNotificationService {
   /// The same alert sound, named the way each platform wants it.
   ///
   /// Android resolves `res/raw` by bare resource name; iOS resolves a file in
-  /// the app bundle and needs the extension. The `.wav` files themselves are
-  /// the identical assets, kept in `ios/Runner/Sounds/` for the iOS build.
+  /// the app bundle and needs the extension. The files themselves are the
+  /// identical assets, kept in `ios/Runner/Sounds/` for the iOS build —
+  /// `.wav` for every alert except `terlewat`, which is an `.mp3`.
   ///
   /// If a file is missing from the bundle, iOS falls back to the default
   /// notification sound rather than failing — quieter than intended, never a
   /// silent alert.
-  static String _darwinSoundFile(String resource) => '$resource.wav';
+  static String _darwinSoundFile(String resource) =>
+      resource == 'terlewat' ? '$resource.mp3' : '$resource.wav';
 }
 
 final localNotificationServiceProvider = Provider<LocalNotificationService>((
@@ -401,6 +467,7 @@ final localNotificationServiceProvider = Provider<LocalNotificationService>((
 ) {
   return LocalNotificationService(
     tts: ref.read(ttsServiceProvider),
+    alarm: ref.read(alarmServiceProvider),
     onShown: (type, title, body) {
       unawaited(
         ref
