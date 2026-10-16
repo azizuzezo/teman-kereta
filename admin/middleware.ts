@@ -51,6 +51,7 @@ export async function middleware(request: NextRequest) {
   const isPublicRoute =
     pathname === "/login" ||
     pathname === "/privacy" ||
+    pathname === "/delete-account" ||
     pathname === "/confirm";
 
   if (!user && !isPublicRoute) {
@@ -63,5 +64,7 @@ export async function middleware(request: NextRequest) {
 }
 
 export const config = {
-  matcher: ["/((?!_next/static|_next/image|favicon.ico).*)"],
+  matcher: [
+    "/((?!_next/static|_next/image|favicon.ico|icon.png|apple-icon.png|icon-192.png|icon-512.png|tk_icon.png|tk_logo_full.png|manifest.webmanifest).*)",
+  ],
 };

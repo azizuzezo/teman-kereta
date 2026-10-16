@@ -1,8 +1,11 @@
+import type { Metadata } from "next";
 import { notFound } from "next/navigation";
-import Link from "next/link";
+import { PageHeader } from "@/components/ui/page-header";
 import { verifyAdminSession } from "@/lib/dal";
 import { createServiceClient } from "@/lib/supabase/service";
 import { EditNearbyPlaceForm } from "./edit-form";
+
+export const metadata: Metadata = { title: "Edit tempat" };
 
 export default async function EditNearbyPlacePage({
   params,
@@ -30,15 +33,11 @@ export default async function EditNearbyPlacePage({
 
   return (
     <div className="flex flex-col gap-6">
-      <div>
-        <Link
-          href="/nearby-places"
-          className="text-sm text-black/60 hover:underline dark:text-white/60"
-        >
-          ← Kembali ke daftar destinasi
-        </Link>
-        <h1 className="mt-2 text-lg font-semibold">Edit destinasi</h1>
-      </div>
+      <PageHeader
+        title="Edit tempat"
+        description={place.name}
+        back={{ href: "/nearby-places", label: "Kembali ke daftar tempat" }}
+      />
 
       <EditNearbyPlaceForm place={place} stations={stations ?? []} />
     </div>

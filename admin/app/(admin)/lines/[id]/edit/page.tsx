@@ -1,9 +1,12 @@
+import type { Metadata } from "next";
 import { notFound } from "next/navigation";
-import Link from "next/link";
+import { PageHeader } from "@/components/ui/page-header";
 import { verifyAdminSession } from "@/lib/dal";
 import { createServiceClient } from "@/lib/supabase/service";
 import { TRANSPORT_MODES } from "../../constants";
 import { EditLineForm } from "./edit-form";
+
+export const metadata: Metadata = { title: "Edit lini" };
 
 export default async function EditLinePage({
   params,
@@ -29,15 +32,11 @@ export default async function EditLinePage({
 
   return (
     <div className="flex flex-col gap-6">
-      <div>
-        <Link
-          href="/lines"
-          className="text-sm text-black/60 hover:underline dark:text-white/60"
-        >
-          ← Kembali ke daftar jalur
-        </Link>
-        <h1 className="mt-2 text-lg font-semibold">Edit jalur</h1>
-      </div>
+      <PageHeader
+        title="Edit lini"
+        description={line.name}
+        back={{ href: "/lines", label: "Kembali ke daftar lini" }}
+      />
 
       <EditLineForm
         line={line}

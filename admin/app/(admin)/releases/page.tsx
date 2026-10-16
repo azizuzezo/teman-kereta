@@ -1,6 +1,13 @@
+import type { Metadata } from "next";
+import { ButtonLink } from "@/components/ui/button";
+import { LoadError } from "@/components/ui/load-error";
+import { PageHeader } from "@/components/ui/page-header";
+import { RecordCard, RecordList } from "@/components/ui/record-card";
 import { verifyAdminSession } from "@/lib/dal";
 import { createServiceClient } from "@/lib/supabase/service";
 import { CreateReleaseForm } from "./create-form";
+
+export const metadata: Metadata = { title: "Rilis" };
 
 function formatDate(value: string) {
   return new Date(value).toLocaleString("id-ID", {
@@ -13,7 +20,7 @@ export default async function ReleasesPage() {
   await verifyAdminSession();
   const supabase = createServiceClient();
 
-  const { data: releases } = await supabase
+  const { data: releases, error } = await supabase
     .from("app_releases")
     .select(
       "id, version_code, version_name, apk_url, changelog, min_supported_version_code, published_at"
@@ -22,58 +29,58 @@ export default async function ReleasesPage() {
 
   return (
     <div className="flex flex-col gap-8">
-      <div>
-        <h1 className="text-lg font-semibold">Rilis Aplikasi</h1>
-        <p className="text-sm text-black/60 dark:text-white/60">
-          Kelola berkas APK yang dibagikan langsung ke pengguna (sideload,
-          tanpa Play Store) dan dicek otomatis oleh aplikasi saat dibuka.
-        </p>
-      </div>
+      <PageHeader
+        title="Rilis"
+        description="Berkas APK yang dibagikan langsung ke pengguna (tanpa Play Store). Aplikasi mengeceknya otomatis saat dibuka."
+      />
 
       <CreateReleaseForm />
 
-      <div className="flex flex-col gap-3">
-        {(releases ?? []).map((release) => (
-          <div
-            key={release.id}
-            className="rounded-lg border border-black/10 p-4 dark:border-white/10"
-          >
-            <div className="flex items-start justify-between gap-4">
-              <div>
-                <p className="font-medium">
+      {error ? (
+        <LoadError what="Daftar rilis" error={error} />
+      ) : (
+        <RecordList
+          isEmpty={(releases ?? []).length === 0}
+          empty={{
+            title: "Belum ada rilis",
+            description: "Unggah APK pertama lewat formulir di atas.",
+          }}
+        >
+          {(releases ?? []).map((release) => (
+            <RecordCard
+              key={release.id}
+              title={
+                <>
                   {release.version_name}{" "}
-                  <span className="text-xs font-normal text-black/50 dark:text-white/50">
-                    (build {release.version_code})
+                  <span className="tabular text-sm font-medium text-ink-muted">
+                    build {release.version_code}
                   </span>
-                </p>
-                {release.changelog && (
-                  <p className="mt-1 text-sm text-black/70 dark:text-white/70">
-                    {release.changelog}
-                  </p>
-                )}
-                <p className="mt-1 text-xs text-black/50 dark:text-white/50">
-                  Dipublikasikan {formatDate(release.published_at)}
-                  {release.min_supported_version_code &&
-                    ` · Minimum versi didukung: build ${release.min_supported_version_code}`}
-                </p>
-              </div>
-              <a
-                href={release.apk_url}
-                target="_blank"
-                rel="noreferrer"
-                className="shrink-0 rounded-md border border-black/15 px-3 py-1 text-xs dark:border-white/20"
-              >
-                Unduh APK
-              </a>
-            </div>
-          </div>
-        ))}
-        {(releases ?? []).length === 0 && (
-          <p className="text-sm text-black/50 dark:text-white/50">
-            Belum ada rilis.
-          </p>
-        )}
-      </div>
+                </>
+              }
+              meta={`Dipublikasikan ${formatDate(release.published_at)}${
+                release.min_supported_version_code
+                  ? ` · Versi minimum yang didukung: build ${release.min_supported_version_code}`
+                  : ""
+              }`}
+              actions={
+                <ButtonLink
+                  href={release.apk_url}
+                  target="_blank"
+                  rel="noreferrer"
+                  size="sm"
+                  aria-label={`Unduh APK ${release.version_name}`}
+                >
+                  Unduh APK
+                </ButtonLink>
+              }
+            >
+              {release.changelog && (
+                <p className="text-ink-muted">{release.changelog}</p>
+              )}
+            </RecordCard>
+          ))}
+        </RecordList>
+      )}
     </div>
   );
 }

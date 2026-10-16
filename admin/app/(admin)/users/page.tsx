@@ -1,5 +1,12 @@
+import type { Metadata } from "next";
+import { DataTable, RowActions } from "@/components/ui/data-table";
+import { LoadError } from "@/components/ui/load-error";
+import { PageHeader } from "@/components/ui/page-header";
 import { verifyAdminSession } from "@/lib/dal";
 import { createServiceClient } from "@/lib/supabase/service";
+import { DeleteUserButton, ResetPasswordButton } from "./user-actions";
+
+export const metadata: Metadata = { title: "Pengguna" };
 
 function formatDate(value: string | null) {
   if (!value) return "-";
@@ -14,7 +21,7 @@ export default async function UsersPage() {
   const supabase = createServiceClient();
 
   // Query admin_all_users_view which includes ALL registered users.
-  const { data: users } = await supabase
+  const { data: users, error } = await supabase
     .from("admin_all_users_view")
     .select("user_id, full_name, email, registered_at, last_sign_in_at")
     .order("registered_at", { ascending: false })
@@ -24,48 +31,64 @@ export default async function UsersPage() {
 
   return (
     <div className="flex flex-col gap-6">
-      <div>
-        <h1 className="text-xl font-bold">Semua Pengguna Terdaftar</h1>
-        <p className="text-sm text-black/60 dark:text-white/60">
-          Semua akun yang pernah mendaftar di Teman Kereta.
-        </p>
-      </div>
+      <PageHeader
+        title="Pengguna"
+        description="Semua akun yang pernah mendaftar di Teman Kereta. Menampilkan 200 akun terbaru."
+      />
 
-      {/* Table */}
-      <div className="overflow-x-auto rounded-xl border border-black/10 dark:border-white/10">
-        <table className="w-full text-left text-sm">
-          <thead className="border-b border-black/10 bg-black/5 dark:border-white/10 dark:bg-white/5">
-            <tr>
-              <th className="p-3 font-semibold">Nama</th>
-              <th className="p-3 font-semibold">Email</th>
-              <th className="p-3 font-semibold">Daftar</th>
-              <th className="p-3 font-semibold">Login Terakhir</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-black/10 dark:divide-white/10">
-            {all.length === 0 ? (
-              <tr>
-                <td colSpan={4} className="p-6 text-center text-black/50 dark:text-white/50">
-                  Belum ada pengguna terdaftar.
-                </td>
-              </tr>
-            ) : (
-              all.map((user) => (
-                <tr key={user.user_id} className="hover:bg-black/5 dark:hover:bg-white/5">
-                  <td className="p-3 font-medium">{user.full_name || "Pengguna Teman Kereta"}</td>
-                  <td className="p-3 text-black/70 dark:text-white/70">{user.email || "-"}</td>
-                  <td className="p-3 text-xs text-black/50 dark:text-white/50">
-                    {formatDate(user.registered_at)}
-                  </td>
-                  <td className="p-3 text-xs text-black/50 dark:text-white/50">
-                    {formatDate(user.last_sign_in_at)}
-                  </td>
-                </tr>
-              ))
-            )}
-          </tbody>
-        </table>
-      </div>
+      {error ? (
+        <LoadError what="Daftar pengguna" error={error} />
+      ) : (
+        <DataTable
+          caption="Daftar pengguna terdaftar"
+          rows={all}
+          rowKey={(user) => user.user_id}
+          emptyTitle="Belum ada pengguna terdaftar"
+          emptyDescription="Akun baru dari aplikasi akan muncul di sini."
+          columns={[
+            {
+              key: "name",
+              header: "Nama",
+              cell: (user) => (
+                <span className="font-semibold">
+                  {user.full_name || "Pengguna Teman Kereta"}
+                </span>
+              ),
+            },
+            { key: "email", header: "Email", cell: (user) => user.email || "-" },
+            {
+              key: "registered",
+              header: "Daftar",
+              cell: (user) => (
+                <span className="tabular text-ink-muted">
+                  {formatDate(user.registered_at)}
+                </span>
+              ),
+            },
+            {
+              key: "last",
+              header: "Login terakhir",
+              cell: (user) => (
+                <span className="tabular text-ink-muted">
+                  {formatDate(user.last_sign_in_at)}
+                </span>
+              ),
+            },
+            {
+              key: "actions",
+              header: "Aksi",
+              headerHidden: true,
+              align: "right",
+              cell: (user) => (
+                <RowActions>
+                  <ResetPasswordButton userId={user.user_id} email={user.email} />
+                  <DeleteUserButton userId={user.user_id} email={user.email} />
+                </RowActions>
+              ),
+            },
+          ]}
+        />
+      )}
     </div>
   );
 }

@@ -1,6 +1,14 @@
 "use client";
 
 import { useActionState } from "react";
+import { Button, ButtonLink } from "@/components/ui/button";
+import { SelectField, TextField, TextareaField } from "@/components/ui/fields";
+import {
+  FormCard,
+  FormFooter,
+  FormGrid,
+  FormMessage,
+} from "@/components/ui/form";
 import { updateNearbyPlace, type NearbyPlaceFormState } from "../../actions";
 
 const initialState: NearbyPlaceFormState = undefined;
@@ -29,148 +37,93 @@ export function EditNearbyPlaceForm({
   );
 
   return (
-    <form
-      action={formAction}
-      className="flex max-w-md flex-col gap-4 rounded-lg border border-black/10 p-4 dark:border-white/10"
-    >
+    <FormCard action={formAction} className="max-w-xl">
       <input type="hidden" name="id" value={place.id} />
-      <div className="flex flex-col gap-1">
-        <label className="text-xs font-medium" htmlFor="station_id">
-          Stasiun
-        </label>
-        <select
-          id="station_id"
-          name="station_id"
-          defaultValue={place.station_id}
-          className="rounded-md border border-black/15 bg-transparent px-2 py-1.5 text-sm dark:border-white/20"
-        >
-          {stations.map((station) => (
-            <option key={station.id} value={station.id}>
-              {station.name} ({station.code})
-            </option>
-          ))}
-        </select>
-      </div>
-      <div className="flex flex-col gap-1">
-        <label className="text-xs font-medium" htmlFor="name">
-          Nama tempat
-        </label>
-        <input
-          id="name"
-          name="name"
-          required
-          defaultValue={place.name}
-          className="rounded-md border border-black/15 bg-transparent px-2 py-1.5 text-sm dark:border-white/20"
-        />
-      </div>
-      <div className="flex flex-col gap-1">
-        <label className="text-xs font-medium" htmlFor="category">
-          Kategori
-        </label>
-        <input
-          id="category"
-          name="category"
-          required
-          defaultValue={place.category}
-          className="rounded-md border border-black/15 bg-transparent px-2 py-1.5 text-sm dark:border-white/20"
-        />
-      </div>
-      <div className="flex gap-3">
-        <div className="flex flex-col gap-1">
-          <label className="text-xs font-medium" htmlFor="latitude">
-            Latitude
-          </label>
-          <input
-            id="latitude"
-            name="latitude"
-            type="number"
-            step="any"
-            required
-            defaultValue={place.latitude}
-            className="w-32 rounded-md border border-black/15 bg-transparent px-2 py-1.5 text-sm dark:border-white/20"
-          />
-        </div>
-        <div className="flex flex-col gap-1">
-          <label className="text-xs font-medium" htmlFor="longitude">
-            Longitude
-          </label>
-          <input
-            id="longitude"
-            name="longitude"
-            type="number"
-            step="any"
-            required
-            defaultValue={place.longitude}
-            className="w-32 rounded-md border border-black/15 bg-transparent px-2 py-1.5 text-sm dark:border-white/20"
-          />
-        </div>
-      </div>
-      <div className="flex gap-3">
-        <div className="flex flex-col gap-1">
-          <label className="text-xs font-medium" htmlFor="distance_meters">
-            Jarak (meter)
-          </label>
-          <input
-            id="distance_meters"
-            name="distance_meters"
-            type="number"
-            min={0}
-            defaultValue={place.distance_meters ?? ""}
-            className="w-28 rounded-md border border-black/15 bg-transparent px-2 py-1.5 text-sm dark:border-white/20"
-          />
-        </div>
-        <div className="flex flex-col gap-1">
-          <label
-            className="text-xs font-medium"
-            htmlFor="walking_duration_minutes"
-          >
-            Jalan kaki (menit)
-          </label>
-          <input
-            id="walking_duration_minutes"
-            name="walking_duration_minutes"
-            type="number"
-            min={0}
-            defaultValue={place.walking_duration_minutes ?? ""}
-            className="w-28 rounded-md border border-black/15 bg-transparent px-2 py-1.5 text-sm dark:border-white/20"
-          />
-        </div>
-      </div>
-      <div className="flex flex-col gap-1">
-        <label className="text-xs font-medium" htmlFor="address">
-          Alamat (opsional)
-        </label>
-        <input
-          id="address"
-          name="address"
-          defaultValue={place.address ?? ""}
-          className="rounded-md border border-black/15 bg-transparent px-2 py-1.5 text-sm dark:border-white/20"
-        />
-      </div>
-      <div className="flex flex-col gap-1">
-        <label className="text-xs font-medium" htmlFor="description">
-          Deskripsi (opsional)
-        </label>
-        <textarea
-          id="description"
-          name="description"
-          rows={2}
-          defaultValue={place.description ?? ""}
-          className="rounded-md border border-black/15 bg-transparent px-2 py-1.5 text-sm dark:border-white/20"
-        />
-      </div>
-      <button
-        type="submit"
-        disabled={pending}
-        className="w-fit rounded-md bg-black px-4 py-1.5 text-sm font-medium text-white disabled:opacity-60 dark:bg-white dark:text-black"
+      <SelectField
+        label="Stasiun"
+        name="station_id"
+        defaultValue={place.station_id}
       >
-        {pending ? "Menyimpan…" : "Simpan perubahan"}
-      </button>
-      {state?.error && (
-        <p className="text-sm text-red-600 dark:text-red-400">
-          {state.error}
-        </p>
-      )}
-    </form>
+        {stations.map((station) => (
+          <option key={station.id} value={station.id}>
+            {station.name} ({station.code})
+          </option>
+        ))}
+      </SelectField>
+      <TextField
+        label="Nama tempat"
+        name="name"
+        required
+        maxLength={180}
+        defaultValue={place.name}
+      />
+      <TextField
+        label="Kategori"
+        name="category"
+        required
+        maxLength={80}
+        defaultValue={place.category}
+      />
+      <FormGrid>
+        <TextField
+          label="Latitude"
+          name="latitude"
+          type="number"
+          step="any"
+          min={-90}
+          max={90}
+          required
+          defaultValue={place.latitude}
+        />
+        <TextField
+          label="Longitude"
+          name="longitude"
+          type="number"
+          step="any"
+          min={-180}
+          max={180}
+          required
+          defaultValue={place.longitude}
+        />
+        <TextField
+          label="Jarak (meter)"
+          name="distance_meters"
+          type="number"
+          min={0}
+          optional
+          defaultValue={place.distance_meters ?? ""}
+        />
+        <TextField
+          label="Jalan kaki (menit)"
+          name="walking_duration_minutes"
+          type="number"
+          min={0}
+          optional
+          defaultValue={place.walking_duration_minutes ?? ""}
+        />
+      </FormGrid>
+      <TextField
+        label="Alamat"
+        name="address"
+        optional
+        defaultValue={place.address ?? ""}
+      />
+      <TextareaField
+        label="Deskripsi"
+        name="description"
+        rows={3}
+        optional
+        defaultValue={place.description ?? ""}
+      />
+      <FormFooter>
+        <Button type="submit" loading={pending} loadingLabel="Menyimpan…">
+          Simpan perubahan
+        </Button>
+        <ButtonLink href="/nearby-places" variant="secondary">
+          Batal
+        </ButtonLink>
+        <FormMessage error={state?.error} />
+      </FormFooter>
+    </FormCard>
   );
 }

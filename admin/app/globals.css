@@ -1,26 +1,163 @@
 @import "tailwindcss";
 
+/*
+ * Design tokens for the Teman Kereta admin panel. Same brand as the mobile
+ * app (see DESIGN.md): navy primary, KRL red as the single accent, cool
+ * neutrals instead of pure white/black. Every text/background pair below was
+ * checked against WCAG AA (4.5:1 text, 3:1 for input borders).
+ * Components use the Tailwind utilities generated from @theme below
+ * (bg-canvas, text-ink, border-line, ...), never raw hex values.
+ */
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
-}
-
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+  color-scheme: light;
+  --tk-canvas: #f3f5f9;
+  --tk-surface: #fcfdfe;
+  --tk-surface-alt: #e9edf4;
+  --tk-line: #d3dae6;
+  --tk-line-strong: #7b8aa3;
+  --tk-ink: #0e2038;
+  --tk-ink-muted: #4a5a72;
+  --tk-brand: #17376b;
+  --tk-on-brand: #ffffff;
+  --tk-brand-soft: #e2e9f5;
+  --tk-accent: #c81e28;
+  --tk-on-accent: #ffffff;
+  --tk-accent-soft: #fbe9ea;
+  --tk-bad: #b3191f;
+  --tk-bad-soft: #fbe9ea;
+  --tk-ok: #176b3a;
+  --tk-ok-soft: #dff2e6;
+  --tk-warn: #8a4b00;
+  --tk-warn-soft: #fbefd6;
+  --tk-overlay: rgb(14 32 56 / 0.5);
+  /* Brand panel on the login screen stays navy in both themes. */
+  --tk-hero: #17376b;
+  --tk-on-hero: #ffffff;
 }
 
 @media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
+  :root:not([data-theme="light"]) {
+    color-scheme: dark;
+    --tk-canvas: #0a111d;
+    --tk-surface: #111b2b;
+    --tk-surface-alt: #18253a;
+    --tk-line: #263650;
+    --tk-line-strong: #5f7391;
+    --tk-ink: #e6edf7;
+    --tk-ink-muted: #a3b3cb;
+    --tk-brand: #8db2f2;
+    --tk-on-brand: #0a111d;
+    --tk-brand-soft: #1b2b49;
+    --tk-accent: #d6323b;
+    --tk-on-accent: #ffffff;
+    --tk-accent-soft: #3a1d26;
+    --tk-bad: #ff8a90;
+    --tk-bad-soft: #3a1d26;
+    --tk-ok: #6fd19a;
+    --tk-ok-soft: #12301f;
+    --tk-warn: #f2bf6b;
+    --tk-warn-soft: #3a2a0e;
+    --tk-overlay: rgb(0 0 0 / 0.65);
   }
 }
 
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --tk-canvas: #0a111d;
+  --tk-surface: #111b2b;
+  --tk-surface-alt: #18253a;
+  --tk-line: #263650;
+  --tk-line-strong: #5f7391;
+  --tk-ink: #e6edf7;
+  --tk-ink-muted: #a3b3cb;
+  --tk-brand: #8db2f2;
+  --tk-on-brand: #0a111d;
+  --tk-brand-soft: #1b2b49;
+  --tk-accent: #d6323b;
+  --tk-on-accent: #ffffff;
+  --tk-accent-soft: #3a1d26;
+  --tk-bad: #ff8a90;
+  --tk-bad-soft: #3a1d26;
+  --tk-ok: #6fd19a;
+  --tk-ok-soft: #12301f;
+  --tk-warn: #f2bf6b;
+  --tk-warn-soft: #3a2a0e;
+  --tk-overlay: rgb(0 0 0 / 0.65);
+}
+
+@theme inline {
+  --color-canvas: var(--tk-canvas);
+  --color-surface: var(--tk-surface);
+  --color-surface-alt: var(--tk-surface-alt);
+  --color-line: var(--tk-line);
+  --color-line-strong: var(--tk-line-strong);
+  --color-ink: var(--tk-ink);
+  --color-ink-muted: var(--tk-ink-muted);
+  --color-brand: var(--tk-brand);
+  --color-on-brand: var(--tk-on-brand);
+  --color-brand-soft: var(--tk-brand-soft);
+  --color-accent: var(--tk-accent);
+  --color-on-accent: var(--tk-on-accent);
+  --color-accent-soft: var(--tk-accent-soft);
+  --color-bad: var(--tk-bad);
+  --color-bad-soft: var(--tk-bad-soft);
+  --color-ok: var(--tk-ok);
+  --color-ok-soft: var(--tk-ok-soft);
+  --color-warn: var(--tk-warn);
+  --color-warn-soft: var(--tk-warn-soft);
+  --color-overlay: var(--tk-overlay);
+  --color-hero: var(--tk-hero);
+  --color-on-hero: var(--tk-on-hero);
+  --font-sans: var(--font-plus-jakarta), ui-sans-serif, system-ui, sans-serif;
+  --font-mono: ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+  --radius-card: 20px;
+  --radius-control: 14px;
+}
+
+html {
+  background: var(--tk-canvas);
+}
+
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  background: var(--tk-canvas);
+  color: var(--tk-ink);
+  font-family: var(--font-sans);
+  font-size: 15px;
+  line-height: 1.5;
+}
+
+/* One focus style for every interactive element (keyboard only). */
+:where(a, button, input, select, textarea, summary, [tabindex]):focus-visible {
+  outline: 2px solid var(--tk-brand);
+  outline-offset: 2px;
+}
+
+/* Clock times, counts and IDs keep a fixed digit width so columns don't jitter. */
+.tabular {
+  font-variant-numeric: tabular-nums;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+@keyframes tk-pulse {
+  50% {
+    opacity: 0.55;
+  }
+}
+
+.tk-skeleton {
+  background: var(--tk-surface-alt);
+  border-radius: 10px;
+  animation: tk-pulse 1.4s ease-in-out infinite;
+}
+
+dialog::backdrop {
+  background: var(--tk-overlay);
 }

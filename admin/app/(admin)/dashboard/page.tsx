@@ -1,26 +1,43 @@
+import type { Metadata } from "next";
+import { Badge } from "@/components/ui/badge";
+import { EmptyState } from "@/components/ui/empty-state";
+import { Section } from "@/components/ui/card";
+import {
+  AlertIcon,
+  LineIcon,
+  OperatorIcon,
+  ReportIcon,
+  StationIcon,
+} from "@/components/ui/icons";
+import { PageHeader } from "@/components/ui/page-header";
+import { StatCard } from "@/components/ui/stat-card";
 import { verifyAdminSession } from "@/lib/dal";
 import { createServiceClient } from "@/lib/supabase/service";
 
-function StatCard({ label, value }: { label: string; value: string | number }) {
-  return (
-    <div className="rounded-lg border border-black/10 p-4 dark:border-white/10">
-      <p className="text-xs text-black/60 dark:text-white/60">{label}</p>
-      <p className="mt-1 text-2xl font-semibold">{value}</p>
-    </div>
-  );
-}
+export const metadata: Metadata = { title: "Dashboard" };
+
+const DATA_SOURCE_LABELS: Record<string, string> = {
+  official_api: "API resmi",
+  gtfs: "GTFS",
+  gtfs_realtime: "GTFS realtime",
+  open_data: "Data terbuka",
+  curated: "Kurasi manual",
+  demo: "Demo",
+};
 
 function formatTimestamp(value: string | null | undefined) {
   if (!value) return "Belum ada data";
   return new Date(value).toLocaleString("id-ID", {
     dateStyle: "medium",
     timeStyle: "short",
+    timeZone: "Asia/Jakarta",
   });
 }
 
 export default async function DashboardPage() {
   await verifyAdminSession();
   const supabase = createServiceClient();
+  const loadedAt = new Date();
 
   const [
     operators,
@@ -73,67 +90,100 @@ export default async function DashboardPage() {
     );
   }
 
+  const alertCount = activeAlerts.count ?? 0;
+  const pendingCount = pendingReports.count ?? 0;
+
   return (
     <div className="flex flex-col gap-8">
-      <div>
-        <h1 className="text-lg font-semibold">Dashboard</h1>
-        <p className="text-sm text-black/60 dark:text-white/60">
-          Ringkasan data referensi dan status sinkronisasi terkini.
-        </p>
-      </div>
+      <PageHeader
+        title="Dashboard"
+        description={`Ringkasan data referensi dan status sinkronisasi. Dimuat ${formatTimestamp(
+          loadedAt.toISOString()
+        )} WIB.`}
+      />
 
-      <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-5">
-        <StatCard label="Operator" value={operators.count ?? 0} />
-        <StatCard label="Jalur" value={lines.count ?? 0} />
-        <StatCard label="Stasiun" value={stations.count ?? 0} />
-        <StatCard label="Gangguan aktif" value={activeAlerts.count ?? 0} />
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
         <StatCard
-          label="Laporan menunggu moderasi"
-          value={pendingReports.count ?? 0}
+          label="Operator"
+          value={operators.count ?? 0}
+          href="/operators"
+          icon={<OperatorIcon />}
+        />
+        <StatCard
+          label="Lini"
+          value={lines.count ?? 0}
+          href="/lines"
+          icon={<LineIcon />}
+        />
+        <StatCard
+          label="Stasiun"
+          value={stations.count ?? 0}
+          href="/stations"
+          icon={<StationIcon />}
+        />
+        <StatCard
+          label="Peringatan layanan aktif"
+          value={alertCount}
+          href="/service-alerts"
+          icon={<AlertIcon />}
+          emphasis={alertCount > 0}
+        />
+        <StatCard
+          label="Laporan pengguna menunggu"
+          value={pendingCount}
+          href="/user-reports"
+          icon={<ReportIcon />}
+          emphasis={pendingCount > 0}
         />
       </div>
 
-      <section>
-        <h2 className="mb-2 text-sm font-semibold">
-          Data terakhir diperbarui
-        </h2>
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+      <Section
+        title="Data terakhir diperbarui"
+        description="Waktu entri terbaru di tiap tabel, dalam WIB."
+      >
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
           <StatCard
-            label="Posisi kendaraan terakhir"
+            small
+            label="Posisi kendaraan"
             value={formatTimestamp(latestVehiclePosition.data?.recorded_at)}
           />
           <StatCard
-            label="Trip update terakhir"
+            small
+            label="Pembaruan trip"
             value={formatTimestamp(latestTripUpdate.data?.updated_at)}
           />
           <StatCard
-            label="Gangguan layanan terakhir"
+            small
+            label="Peringatan layanan"
             value={formatTimestamp(latestServiceAlert.data?.updated_at)}
           />
         </div>
-      </section>
+      </Section>
 
-      <section>
-        <h2 className="mb-2 text-sm font-semibold">
-          Status provider (per jenis sumber data operator)
-        </h2>
+      <Section
+        title="Sumber data operator"
+        description="Jumlah operator menurut jenis sumber datanya."
+      >
         {sourceCounts.size === 0 ? (
-          <p className="text-sm text-black/60 dark:text-white/60">
-            Belum ada operator terdaftar.
-          </p>
-        ) : (
-          <div className="flex flex-wrap gap-2">
-            {[...sourceCounts.entries()].map(([source, count]) => (
-              <span
-                key={source}
-                className="rounded-full border border-black/10 px-3 py-1 text-xs dark:border-white/10"
-              >
-                {source}: {count}
-              </span>
-            ))}
+          <div className="rounded-card border border-line bg-surface">
+            <EmptyState
+              title="Belum ada operator"
+              description="Tambahkan operator di halaman Operator."
+              icon={<OperatorIcon width={24} height={24} />}
+            />
           </div>
+        ) : (
+          <ul className="flex flex-wrap gap-2">
+            {[...sourceCounts.entries()].map(([source, count]) => (
+              <li key={source}>
+                <Badge tone="brand" className="tabular text-sm">
+                  {DATA_SOURCE_LABELS[source] ?? source}: {count}
+                </Badge>
+              </li>
+            ))}
+          </ul>
         )}
-      </section>
+      </Section>
     </div>
   );
 }

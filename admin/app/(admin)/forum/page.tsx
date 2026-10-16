@@ -1,12 +1,17 @@
-import Link from "next/link";
+import type { Metadata } from "next";
+import { Badge, StatusBadge } from "@/components/ui/badge";
+import { ButtonLink } from "@/components/ui/button";
+import { PageHeader } from "@/components/ui/page-header";
+import { FilterTabs, RecordCard, RecordList } from "@/components/ui/record-card";
 import { verifyAdminSession } from "@/lib/dal";
 import { createServiceClient } from "@/lib/supabase/service";
-import { moderatePost, type ModerationStatus } from "./actions";
+import { moderatePost } from "./actions";
+import { ModerationButtons, STATUS_LABELS } from "./moderation-buttons";
+
+export const metadata: Metadata = { title: "Forum" };
 
 const FILTERS = ["all", "visible", "hidden", "removed"] as const;
 type Filter = (typeof FILTERS)[number];
-
-const MODERATION_STATUSES: ModerationStatus[] = ["visible", "hidden", "removed"];
 
 function formatDate(value: string) {
   return new Date(value).toLocaleString("id-ID", {
@@ -43,38 +48,36 @@ export default async function ForumPage({
 
   return (
     <div className="flex flex-col gap-6">
-      <div className="flex items-start justify-between gap-4">
-        <div>
-          <h1 className="text-lg font-semibold">Forum</h1>
-          <p className="text-sm text-black/60 dark:text-white/60">
-            Moderasi postingan forum komunitas.
-          </p>
-        </div>
-        <Link
-          href="/forum/comments"
-          className="shrink-0 rounded-md border border-black/15 px-3 py-1.5 text-xs dark:border-white/20"
-        >
-          Lihat komentar
-        </Link>
-      </div>
+      <PageHeader
+        title="Forum"
+        description="Moderasi postingan forum komunitas. Menampilkan 100 postingan terbaru."
+        actions={
+          <>
+            <ButtonLink href="/forum/reports">Laporan forum</ButtonLink>
+            <ButtonLink href="/forum/comments">Lihat komentar</ButtonLink>
+          </>
+        }
+      />
 
-      <div className="flex gap-2">
-        {FILTERS.map((f) => (
-          <Link
-            key={f}
-            href={f === "all" ? "/forum" : `/forum?status=${f}`}
-            className={`rounded-md border px-3 py-1 text-xs ${
-              filter === f
-                ? "border-black bg-black text-white dark:border-white dark:bg-white dark:text-black"
-                : "border-black/15 dark:border-white/20"
-            }`}
-          >
-            {f}
-          </Link>
-        ))}
-      </div>
+      <FilterTabs
+        label="Filter status postingan"
+        items={FILTERS.map((f) => ({
+          href: f === "all" ? "/forum" : `/forum?status=${f}`,
+          label: STATUS_LABELS[f],
+          active: filter === f,
+        }))}
+      />
 
-      <div className="flex flex-col gap-3">
+      <RecordList
+        isEmpty={(posts ?? []).length === 0}
+        empty={{
+          title: "Tidak ada postingan",
+          description:
+            filter === "all"
+              ? "Postingan dari pengguna akan muncul di sini."
+              : "Tidak ada postingan dengan status ini.",
+        }}
+      >
         {(posts ?? []).map((post) => {
           const author = post.users as unknown as
             | { display_name: string | null; email: string | null }
@@ -83,50 +86,33 @@ export default async function ForumPage({
             post.body.length > 240 ? `${post.body.slice(0, 240)}…` : post.body;
 
           return (
-            <div
+            <RecordCard
               key={post.id}
-              className="rounded-lg border border-black/10 p-4 dark:border-white/10"
+              title={author?.display_name ?? "Pengguna"}
+              badges={
+                <>
+                  <StatusBadge status={post.status} />
+                  {post.image_url && <Badge tone="neutral">Ada gambar</Badge>}
+                </>
+              }
+              meta={`${author?.email ? `${author.email} · ` : ""}${formatDate(
+                post.created_at
+              )} · ${post.like_count} suka · ${post.comment_count} komentar`}
+              actions={
+                <ModerationButtons
+                  current={post.status}
+                  noun="postingan"
+                  bindAction={(next) => moderatePost.bind(null, post.id, next)}
+                />
+              }
             >
-              <div className="flex items-start justify-between gap-4">
-                <div>
-                  <p className="font-medium">
-                    {author?.display_name ?? "Pengguna"}{" "}
-                    <span className="text-xs font-normal text-black/50 dark:text-white/50">
-                      {author?.email && `· ${author.email} `}· {post.status}
-                    </span>
-                  </p>
-                  <p className="mt-1 text-sm text-black/70 dark:text-white/70">
-                    {truncatedBody}
-                  </p>
-                  <p className="mt-1 text-xs text-black/50 dark:text-white/50">
-                    {formatDate(post.created_at)} · {post.like_count} suka ·{" "}
-                    {post.comment_count} komentar
-                  </p>
-                </div>
-                <div className="flex shrink-0 gap-2">
-                  {MODERATION_STATUSES.filter((s) => s !== post.status).map(
-                    (s) => (
-                      <form key={s} action={moderatePost.bind(null, post.id, s)}>
-                        <button
-                          type="submit"
-                          className="rounded-md border border-black/15 px-2 py-1 text-xs dark:border-white/20"
-                        >
-                          {s}
-                        </button>
-                      </form>
-                    )
-                  )}
-                </div>
-              </div>
-            </div>
+              <p className="whitespace-pre-wrap text-ink-muted">
+                {truncatedBody}
+              </p>
+            </RecordCard>
           );
         })}
-        {(posts ?? []).length === 0 && (
-          <p className="text-sm text-black/50 dark:text-white/50">
-            Tidak ada postingan.
-          </p>
-        )}
-      </div>
+      </RecordList>
     </div>
   );
 }

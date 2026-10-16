@@ -1,77 +1,100 @@
-import Link from "next/link";
+import type { Metadata } from "next";
+import { Badge } from "@/components/ui/badge";
+import { ButtonLink } from "@/components/ui/button";
+import { DataTable, RowActions } from "@/components/ui/data-table";
+import { LoadError } from "@/components/ui/load-error";
+import { PageHeader } from "@/components/ui/page-header";
 import { verifyAdminSession } from "@/lib/dal";
 import { createServiceClient } from "@/lib/supabase/service";
 import { CreateStationForm } from "./create-form";
 import { DeleteStationButton } from "./delete-button";
 
+export const metadata: Metadata = { title: "Stasiun" };
+
 export default async function StationsPage() {
   await verifyAdminSession();
   const supabase = createServiceClient();
-  const { data: stations } = await supabase
+  const { data: stations, error } = await supabase
     .from("stations")
     .select("id, code, name, latitude, longitude, wheelchair_accessible")
     .order("code");
 
   return (
     <div className="flex flex-col gap-8">
-      <div>
-        <h1 className="text-lg font-semibold">Stasiun</h1>
-        <p className="text-sm text-black/60 dark:text-white/60">
-          Stasiun/halte beserta koordinat dan fasilitas.
-        </p>
-      </div>
+      <PageHeader
+        title="Stasiun"
+        description="Stasiun dan halte beserta koordinat dan fasilitasnya."
+      />
 
       <CreateStationForm />
 
-      <div className="overflow-x-auto rounded-lg border border-black/10 dark:border-white/10">
-        <table className="w-full text-sm">
-          <thead className="border-b border-black/10 text-left dark:border-white/10">
-            <tr>
-              <th className="p-3">Kode</th>
-              <th className="p-3">Nama</th>
-              <th className="p-3">Koordinat</th>
-              <th className="p-3">Akses kursi roda</th>
-              <th className="p-3" />
-            </tr>
-          </thead>
-          <tbody>
-            {(stations ?? []).map((station) => (
-              <tr
-                key={station.id}
-                className="border-b border-black/5 last:border-0 dark:border-white/5"
-              >
-                <td className="p-3">{station.code}</td>
-                <td className="p-3">{station.name}</td>
-                <td className="p-3 text-xs text-black/60 dark:text-white/60">
+      {error ? (
+        <LoadError what="Daftar stasiun" error={error} />
+      ) : (
+        <DataTable
+          caption="Daftar stasiun"
+          rows={stations ?? []}
+          rowKey={(station) => station.id}
+          emptyTitle="Belum ada stasiun"
+          emptyDescription="Tambahkan stasiun lewat formulir di atas, atau impor dari feed GTFS."
+          columns={[
+            {
+              key: "code",
+              header: "Kode",
+              cell: (station) => (
+                <span className="font-mono text-xs">{station.code}</span>
+              ),
+            },
+            {
+              key: "name",
+              header: "Nama",
+              cell: (station) => (
+                <span className="font-semibold">{station.name}</span>
+              ),
+            },
+            {
+              key: "coords",
+              header: "Koordinat",
+              cell: (station) => (
+                <span className="tabular text-ink-muted">
                   {station.latitude.toFixed(5)}, {station.longitude.toFixed(5)}
-                </td>
-                <td className="p-3">{station.wheelchair_accessible ? "Ya" : "Tidak"}</td>
-                <td className="p-3 text-right">
-                  <div className="flex items-center justify-end gap-3">
-                    <Link
-                      href={`/stations/${station.id}/edit`}
-                      className="text-xs text-black/70 hover:underline dark:text-white/70"
-                    >
-                      Edit
-                    </Link>
-                    <DeleteStationButton stationId={station.id} />
-                  </div>
-                </td>
-              </tr>
-            ))}
-            {(stations ?? []).length === 0 && (
-              <tr>
-                <td
-                  colSpan={5}
-                  className="p-3 text-center text-black/50 dark:text-white/50"
-                >
-                  Belum ada stasiun.
-                </td>
-              </tr>
-            )}
-          </tbody>
-        </table>
-      </div>
+                </span>
+              ),
+            },
+            {
+              key: "wheelchair",
+              header: "Akses kursi roda",
+              cell: (station) => (
+                <Badge tone={station.wheelchair_accessible ? "ok" : "neutral"}>
+                  {station.wheelchair_accessible ? "Ya" : "Tidak"}
+                </Badge>
+              ),
+            },
+            {
+              key: "actions",
+              header: "Aksi",
+              headerHidden: true,
+              align: "right",
+              cell: (station) => (
+                <RowActions>
+                  <ButtonLink
+                    href={`/stations/${station.id}/edit`}
+                    variant="ghost"
+                    size="sm"
+                    aria-label={`Edit stasiun ${station.name}`}
+                  >
+                    Edit
+                  </ButtonLink>
+                  <DeleteStationButton
+                    stationId={station.id}
+                    name={station.name}
+                  />
+                </RowActions>
+              ),
+            },
+          ]}
+        />
+      )}
     </div>
   );
 }

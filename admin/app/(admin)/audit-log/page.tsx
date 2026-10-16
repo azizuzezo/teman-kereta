@@ -1,5 +1,18 @@
+import type { Metadata } from "next";
+import { Badge, type BadgeTone } from "@/components/ui/badge";
+import { DataTable } from "@/components/ui/data-table";
+import { LoadError } from "@/components/ui/load-error";
+import { PageHeader } from "@/components/ui/page-header";
 import { verifyAdminSession } from "@/lib/dal";
 import { createServiceClient } from "@/lib/supabase/service";
+
+export const metadata: Metadata = { title: "Log audit" };
+
+const ACTION_TONES: Record<string, BadgeTone> = {
+  create: "ok",
+  update: "brand",
+  delete: "bad",
+};
 
 function formatDate(value: string) {
   return new Date(value).toLocaleString("id-ID", {
@@ -11,7 +24,7 @@ function formatDate(value: string) {
 export default async function AuditLogPage() {
   await verifyAdminSession();
   const supabase = createServiceClient();
-  const { data: entries } = await supabase
+  const { data: entries, error } = await supabase
     .from("audit_log")
     .select("id, action, table_name, record_id, changes, created_at, admin_users(display_name)")
     .order("created_at", { ascending: false })
@@ -19,53 +32,63 @@ export default async function AuditLogPage() {
 
   return (
     <div className="flex flex-col gap-6">
-      <div>
-        <h1 className="text-lg font-semibold">Audit Log</h1>
-        <p className="text-sm text-black/60 dark:text-white/60">
-          Catatan setiap perubahan yang dilakukan lewat admin panel ini —
-          tidak bisa diedit atau dihapus dari sini.
-        </p>
-      </div>
+      <PageHeader
+        title="Log audit"
+        description="Catatan setiap perubahan yang dibuat lewat panel ini. Tidak bisa diubah atau dihapus dari sini. Menampilkan 200 entri terbaru."
+      />
 
-      <div className="overflow-x-auto rounded-lg border border-black/10 dark:border-white/10">
-        <table className="w-full text-sm">
-          <thead className="border-b border-black/10 text-left dark:border-white/10">
-            <tr>
-              <th className="p-3">Waktu</th>
-              <th className="p-3">Aksi</th>
-              <th className="p-3">Tabel</th>
-              <th className="p-3">Perubahan</th>
-            </tr>
-          </thead>
-          <tbody>
-            {(entries ?? []).map((entry) => (
-              <tr
-                key={entry.id}
-                className="border-b border-black/5 align-top last:border-0 dark:border-white/5"
-              >
-                <td className="whitespace-nowrap p-3">
+      {error ? (
+        <LoadError what="Log audit" error={error} />
+      ) : (
+        <DataTable
+          caption="Log audit perubahan data"
+          rows={entries ?? []}
+          rowKey={(entry) => entry.id}
+          emptyTitle="Belum ada aktivitas"
+          emptyDescription="Perubahan data lewat panel ini akan tercatat di sini."
+          columns={[
+            {
+              key: "time",
+              header: "Waktu",
+              cell: (entry) => (
+                <span className="tabular whitespace-nowrap">
                   {formatDate(entry.created_at)}
-                </td>
-                <td className="p-3">{entry.action}</td>
-                <td className="p-3">{entry.table_name}</td>
-                <td className="p-3 font-mono text-xs">
-                  {entry.changes ? JSON.stringify(entry.changes) : "—"}
-                </td>
-              </tr>
-            ))}
-            {(entries ?? []).length === 0 && (
-              <tr>
-                <td
-                  colSpan={4}
-                  className="p-3 text-center text-black/50 dark:text-white/50"
-                >
-                  Belum ada aktivitas.
-                </td>
-              </tr>
-            )}
-          </tbody>
-        </table>
-      </div>
+                </span>
+              ),
+              className: "align-top",
+            },
+            {
+              key: "action",
+              header: "Aksi",
+              cell: (entry) => (
+                <Badge tone={ACTION_TONES[entry.action] ?? "neutral"}>
+                  {entry.action}
+                </Badge>
+              ),
+              className: "align-top",
+            },
+            {
+              key: "table",
+              header: "Tabel",
+              cell: (entry) => entry.table_name,
+              className: "align-top",
+            },
+            {
+              key: "changes",
+              header: "Perubahan",
+              cell: (entry) =>
+                entry.changes ? (
+                  <code className="block max-w-xl break-all font-mono text-xs text-ink-muted">
+                    {JSON.stringify(entry.changes)}
+                  </code>
+                ) : (
+                  <span className="text-ink-muted">-</span>
+                ),
+              className: "align-top",
+            },
+          ]}
+        />
+      )}
     </div>
   );
 }

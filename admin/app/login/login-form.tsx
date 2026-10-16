@@ -1,53 +1,62 @@
 "use client";
 
-import { useActionState } from "react";
+import { useActionState, useState } from "react";
+import { Button } from "@/components/ui/button";
+import { FormMessage } from "@/components/ui/form";
+import { Field, TextField } from "@/components/ui/fields";
+import { EyeIcon, EyeOffIcon } from "@/components/ui/icons";
 import { login, type LoginState } from "./actions";
 
 const initialState: LoginState = undefined;
 
 export function LoginForm() {
   const [state, formAction, pending] = useActionState(login, initialState);
+  const [showPassword, setShowPassword] = useState(false);
 
   return (
-    <form action={formAction} className="flex w-full max-w-sm flex-col gap-4">
-      <div className="flex flex-col gap-1">
-        <label htmlFor="email" className="text-sm font-medium">
-          Email
-        </label>
-        <input
-          id="email"
-          name="email"
-          type="email"
-          required
-          autoComplete="username"
-          className="rounded-md border border-black/15 bg-transparent px-3 py-2 text-sm dark:border-white/20"
-        />
-      </div>
-      <div className="flex flex-col gap-1">
-        <label htmlFor="password" className="text-sm font-medium">
-          Password
-        </label>
-        <input
-          id="password"
-          name="password"
-          type="password"
-          required
-          autoComplete="current-password"
-          className="rounded-md border border-black/15 bg-transparent px-3 py-2 text-sm dark:border-white/20"
-        />
-      </div>
-      {state?.error && (
-        <p className="text-sm text-red-600 dark:text-red-400">
-          {state.error}
-        </p>
-      )}
-      <button
+    <form action={formAction} className="flex flex-col gap-5">
+      <TextField
+        label="Email"
+        name="email"
+        type="email"
+        required
+        autoComplete="username"
+        inputMode="email"
+        autoCapitalize="none"
+        spellCheck={false}
+      />
+      <Field label="Password" htmlFor="password">
+        <div className="relative">
+          <input
+            id="password"
+            name="password"
+            type={showPassword ? "text" : "password"}
+            required
+            autoComplete="current-password"
+            className="min-h-11 w-full rounded-control border border-line-strong bg-surface pl-3 pr-12 text-sm text-ink"
+          />
+          <button
+            type="button"
+            onClick={() => setShowPassword((value) => !value)}
+            aria-label={
+              showPassword ? "Sembunyikan password" : "Tampilkan password"
+            }
+            aria-pressed={showPassword}
+            className="absolute inset-y-0 right-0 inline-flex w-11 items-center justify-center rounded-r-control text-ink-muted hover:text-ink"
+          >
+            {showPassword ? <EyeOffIcon /> : <EyeIcon />}
+          </button>
+        </div>
+      </Field>
+      <FormMessage error={state?.error} />
+      <Button
         type="submit"
-        disabled={pending}
-        className="rounded-md bg-black px-4 py-2 text-sm font-medium text-white disabled:opacity-60 dark:bg-white dark:text-black"
+        loading={pending}
+        loadingLabel="Memproses…"
+        className="w-full"
       >
-        {pending ? "Memproses…" : "Masuk"}
-      </button>
+        Masuk
+      </Button>
     </form>
   );
 }

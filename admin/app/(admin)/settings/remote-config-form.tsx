@@ -1,6 +1,14 @@
 "use client";
 
 import { useActionState } from "react";
+import { Button } from "@/components/ui/button";
+import { TextareaField } from "@/components/ui/fields";
+import {
+  FormCard,
+  FormFooter,
+  FormMessage,
+  useSavedFlag,
+} from "@/components/ui/form";
 import { updateRemoteConfig, type SettingsFormState } from "./actions";
 
 const initialState: SettingsFormState = undefined;
@@ -10,27 +18,25 @@ export function RemoteConfigForm({ value }: { value: unknown }) {
     updateRemoteConfig,
     initialState
   );
+  const saved = useSavedFlag(pending, state?.error);
 
   return (
-    <form action={formAction} className="flex flex-col gap-2">
-      <textarea
+    <FormCard action={formAction} title="Remote configuration">
+      <TextareaField
+        label="Konfigurasi (JSON)"
         name="remote_config"
+        rows={10}
+        spellCheck={false}
+        hint="Harus berupa objek JSON."
+        className="font-mono text-xs"
         defaultValue={JSON.stringify(value, null, 2)}
-        rows={8}
-        className="rounded-md border border-black/15 bg-transparent px-2 py-1.5 font-mono text-xs dark:border-white/20"
       />
-      <button
-        type="submit"
-        disabled={pending}
-        className="w-fit rounded-md bg-black px-4 py-1.5 text-sm font-medium text-white disabled:opacity-60 dark:bg-white dark:text-black"
-      >
-        {pending ? "Menyimpan…" : "Simpan remote config"}
-      </button>
-      {state?.error && (
-        <p className="text-sm text-red-600 dark:text-red-400">
-          {state.error}
-        </p>
-      )}
-    </form>
+      <FormFooter>
+        <Button type="submit" loading={pending} loadingLabel="Menyimpan…">
+          Simpan remote config
+        </Button>
+        <FormMessage error={state?.error} saved={saved} savedLabel="Konfigurasi tersimpan." />
+      </FormFooter>
+    </FormCard>
   );
 }

@@ -76,3 +76,68 @@ export async function moderateComment(
   revalidatePath("/forum/comments");
   revalidatePath("/forum");
 }
+
+export type ReportResolution = "reviewed" | "dismissed";
+
+/**
+ * Closes a forum report. `reviewed` also hides the reported post or comment
+ * (it stays recoverable from the Forum / Komentar pages); `dismissed` leaves
+ * the content untouched.
+ */
+export async function resolveReport(
+  reportId: string,
+  resolution: ReportResolution,
+  // Unused: present only because .bind(null, reportId, resolution) leaves
+  // this as the form's FormData argument.
+  _formData: FormData
+) {
+  void _formData;
+  const session = await verifyAdminSession();
+  if (resolution !== "reviewed" && resolution !== "dismissed") return;
+
+  const supabase = createServiceClient();
+  const { data: report } = await supabase
+    .from("forum_reports")
+    .select("id, post_id, comment_id")
+    .eq("id", reportId)
+    .maybeSingle();
+  if (!report) return;
+
+  if (resolution === "reviewed") {
+    // Only mark the report reviewed once the content really is hidden;
+    // otherwise it would leave the open queue while the content stays visible.
+    if (report.post_id) {
+      const { error: hideError } = await supabase
+        .from("forum_posts")
+        .update({ status: "hidden" })
+        .eq("id", report.post_id);
+      if (hideError) return;
+    }
+    if (report.comment_id) {
+      const { error: hideError } = await supabase
+        .from("forum_comments")
+        .update({ status: "hidden" })
+        .eq("id", report.comment_id);
+      if (hideError) return;
+    }
+  }
+
+  const { error } = await supabase
+    .from("forum_reports")
+    .update({ status: resolution })
+    .eq("id", reportId);
+
+  if (!error) {
+    await recordAudit({
+      adminUserId: session.userId,
+      action: "update",
+      tableName: "forum_reports",
+      recordId: reportId,
+      changes: { status: resolution },
+    });
+  }
+
+  revalidatePath("/forum/reports");
+  revalidatePath("/forum");
+  revalidatePath("/forum/comments");
+}
