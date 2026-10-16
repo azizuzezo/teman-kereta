@@ -76,10 +76,17 @@ minimum_password_length = 8
 [auth.email]
 enable_signup = true
 double_confirm_changes = true
-enable_confirmations = false
+enable_confirmations = true
 max_frequency = "1m"
 otp_length = 6
 otp_expiry = 3600
+
+# Sign-up verification is a 6 digit code typed into the app (see
+# lib/features/account/presentation/verify_otp_page.dart). The default
+# template only has a link, so this one prints {{ .Token }} instead.
+[auth.email.template.confirmation]
+subject = "Kode verifikasi Teman Kereta: {{ .Token }}"
+content_path = "./supabase/templates/confirmation.html"
 
 [auth.sms]
 enable_signup = false
