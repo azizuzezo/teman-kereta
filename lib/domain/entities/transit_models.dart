@@ -3,7 +3,9 @@ import 'package:freezed_annotation/freezed_annotation.dart';
 part 'transit_models.freezed.dart';
 part 'transit_models.g.dart';
 
-enum DataFreshness { realtime, nearRealtime, estimated, unavailable }
+/// How trustworthy a time or position is. [scheduled] is a published timetable
+/// time (fixed until it passes), [estimated] is computed (it may move).
+enum DataFreshness { realtime, nearRealtime, scheduled, estimated, unavailable }
 
 enum TransportMode { walk, commuterRail, mrt, lrt, bus, bicycle, rideHailing }
 

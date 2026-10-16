@@ -5,11 +5,16 @@ import 'package:go_router/go_router.dart';
 
 import '../../../app/theme/app_theme.dart';
 import '../../../core/notifications/local_notification_service.dart';
+import '../../../core/platform/native_trip_service.dart';
 import '../../../core/preferences/preferences_store.dart';
+import '../../../core/widgets/tk_components.dart';
 import '../../../core/widgets/tk_logo.dart';
 import '../../../data/providers/provider_registry.dart';
 import '../../../domain/entities/transit_models.dart';
+import '../../schedule/presentation/widgets/station_picker_sheet.dart';
 import '../../settings/presentation/settings_controller.dart';
+
+const _stepCount = 4;
 
 class OnboardingPage extends ConsumerStatefulWidget {
   const OnboardingPage({super.key});
@@ -32,12 +37,20 @@ class _OnboardingPageState extends ConsumerState<OnboardingPage> {
 
   @override
   Widget build(BuildContext context) {
+    final tk = context.tk;
+    final reduceMotion = MediaQuery.disableAnimationsOf(context);
     return Scaffold(
       appBar: AppBar(
-        title: const TkLogo(size: 36),
+        leading: _page > 0
+            ? IconButton(
+                tooltip: 'Kembali',
+                onPressed: _back,
+                icon: const Icon(Icons.arrow_back_rounded),
+              )
+            : null,
         actions: <Widget>[
           if (_page > 0)
-            TextButton(onPressed: _finish, child: const Text('Lewati')),
+            TextButton(onPressed: _finish, child: const Text('Lewati semua')),
           const SizedBox(width: 8),
         ],
       ),
@@ -45,25 +58,29 @@ class _OnboardingPageState extends ConsumerState<OnboardingPage> {
         child: Column(
           children: <Widget>[
             Padding(
-              padding: const EdgeInsets.fromLTRB(24, 8, 24, 12),
-              child: Row(
-                children: List<Widget>.generate(4, (index) {
-                  return Expanded(
-                    child: AnimatedContainer(
-                      duration: MediaQuery.disableAnimationsOf(context)
-                          ? Duration.zero
-                          : const Duration(milliseconds: 220),
-                      height: 4,
-                      margin: EdgeInsets.only(right: index == 3 ? 0 : 8),
-                      decoration: BoxDecoration(
-                        color: index <= _page
-                            ? AppColors.blue
-                            : Theme.of(context).colorScheme.outlineVariant,
-                        borderRadius: BorderRadius.circular(999),
+              padding: const EdgeInsets.fromLTRB(24, 4, 24, 8),
+              child: Semantics(
+                label: 'Langkah ${_page + 1} dari $_stepCount',
+                excludeSemantics: true,
+                child: Row(
+                  children: List<Widget>.generate(_stepCount, (index) {
+                    return Expanded(
+                      child: AnimatedContainer(
+                        duration: reduceMotion
+                            ? Duration.zero
+                            : const Duration(milliseconds: 220),
+                        height: 4,
+                        margin: EdgeInsets.only(
+                          right: index == _stepCount - 1 ? 0 : 8,
+                        ),
+                        decoration: BoxDecoration(
+                          color: index <= _page ? tk.primary : tk.border,
+                          borderRadius: BorderRadius.circular(2),
+                        ),
                       ),
-                    ),
-                  );
-                }),
+                    );
+                  }),
+                ),
               ),
             ),
             Expanded(
@@ -72,39 +89,19 @@ class _OnboardingPageState extends ConsumerState<OnboardingPage> {
                 onPageChanged: (value) => setState(() => _page = value),
                 children: <Widget>[
                   _WelcomeStep(onNext: _next),
-                  _PermissionStep(
-                    icon: Icons.location_on_outlined,
-                    title: 'Lokasi, secara bertahap',
-                    description:
-                        'Lokasi membantu menemukan stasiun dan memberi peringatan perjalanan. Pelacakan intensif hanya berjalan setelah kamu memulai perjalanan.',
-                    items: const <String>[
-                      'Temukan stasiun terdekat',
-                      'Deteksi perjalanan setelah disetujui',
-                      'Peringatan sebelum stasiun tujuan',
-                    ],
-                    primaryLabel: 'Aktifkan saat digunakan',
-                    onPrimary: _requestLocation,
-                    onSkip: _next,
-                  ),
-                  _PermissionStep(
-                    icon: Icons.notifications_none_rounded,
-                    title: 'Peringatan yang bisa diatur',
-                    description:
-                        'Notifikasi membantu saat aplikasi diminimalkan. Kamu dapat memilih suara, getaran, atau mode senyap nanti.',
-                    items: const <String>[
-                      'Tiga, dua, dan satu stasiun sebelum tujuan',
-                      'Waktunya transit atau turun',
-                      'Perubahan jadwal saat sumber resmi tersedia',
-                    ],
-                    primaryLabel: 'Aktifkan notifikasi',
-                    onPrimary: _requestNotifications,
-                    onSkip: _next,
+                  _LocationStep(onRequest: _requestLocation, onSkip: _next),
+                  _RemindersStep(
+                    onRequestNotifications: _requestNotifications,
+                    onRequestBattery: _requestBattery,
+                    onNext: _next,
                   ),
                   _DailyRouteStep(
                     homeStation: _homeStation,
                     workStation: _workStation,
-                    onHomeChanged: (value) => setState(() => _homeStation = value),
-                    onWorkChanged: (value) => setState(() => _workStation = value),
+                    onHomeChanged: (value) =>
+                        setState(() => _homeStation = value),
+                    onWorkChanged: (value) =>
+                        setState(() => _workStation = value),
                     onFinish: _finish,
                   ),
                 ],
@@ -127,13 +124,25 @@ class _OnboardingPageState extends ConsumerState<OnboardingPage> {
   }
 
   void _next() {
-    if (_page >= 3) {
+    if (_page >= _stepCount - 1) {
       return;
     }
+    _goTo(_page + 1);
+  }
+
+  void _back() {
+    if (_page <= 0) {
+      return;
+    }
+    _goTo(_page - 1);
+  }
+
+  void _goTo(int target) {
     if (MediaQuery.disableAnimationsOf(context)) {
-      _controller.jumpToPage(_page + 1);
+      _controller.jumpToPage(target);
     } else {
-      _controller.nextPage(
+      _controller.animateToPage(
+        target,
         duration: const Duration(milliseconds: 280),
         curve: Curves.easeOutCubic,
       );
@@ -166,7 +175,8 @@ class _OnboardingPageState extends ConsumerState<OnboardingPage> {
     }
   }
 
-  Future<void> _requestNotifications() async {
+  /// Returns whether notifications ended up allowed.
+  Future<bool> _requestNotifications() async {
     final granted = await ref
         .read(localNotificationServiceProvider)
         .requestPermission();
@@ -175,11 +185,80 @@ class _OnboardingPageState extends ConsumerState<OnboardingPage> {
         'Notifikasi belum diizinkan. Kamu dapat mengaktifkannya dari Profil.',
       );
     }
-    _next();
+    return granted;
+  }
+
+  /// Opens the system battery-optimization dialog, then reports whether the
+  /// app is now exempt (false also when the platform has no such setting).
+  Future<bool> _requestBattery() async {
+    try {
+      final service = ref.read(nativeTripServiceProvider);
+      await service.requestIgnoreBatteryOptimizations();
+      final status = await service.getPermissionStatus();
+      return status['batteryOptimizationIgnored'] == true;
+    } on Object {
+      return false;
+    }
   }
 
   void _showMessage(String message) {
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(SnackBar(content: Text(message)));
+  }
+}
+
+/// Shared frame of every step: scrolling content with the actions pinned
+/// to the bottom so the main button is always under the thumb.
+class _StepFrame extends StatelessWidget {
+  const _StepFrame({required this.content, required this.actions});
+
+  final List<Widget> content;
+  final List<Widget> actions;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      children: <Widget>[
+        Expanded(
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.fromLTRB(24, 20, 24, 16),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: content,
+            ),
+          ),
+        ),
+        Padding(
+          padding: const EdgeInsets.fromLTRB(24, 8, 24, 16),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: actions,
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _IconTile extends StatelessWidget {
+  const _IconTile({required this.icon});
+
+  final IconData icon;
+
+  @override
+  Widget build(BuildContext context) {
+    final tk = context.tk;
+    return Container(
+      width: 64,
+      height: 64,
+      decoration: BoxDecoration(
+        color: tk.primarySoft,
+        borderRadius: BorderRadius.circular(TkRadius.card),
+      ),
+      child: Icon(icon, size: 32, color: tk.primary),
+    );
   }
 }
 
@@ -190,153 +269,326 @@ class _WelcomeStep extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return SingleChildScrollView(
-      padding: const EdgeInsets.fromLTRB(24, 28, 24, 24),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: <Widget>[
-          Semantics(
-            label: 'Ilustrasi kereta dan jalur perjalanan',
-            image: true,
-            child: Container(
-              height: 210,
-              decoration: BoxDecoration(
-                color: AppColors.navy,
-                borderRadius: BorderRadius.circular(24),
-              ),
-              child: Stack(
-                children: <Widget>[
-                  const Positioned(
-                    left: 28,
-                    right: 28,
-                    top: 102,
-                    child: Divider(color: AppColors.softBlue, thickness: 5),
-                  ),
-                  for (final left in <double>[36, 112, 188, 264])
-                    Positioned(
-                      left: left,
-                      top: 92,
-                      child: const CircleAvatar(
-                        radius: 11,
-                        backgroundColor: AppColors.surfaceLight,
-                      ),
-                    ),
-                  const Positioned(
-                    left: 96,
-                    top: 42,
-                    child: Icon(
-                      Icons.train_rounded,
-                      size: 88,
-                      color: AppColors.coral,
-                    ),
-                  ),
-                  const Positioned(
-                    left: 28,
-                    bottom: 24,
-                    child: Text(
-                      'Cari • Naik • Diingatkan',
-                      style: TextStyle(
-                        color: AppColors.surfaceLight,
-                        fontWeight: FontWeight.w700,
-                      ),
-                    ),
-                  ),
-                ],
-              ),
+    final tk = context.tk;
+    final textTheme = Theme.of(context).textTheme;
+    return _StepFrame(
+      content: <Widget>[
+        const TkLogo(size: 64),
+        const SizedBox(height: 32),
+        Text('Teman perjalanan KRL setiap hari', style: textTheme.displayLarge),
+        const SizedBox(height: 12),
+        Text(
+          'Cek jadwal, ikuti perjalanan stasiun demi stasiun, dan dapat '
+          'pengingat sebelum tujuan.',
+          style: textTheme.bodyLarge?.copyWith(color: tk.textMuted),
+        ),
+        const SizedBox(height: 28),
+        const TkRowGroup(
+          children: <Widget>[
+            TkRow(
+              icon: Icons.schedule_rounded,
+              title: 'Jadwal dari stasiun terdekat',
+              subtitle: 'Lihat keberangkatan berikutnya tanpa mengetik.',
             ),
-          ),
-          const SizedBox(height: 32),
-          Text(
-            'Teman perjalanan KRL setiap hari',
-            style: Theme.of(context).textTheme.displayLarge,
-          ),
-          const SizedBox(height: 12),
-          Text(
-            'Rencanakan perjalanan, ikuti stasiun, dan dapatkan pengingat sebelum tujuan tanpa harus membuat akun.',
-            style: Theme.of(context).textTheme.bodyLarge,
-          ),
-          const SizedBox(height: 28),
-          SizedBox(
-            width: double.infinity,
-            child: FilledButton(
-              onPressed: onNext,
-              child: const Text('Mulai'),
+            TkRow(
+              icon: Icons.route_rounded,
+              title: 'Ikuti perjalananmu',
+              subtitle:
+                  'Tahu stasiun berikutnya dan sisa stasiun sampai tujuan.',
             ),
-          ),
-        ],
-      ),
+            TkRow(
+              icon: Icons.notifications_active_outlined,
+              title: 'Pengingat sebelum turun',
+              subtitle:
+                  'Notifikasi tiga, dua, dan satu stasiun sebelum tujuan.',
+            ),
+          ],
+        ),
+      ],
+      actions: <Widget>[
+        SizedBox(
+          height: 56,
+          child: FilledButton(onPressed: onNext, child: const Text('Mulai')),
+        ),
+      ],
     );
   }
 }
 
-class _PermissionStep extends StatelessWidget {
-  const _PermissionStep({
+class _BenefitList extends StatelessWidget {
+  const _BenefitList({required this.items});
+
+  final List<String> items;
+
+  @override
+  Widget build(BuildContext context) {
+    final tk = context.tk;
+    return Column(
+      children: <Widget>[
+        for (final item in items)
+          Padding(
+            padding: const EdgeInsets.only(bottom: 12),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: <Widget>[
+                Icon(Icons.check_circle_rounded, size: 22, color: tk.success),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Text(
+                    item,
+                    style: Theme.of(context).textTheme.bodyLarge,
+                  ),
+                ),
+              ],
+            ),
+          ),
+      ],
+    );
+  }
+}
+
+class _LocationStep extends StatelessWidget {
+  const _LocationStep({required this.onRequest, required this.onSkip});
+
+  final Future<void> Function() onRequest;
+  final VoidCallback onSkip;
+
+  @override
+  Widget build(BuildContext context) {
+    final tk = context.tk;
+    final textTheme = Theme.of(context).textTheme;
+    return _StepFrame(
+      content: <Widget>[
+        const _IconTile(icon: Icons.location_on_outlined),
+        const SizedBox(height: 24),
+        Text('Lokasi, secara bertahap', style: textTheme.headlineLarge),
+        const SizedBox(height: 12),
+        Text(
+          'Lokasi membantu menemukan stasiun dan memberi peringatan '
+          'perjalanan. Pelacakan intensif hanya berjalan setelah kamu memulai '
+          'perjalanan.',
+          style: textTheme.bodyLarge?.copyWith(color: tk.textMuted),
+        ),
+        const SizedBox(height: 24),
+        const _BenefitList(
+          items: <String>[
+            'Temukan stasiun terdekat',
+            'Deteksi perjalanan setelah disetujui',
+            'Peringatan sebelum stasiun tujuan',
+          ],
+        ),
+        const SizedBox(height: 4),
+        Text(
+          'Bisa diubah kapan saja di Profil.',
+          style: textTheme.bodySmall?.copyWith(color: tk.textMuted),
+        ),
+      ],
+      actions: <Widget>[
+        SizedBox(
+          height: 56,
+          child: FilledButton(
+            onPressed: onRequest,
+            child: const Text('Aktifkan saat digunakan'),
+          ),
+        ),
+        const SizedBox(height: 4),
+        TextButton(
+          onPressed: onSkip,
+          style: TextButton.styleFrom(minimumSize: const Size.fromHeight(48)),
+          child: const Text('Lewati sekarang'),
+        ),
+      ],
+    );
+  }
+}
+
+class _RemindersStep extends StatefulWidget {
+  const _RemindersStep({
+    required this.onRequestNotifications,
+    required this.onRequestBattery,
+    required this.onNext,
+  });
+
+  final Future<bool> Function() onRequestNotifications;
+  final Future<bool> Function() onRequestBattery;
+  final VoidCallback onNext;
+
+  @override
+  State<_RemindersStep> createState() => _RemindersStepState();
+}
+
+enum _AskState { idle, allowed, notAllowed }
+
+class _RemindersStepState extends State<_RemindersStep> {
+  _AskState _notifications = _AskState.idle;
+  _AskState _battery = _AskState.idle;
+
+  bool get _anyAsked =>
+      _notifications != _AskState.idle || _battery != _AskState.idle;
+
+  Future<void> _askNotifications() async {
+    final granted = await widget.onRequestNotifications();
+    if (mounted) {
+      setState(
+        () =>
+            _notifications = granted ? _AskState.allowed : _AskState.notAllowed,
+      );
+    }
+  }
+
+  Future<void> _askBattery() async {
+    final ignored = await widget.onRequestBattery();
+    if (mounted) {
+      setState(
+        () => _battery = ignored ? _AskState.allowed : _AskState.notAllowed,
+      );
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final tk = context.tk;
+    final textTheme = Theme.of(context).textTheme;
+    return _StepFrame(
+      content: <Widget>[
+        const _IconTile(icon: Icons.notifications_none_rounded),
+        const SizedBox(height: 24),
+        Text('Peringatan yang bisa diatur', style: textTheme.headlineLarge),
+        const SizedBox(height: 12),
+        Text(
+          'Notifikasi membantu saat aplikasi diminimalkan. Kamu dapat memilih '
+          'suara, getaran, atau mode senyap nanti.',
+          style: textTheme.bodyLarge?.copyWith(color: tk.textMuted),
+        ),
+        const SizedBox(height: 24),
+        _PermissionCard(
+          icon: Icons.notifications_active_outlined,
+          title: 'Notifikasi stasiun',
+          description:
+              'Tiga, dua, dan satu stasiun sebelum tujuan, lalu waktunya '
+              'transit atau turun.',
+          actionLabel: 'Aktifkan notifikasi',
+          state: _notifications,
+          onAction: _askNotifications,
+        ),
+        const SizedBox(height: 12),
+        _PermissionCard(
+          icon: Icons.battery_charging_full_rounded,
+          title: 'Tetap berjalan di latar belakang',
+          description:
+              'Sebagian HP menghentikan aplikasi yang tidak dibuka, sehingga '
+              'pengingat bisa terlambat. Izin ini mencegahnya selama '
+              'perjalanan.',
+          actionLabel: 'Izinkan di latar belakang',
+          state: _battery,
+          onAction: _askBattery,
+          deniedLabel: 'Sudah diminta',
+        ),
+      ],
+      actions: <Widget>[
+        if (_anyAsked)
+          SizedBox(
+            height: 56,
+            child: FilledButton(
+              onPressed: widget.onNext,
+              child: const Text('Lanjut'),
+            ),
+          )
+        else
+          TextButton(
+            onPressed: widget.onNext,
+            style: TextButton.styleFrom(minimumSize: const Size.fromHeight(56)),
+            child: const Text('Lewati sekarang'),
+          ),
+      ],
+    );
+  }
+}
+
+class _PermissionCard extends StatefulWidget {
+  const _PermissionCard({
     required this.icon,
     required this.title,
     required this.description,
-    required this.items,
-    required this.primaryLabel,
-    required this.onPrimary,
-    required this.onSkip,
+    required this.actionLabel,
+    required this.state,
+    required this.onAction,
+    this.deniedLabel = 'Belum diizinkan',
   });
 
   final IconData icon;
   final String title;
   final String description;
-  final List<String> items;
-  final String primaryLabel;
-  final Future<void> Function() onPrimary;
-  final VoidCallback onSkip;
+  final String actionLabel;
+  final _AskState state;
+  final Future<void> Function() onAction;
+  final String deniedLabel;
+
+  @override
+  State<_PermissionCard> createState() => _PermissionCardState();
+}
+
+class _PermissionCardState extends State<_PermissionCard> {
+  bool _busy = false;
+
+  Future<void> _run() async {
+    if (_busy) {
+      return;
+    }
+    setState(() => _busy = true);
+    try {
+      await widget.onAction();
+    } finally {
+      if (mounted) {
+        setState(() => _busy = false);
+      }
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
-    return SingleChildScrollView(
-      padding: const EdgeInsets.fromLTRB(24, 30, 24, 24),
+    final tk = context.tk;
+    final textTheme = Theme.of(context).textTheme;
+    return TkCard(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: <Widget>[
-          Container(
-            width: 72,
-            height: 72,
-            decoration: BoxDecoration(
-              color: Theme.of(context).colorScheme.primaryContainer,
-              borderRadius: BorderRadius.circular(20),
-            ),
-            child: Icon(icon, size: 36),
-          ),
-          const SizedBox(height: 28),
-          Text(title, style: Theme.of(context).textTheme.headlineLarge),
-          const SizedBox(height: 12),
-          Text(description, style: Theme.of(context).textTheme.bodyLarge),
-          const SizedBox(height: 24),
-          for (final item in items)
-            Padding(
-              padding: const EdgeInsets.only(bottom: 14),
-              child: Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: <Widget>[
-                  const Icon(Icons.check_circle_outline, size: 22),
-                  const SizedBox(width: 12),
-                  Expanded(child: Text(item)),
-                ],
-              ),
-            ),
-          const SizedBox(height: 24),
-          SizedBox(
-            width: double.infinity,
-            child: FilledButton(
-              onPressed: onPrimary,
-              child: Text(primaryLabel),
-            ),
+          Row(
+            children: <Widget>[
+              Icon(widget.icon, color: tk.primary),
+              const SizedBox(width: 12),
+              Expanded(child: Text(widget.title, style: textTheme.titleSmall)),
+              if (widget.state == _AskState.allowed)
+                const TkPill(
+                  label: 'Diizinkan',
+                  icon: Icons.check_rounded,
+                  tone: TkPillTone.success,
+                  dense: true,
+                )
+              else if (widget.state == _AskState.notAllowed)
+                TkPill(
+                  label: widget.deniedLabel,
+                  tone: TkPillTone.warning,
+                  dense: true,
+                ),
+            ],
           ),
           const SizedBox(height: 8),
-          SizedBox(
-            width: double.infinity,
-            child: TextButton(
-              onPressed: onSkip,
-              child: const Text('Lewati sekarang'),
-            ),
+          Text(
+            widget.description,
+            style: textTheme.bodyMedium?.copyWith(color: tk.textMuted),
           ),
+          if (widget.state != _AskState.allowed) ...<Widget>[
+            const SizedBox(height: 12),
+            SizedBox(
+              width: double.infinity,
+              height: 48,
+              child: FilledButton.tonal(
+                onPressed: _busy ? null : _run,
+                child: Text(widget.actionLabel),
+              ),
+            ),
+          ],
         ],
       ),
     );
@@ -360,60 +612,153 @@ class _DailyRouteStep extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final tk = context.tk;
+    final textTheme = Theme.of(context).textTheme;
+    final stationsAsync = ref.watch(stationListProvider);
     final stations = List<Station>.of(
-      ref.watch(stationListProvider).asData?.value ?? const <Station>[],
+      stationsAsync.asData?.value ?? const <Station>[],
     )..sort((a, b) => a.name.compareTo(b.name));
-    final stationItems = <DropdownMenuItem<String>>[
-      for (final station in stations)
-        DropdownMenuItem(
-          value: station.id,
-          child: Text(station.name, overflow: TextOverflow.ellipsis),
+    String? nameOf(String? id) =>
+        stations.where((s) => s.id == id).firstOrNull?.name;
+    return _StepFrame(
+      content: <Widget>[
+        const _IconTile(icon: Icons.route_rounded),
+        const SizedBox(height: 24),
+        Text('Simpan rute harian', style: textTheme.headlineLarge),
+        const SizedBox(height: 12),
+        Text(
+          'Opsional. Rute ini hanya disimpan di perangkat pada mode lokal.',
+          style: textTheme.bodyLarge?.copyWith(color: tk.textMuted),
         ),
-    ];
-    return SingleChildScrollView(
-      padding: const EdgeInsets.fromLTRB(24, 30, 24, 24),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: <Widget>[
-          const Icon(Icons.route_rounded, size: 64, color: AppColors.blue),
-          const SizedBox(height: 24),
-          Text('Simpan rute harian', style: Theme.of(context).textTheme.headlineLarge),
+        const SizedBox(height: 24),
+        if (stationsAsync.isLoading)
+          const Column(
+            children: <Widget>[
+              TkSkeleton(height: 64, radius: 14),
+              SizedBox(height: 12),
+              TkSkeleton(height: 64, radius: 14),
+            ],
+          )
+        else ...<Widget>[
+          _StationChoice(
+            label: 'Stasiun rumah',
+            icon: Icons.home_outlined,
+            value: nameOf(homeStation),
+            onPick: () async {
+              final id = await showStationPicker(
+                context,
+                stations: stations,
+                title: 'Stasiun rumah',
+                selectedId: homeStation,
+              );
+              if (id != null) {
+                onHomeChanged(id);
+              }
+            },
+            onClear: homeStation == null ? null : () => onHomeChanged(null),
+          ),
           const SizedBox(height: 12),
-          Text(
-            'Opsional. Rute ini hanya disimpan di perangkat pada mode lokal.',
-            style: Theme.of(context).textTheme.bodyLarge,
+          _StationChoice(
+            label: 'Stasiun kantor atau kampus',
+            icon: Icons.work_outline_rounded,
+            value: nameOf(workStation),
+            onPick: () async {
+              final id = await showStationPicker(
+                context,
+                stations: stations,
+                title: 'Stasiun kantor atau kampus',
+                selectedId: workStation,
+              );
+              if (id != null) {
+                onWorkChanged(id);
+              }
+            },
+            onClear: workStation == null ? null : () => onWorkChanged(null),
           ),
-          const SizedBox(height: 28),
-          DropdownButtonFormField<String>(
-            initialValue: homeStation,
-            isExpanded: true,
-            decoration: const InputDecoration(
-              labelText: 'Stasiun rumah',
-              prefixIcon: Icon(Icons.home_outlined),
+          if (stationsAsync.hasError || stations.isEmpty) ...<Widget>[
+            const SizedBox(height: 12),
+            Text(
+              'Daftar stasiun belum tersedia. Kamu bisa mengatur rute harian '
+              'nanti di Profil.',
+              style: textTheme.bodySmall?.copyWith(color: tk.textMuted),
             ),
-            items: stationItems,
-            onChanged: onHomeChanged,
-          ),
-          const SizedBox(height: 16),
-          DropdownButtonFormField<String>(
-            initialValue: workStation,
-            isExpanded: true,
-            decoration: const InputDecoration(
-              labelText: 'Stasiun kantor atau kampus',
-              prefixIcon: Icon(Icons.work_outline_rounded),
-            ),
-            items: stationItems,
-            onChanged: onWorkChanged,
-          ),
-          const SizedBox(height: 28),
-          SizedBox(
-            width: double.infinity,
-            child: FilledButton(
-              onPressed: onFinish,
-              child: const Text('Buka Teman Kereta'),
-            ),
-          ),
+          ],
         ],
+      ],
+      actions: <Widget>[
+        SizedBox(
+          height: 56,
+          child: FilledButton(
+            onPressed: onFinish,
+            child: const Text('Buka Teman Kereta'),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _StationChoice extends StatelessWidget {
+  const _StationChoice({
+    required this.label,
+    required this.icon,
+    required this.value,
+    required this.onPick,
+    required this.onClear,
+  });
+
+  final String label;
+  final IconData icon;
+  final String? value;
+  final VoidCallback onPick;
+  final VoidCallback? onClear;
+
+  @override
+  Widget build(BuildContext context) {
+    final tk = context.tk;
+    final textTheme = Theme.of(context).textTheme;
+    return TkCard(
+      onTap: onPick,
+      padding: const EdgeInsets.fromLTRB(16, 8, 4, 8),
+      semanticLabel:
+          '$label: ${value ?? 'belum dipilih'}. Ketuk untuk memilih.',
+      child: ExcludeSemantics(
+        child: Row(
+          children: <Widget>[
+            Icon(icon, color: tk.primary),
+            const SizedBox(width: 14),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: <Widget>[
+                  Text(
+                    label,
+                    style: textTheme.bodySmall?.copyWith(color: tk.textMuted),
+                  ),
+                  Text(
+                    value ?? 'Pilih stasiun',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: textTheme.titleSmall?.copyWith(
+                      color: value == null ? tk.textMuted : tk.text,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            if (onClear != null)
+              IconButton(
+                tooltip: 'Hapus pilihan $label',
+                onPressed: onClear,
+                icon: const Icon(Icons.close_rounded),
+              )
+            else
+              const Padding(
+                padding: EdgeInsets.all(12),
+                child: Icon(Icons.unfold_more_rounded),
+              ),
+          ],
+        ),
       ),
     );
   }

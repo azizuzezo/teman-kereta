@@ -1,6 +1,8 @@
 import 'package:audioplayers/audioplayers.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../platform/native_trip_service.dart';
+
 /// No audio focus requested at all: this alarm is a supplementary cue
 /// layered on top of everything else already sounding (the spoken
 /// notification, a later alert's own voice/alarm, whatever the rider is
@@ -25,10 +27,20 @@ final _audioContext = AudioContext(
 /// follow-up for the "1 stasiun lagi" transfer/arrival alerts. Best-effort
 /// like [TtsService.speak]: playback failing must never crash or block a
 /// trip-critical notification.
+///
+/// On Android this player is no longer used for trip alerts: the native
+/// `AlertAudioPlayer` plays the voice line and then the bell from its real
+/// completion callback, and routes both to a headset when one is connected
+/// (see `NativeTripService.playAlertAudio`). This class remains the bell for
+/// platforms without that native side, and [stop] also silences the native
+/// bell.
 class AlarmService {
-  AlarmService({AudioPlayer? player}) : _player = player ?? AudioPlayer();
+  AlarmService({AudioPlayer? player, NativeTripService? native})
+    : _player = player ?? AudioPlayer(),
+      _native = native ?? const NativeTripService();
 
   final AudioPlayer _player;
+  final NativeTripService _native;
 
   Future<void> play() async {
     try {
@@ -46,6 +58,7 @@ class AlarmService {
   /// nothing is playing.
   Future<void> stop() async {
     try {
+      await _native.silenceAlertBell();
       await _player.stop();
     } on Object {
       // See rationale above.

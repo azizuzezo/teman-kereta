@@ -10,6 +10,8 @@ class TripSearchState {
     required this.originStationId,
     required this.destinationStationId,
     required this.departureAt,
+    this.departNow = true,
+    this.hasSearched = false,
     this.results = const <TransitTrip>[],
     this.isLoading = false,
     this.errorMessage,
@@ -19,6 +21,15 @@ class TripSearchState {
   final String originStationId;
   final String destinationStationId;
   final DateTime departureAt;
+
+  /// True until the rider picks a specific time: the search then uses the
+  /// moment the button is pressed instead of when this controller was built
+  /// (the provider outlives the page, so that moment can be hours old).
+  final bool departNow;
+
+  /// True once a search has completed, so an empty result list can say
+  /// "no trains" instead of the first-visit hint.
+  final bool hasSearched;
   final List<TransitTrip> results;
   final bool isLoading;
   final String? errorMessage;
@@ -32,6 +43,8 @@ class TripSearchState {
     String? originStationId,
     String? destinationStationId,
     DateTime? departureAt,
+    bool? departNow,
+    bool? hasSearched,
     List<TransitTrip>? results,
     bool? isLoading,
     String? errorMessage,
@@ -42,6 +55,8 @@ class TripSearchState {
       originStationId: originStationId ?? this.originStationId,
       destinationStationId: destinationStationId ?? this.destinationStationId,
       departureAt: departureAt ?? this.departureAt,
+      departNow: departNow ?? this.departNow,
+      hasSearched: hasSearched ?? this.hasSearched,
       results: results ?? this.results,
       isLoading: isLoading ?? this.isLoading,
       errorMessage: clearError ? null : errorMessage ?? this.errorMessage,
@@ -69,7 +84,10 @@ class TripSearchController extends Notifier<TripSearchState> {
       if (_originManuallySet) return;
       final nearest = next.asData?.value.firstOrNull;
       if (nearest != null) {
-        state = state.copyWith(originStationId: nearest.station.id, clearError: true);
+        state = state.copyWith(
+          originStationId: nearest.station.id,
+          clearError: true,
+        );
       }
     });
     return TripSearchState(
@@ -88,9 +106,33 @@ class TripSearchController extends Notifier<TripSearchState> {
     state = state.copyWith(originStationId: value, clearError: true);
   }
 
+  /// Picks a specific departure time of day. A time that already passed
+  /// today means tomorrow's departure, see [resolveDepartureTime].
+  void setDepartureTime(int hour, int minute) {
+    state = state.copyWith(
+      departureAt: resolveDepartureTime(
+        ref.read(clockProvider).now(),
+        hour,
+        minute,
+      ),
+      departNow: false,
+      clearError: true,
+    );
+  }
+
+  void setDepartNow() {
+    state = state.copyWith(
+      departureAt: ref.read(clockProvider).now(),
+      departNow: true,
+      clearError: true,
+    );
+  }
+
   void setFinalDestinationQuery(String? value) {
     state = state.copyWith(
-      finalDestinationQuery: (value == null || value.trim().isEmpty) ? null : value.trim(),
+      finalDestinationQuery: (value == null || value.trim().isEmpty)
+          ? null
+          : value.trim(),
     );
   }
 
@@ -111,7 +153,14 @@ class TripSearchController extends Notifier<TripSearchState> {
       return;
     }
 
-    state = state.copyWith(isLoading: true, clearError: true);
+    final departureAt = state.departNow
+        ? ref.read(clockProvider).now()
+        : state.departureAt;
+    state = state.copyWith(
+      departureAt: departureAt,
+      isLoading: true,
+      clearError: true,
+    );
     try {
       final trips = await ref
           .read(transitScheduleProvider)
@@ -119,11 +168,15 @@ class TripSearchController extends Notifier<TripSearchState> {
             TripSearchQuery(
               originStationId: state.originStationId,
               destinationStationId: state.destinationStationId,
-              departureAt: state.departureAt,
+              departureAt: departureAt,
             ),
           );
-      final ranked = const RouteRanker().rank(trips, state.departureAt);
-      state = state.copyWith(results: ranked, isLoading: false);
+      final ranked = const RouteRanker().rank(trips, departureAt);
+      state = state.copyWith(
+        results: ranked,
+        isLoading: false,
+        hasSearched: true,
+      );
     } on Object {
       state = state.copyWith(
         isLoading: false,
@@ -132,6 +185,16 @@ class TripSearchController extends Notifier<TripSearchState> {
       );
     }
   }
+}
+
+/// Combines today's date from [now] with a wall-clock [hour]:[minute]. If that
+/// moment is more than a minute in the past, the rider means the next day.
+DateTime resolveDepartureTime(DateTime now, int hour, int minute) {
+  final today = DateTime(now.year, now.month, now.day, hour, minute);
+  if (today.isBefore(now.subtract(const Duration(minutes: 1)))) {
+    return DateTime(now.year, now.month, now.day + 1, hour, minute);
+  }
+  return today;
 }
 
 final tripSearchControllerProvider =

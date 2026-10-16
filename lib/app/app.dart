@@ -22,8 +22,8 @@ class TemanKeretaApp extends ConsumerWidget {
     return MaterialApp.router(
       title: 'Teman Kereta',
       debugShowCheckedModeBanner: false,
-      theme: AppTheme.light(),
-      darkTheme: AppTheme.dark(),
+      theme: AppTheme.light(settings.palette),
+      darkTheme: AppTheme.dark(settings.palette),
       themeMode: settings.themeMode,
       routerConfig: router,
       locale: const Locale('id', 'ID'),
@@ -58,6 +58,7 @@ class _MaintenanceScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final tk = context.tk;
     return Scaffold(
       body: SafeArea(
         child: Center(
@@ -66,7 +67,15 @@ class _MaintenanceScreen extends StatelessWidget {
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: <Widget>[
-                const Icon(Icons.build_circle_outlined, size: 56),
+                Container(
+                  width: 64,
+                  height: 64,
+                  decoration: BoxDecoration(
+                    color: tk.warningSoft,
+                    borderRadius: BorderRadius.circular(TkRadius.card),
+                  ),
+                  child: Icon(Icons.build_circle_outlined, size: 32, color: tk.warning),
+                ),
                 const SizedBox(height: 16),
                 Text(
                   'Sedang dalam pemeliharaan',
@@ -74,9 +83,12 @@ class _MaintenanceScreen extends StatelessWidget {
                   textAlign: TextAlign.center,
                 ),
                 const SizedBox(height: 8),
-                const Text(
+                Text(
                   'Teman Kereta sedang diperbarui. Silakan coba lagi sebentar lagi.',
                   textAlign: TextAlign.center,
+                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                    color: tk.textMuted,
+                  ),
                 ),
               ],
             ),

@@ -5,6 +5,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:uuid/uuid.dart';
 
 import '../../../app/config/app_environment.dart';
+import '../../account/presentation/account_controller.dart';
 import 'forum_models.dart';
 
 const _pageSize = 20;
@@ -40,13 +41,17 @@ class ForumFeedState {
 /// below) rather than kept in this state, since only one post's comment
 /// thread is ever open at a time.
 class ForumController extends AsyncNotifier<ForumFeedState> {
-  /// Selected line to filter the feed by, or null for every post. Kept as
-  /// controller state rather than [ForumFeedState] since it's an input to
-  /// fetching, not a fetched result — [loadMore] reads it via [_fetchPage]
-  /// exactly like it already reads `before`.
-  String? _lineFilter;
+  /// Current feed narrowing (line tag and/or "Mengikuti"). Kept as controller
+  /// state rather than [ForumFeedState] since it's an input to fetching, not
+  /// a fetched result — [loadMore] reads it via [_fetchPage] exactly like it
+  /// already reads `before`.
+  ForumFeedFilter _filter = ForumFeedFilter.all;
 
-  String? get lineFilter => _lineFilter;
+  ForumFeedFilter get filter => _filter;
+
+  String? get lineFilter => _filter.lineId;
+
+  bool get followingOnly => _filter.followingOnly;
 
   @override
   Future<ForumFeedState> build() => _fetchPage();
@@ -54,8 +59,16 @@ class ForumController extends AsyncNotifier<ForumFeedState> {
   /// Switches the feed to only posts tagged with [lineId] (or every post, for
   /// null) and reloads from the first page.
   Future<void> setLineFilter(String? lineId) async {
-    if (_lineFilter == lineId) return;
-    _lineFilter = lineId;
+    if (_filter.lineId == lineId) return;
+    _filter = _filter.withLine(lineId);
+    await refresh();
+  }
+
+  /// Switches between every post and only posts from accounts the signed-in
+  /// user follows, and reloads from the first page.
+  Future<void> setFollowingOnly({required bool value}) async {
+    if (_filter.followingOnly == value) return;
+    _filter = _filter.withFollowingOnly(value: value);
     await refresh();
   }
 
@@ -63,12 +76,35 @@ class ForumController extends AsyncNotifier<ForumFeedState> {
     if (!AppEnvironment.supabaseEnabled) {
       return const ForumFeedState(posts: <ForumPost>[], hasMore: false);
     }
+    List<String>? followeeIds;
+    if (_filter.followingOnly) {
+      final me = Supabase.instance.client.auth.currentUser?.id;
+      if (me != null) {
+        final followRows =
+            await Supabase.instance.client
+                    .from('user_follows')
+                    .select('followee_id')
+                    .eq('follower_id', me)
+                as List<dynamic>;
+        followeeIds = followRows
+            .map(
+              (row) => (row as Map<String, dynamic>)['followee_id'] as String,
+            )
+            .toList();
+      }
+      if (followeeIds == null || followeeIds.isEmpty) {
+        return const ForumFeedState(posts: <ForumPost>[], hasMore: false);
+      }
+    }
     var query = Supabase.instance.client
         .from('forum_posts')
         .select('*, $_postAuthorSelect')
         .eq('status', 'visible');
-    if (_lineFilter != null) {
-      query = query.eq('line_id', _lineFilter!);
+    if (_filter.lineId != null) {
+      query = query.eq('line_id', _filter.lineId!);
+    }
+    if (followeeIds != null) {
+      query = query.inFilter('user_id', followeeIds);
     }
     if (before != null) {
       query = query.lt('created_at', before.toIso8601String());
@@ -80,10 +116,14 @@ class ForumController extends AsyncNotifier<ForumFeedState> {
         .map((row) => ForumPost.fromJson(row as Map<String, dynamic>))
         .toList();
     final liked = await _fetchLikedPostIds(posts.map((p) => p.id).toList());
+    final blocked = await ref.read(blockedUserIdsProvider.future);
     final merged = <ForumPost>[
       for (final post in posts)
-        post.copyWith(likedByMe: liked.contains(post.id)),
+        if (!blocked.contains(post.userId))
+          post.copyWith(likedByMe: liked.contains(post.id)),
     ];
+    // `hasMore` reflects the raw page, not the filtered one, so blocking
+    // everyone on a page doesn't end pagination early.
     return ForumFeedState(posts: merged, hasMore: posts.length == _pageSize);
   }
 
@@ -105,6 +145,16 @@ class ForumController extends AsyncNotifier<ForumFeedState> {
   Future<void> refresh() async {
     state = const AsyncValue.loading();
     state = await AsyncValue.guard(_fetchPage);
+  }
+
+  /// Pull-to-refresh: re-fetches the first page without blanking the list
+  /// first, and keeps what is showing if the fetch fails. Returns whether it
+  /// succeeded.
+  Future<bool> reload() async {
+    final result = await AsyncValue.guard(_fetchPage);
+    if (result.hasError) return false;
+    state = result;
+    return true;
   }
 
   Future<void> loadMore() async {
@@ -276,6 +326,28 @@ class ForumController extends AsyncNotifier<ForumFeedState> {
     }
   }
 
+  /// Visible posts by [userId], newest first, with the viewer's own likes
+  /// merged in (for another user's profile page).
+  Future<List<ForumPost>> fetchUserPosts(String userId) async {
+    final rows =
+        await Supabase.instance.client
+                .from('forum_posts')
+                .select('*, $_postAuthorSelect')
+                .eq('user_id', userId)
+                .eq('status', 'visible')
+                .order('created_at', ascending: false)
+                .limit(50)
+            as List<dynamic>;
+    final posts = rows
+        .map((row) => ForumPost.fromJson(row as Map<String, dynamic>))
+        .toList();
+    final liked = await _fetchLikedPostIds(posts.map((p) => p.id).toList());
+    return <ForumPost>[
+      for (final post in posts)
+        post.copyWith(likedByMe: liked.contains(post.id)),
+    ];
+  }
+
   Future<List<ForumComment>> fetchComments(String postId) async {
     final rows =
         await Supabase.instance.client
@@ -285,9 +357,90 @@ class ForumController extends AsyncNotifier<ForumFeedState> {
                 .eq('status', 'visible')
                 .order('created_at')
             as List<dynamic>;
+    final blocked = await ref.read(blockedUserIdsProvider.future);
     return rows
         .map((row) => ForumComment.fromJson(row as Map<String, dynamic>))
+        .where((comment) => !blocked.contains(comment.userId))
         .toList();
+  }
+
+  /// Files a report against a post or comment (exactly one of [postId] /
+  /// [commentId]) for the moderators to review. Reporting the same item twice
+  /// is treated as success. Returns an error message, or null on success.
+  Future<String?> reportContent({
+    String? postId,
+    String? commentId,
+    required String reason,
+    String? details,
+  }) async {
+    assert((postId == null) != (commentId == null));
+    final userId = Supabase.instance.client.auth.currentUser?.id;
+    if (userId == null) return 'Masuk untuk melaporkan konten.';
+    final trimmed = details?.trim();
+    try {
+      await Supabase.instance.client
+          .from('forum_reports')
+          .insert(<String, Object?>{
+            'reporter_id': userId,
+            'post_id': ?postId,
+            'comment_id': ?commentId,
+            'reason': reason,
+            if (trimmed != null && trimmed.isNotEmpty) 'details': trimmed,
+          });
+      return null;
+    } on PostgrestException catch (error) {
+      if (error.code == '23505') return null; // already reported by this user
+      return 'Gagal mengirim laporan. Coba lagi.';
+    } on Object {
+      return 'Gagal mengirim laporan. Coba lagi.';
+    }
+  }
+
+  /// Blocks [targetUserId]: their posts and comments disappear from this
+  /// user's feed and threads. Returns an error message, or null on success.
+  Future<String?> blockUser(String targetUserId) async {
+    final userId = Supabase.instance.client.auth.currentUser?.id;
+    if (userId == null) return 'Masuk untuk memblokir pengguna.';
+    if (userId == targetUserId) {
+      return 'Kamu tidak bisa memblokir dirimu sendiri.';
+    }
+    try {
+      await Supabase.instance.client.from('user_blocks').insert(
+        <String, Object?>{'blocker_id': userId, 'blocked_id': targetUserId},
+      );
+    } on PostgrestException catch (error) {
+      if (error.code != '23505') return 'Gagal memblokir pengguna. Coba lagi.';
+    } on Object {
+      return 'Gagal memblokir pengguna. Coba lagi.';
+    }
+    await _refreshAfterBlockChange();
+    return null;
+  }
+
+  /// Block lists are applied when data is fetched, so every cached thread
+  /// fetched before the change (comments of any post) must be dropped too,
+  /// or a blocked user's comments stay visible (or stay hidden after unblock).
+  Future<void> _refreshAfterBlockChange() async {
+    ref.invalidate(blockedUserIdsProvider);
+    ref.invalidate(blockedUsersProvider);
+    ref.invalidate(forumCommentsProvider);
+    await refresh();
+  }
+
+  Future<String?> unblockUser(String targetUserId) async {
+    final userId = Supabase.instance.client.auth.currentUser?.id;
+    if (userId == null) return 'Masuk untuk mengelola blokir.';
+    try {
+      await Supabase.instance.client
+          .from('user_blocks')
+          .delete()
+          .eq('blocker_id', userId)
+          .eq('blocked_id', targetUserId);
+    } on Object {
+      return 'Gagal membuka blokir. Coba lagi.';
+    }
+    await _refreshAfterBlockChange();
+    return null;
   }
 
   /// Returns an error message on failure, or null on success.
@@ -382,6 +535,12 @@ final forumPostProvider = FutureProvider.family<ForumPost?, String>((
   return ref.read(forumControllerProvider.notifier).fetchPost(postId);
 });
 
+/// Posts written by one user (their profile page).
+final forumUserPostsProvider = FutureProvider.autoDispose
+    .family<List<ForumPost>, String>((ref, userId) {
+      return ref.read(forumControllerProvider.notifier).fetchUserPosts(userId);
+    });
+
 /// Re-fetched (and cached) per post id; callers invalidate this after
 /// [ForumController.addComment] succeeds to pick up the new comment.
 final forumCommentsProvider = FutureProvider.family<List<ForumComment>, String>(
@@ -389,6 +548,65 @@ final forumCommentsProvider = FutureProvider.family<List<ForumComment>, String>(
     return ref.read(forumControllerProvider.notifier).fetchComments(postId);
   },
 );
+
+/// Ids of users the signed-in account has blocked; empty when signed out.
+/// Re-fetched when the signed-in account changes.
+final blockedUserIdsProvider = FutureProvider<Set<String>>((ref) async {
+  final user = ref.watch(accountControllerProvider).asData?.value;
+  if (user == null || !AppEnvironment.supabaseEnabled) return <String>{};
+  try {
+    final rows =
+        await Supabase.instance.client
+                .from('user_blocks')
+                .select('blocked_id')
+                .eq('blocker_id', user.id)
+            as List<dynamic>;
+    return rows
+        .map((row) => (row as Map<String, dynamic>)['blocked_id'] as String)
+        .toSet();
+  } on Object {
+    // Blocking is a convenience filter; fail open rather than hide the forum.
+    return <String>{};
+  }
+});
+
+/// A blocked user, with enough profile data to show in the "blocked users"
+/// list.
+class BlockedUser {
+  const BlockedUser({required this.id, required this.name});
+
+  final String id;
+  final String name;
+}
+
+final blockedUsersProvider = FutureProvider<List<BlockedUser>>((ref) async {
+  final user = ref.watch(accountControllerProvider).asData?.value;
+  if (user == null || !AppEnvironment.supabaseEnabled) return const [];
+  final rows =
+      await Supabase.instance.client
+              .from('user_blocks')
+              .select(
+                'blocked_id, users!user_blocks_blocked_id_fkey(username, display_name)',
+              )
+              .eq('blocker_id', user.id)
+              .order('created_at', ascending: false)
+          as List<dynamic>;
+  return <BlockedUser>[
+    for (final raw in rows)
+      () {
+        final row = raw as Map<String, dynamic>;
+        final profile = row['users'] as Map<String, dynamic>?;
+        final username = profile?['username'] as String?;
+        final displayName = profile?['display_name'] as String?;
+        final name = (username != null && username.isNotEmpty)
+            ? '@$username'
+            : (displayName != null && displayName.isNotEmpty)
+            ? displayName
+            : 'Pengguna Teman Kereta';
+        return BlockedUser(id: row['blocked_id'] as String, name: name);
+      }(),
+  ];
+});
 
 final forumLineOptionsProvider = FutureProvider<List<LineOption>>((ref) {
   return ref.read(forumControllerProvider.notifier).fetchLineOptions();

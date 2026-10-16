@@ -1,37 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:go_router/go_router.dart';
 
-import '../../../core/widgets/empty_state.dart';
-import '../../../domain/entities/social_models.dart';
-import 'widgets/user_row_tile.dart';
-
-/// See the comment on `_followersProvider` in `followers_list_page.dart` for
-/// why this is two queries instead of one nested-select join.
-final _followingProvider = FutureProvider.family<List<UserSummary>, String>((
-  ref,
-  userId,
-) async {
-  final followRows =
-      await Supabase.instance.client
-              .from('user_follows')
-              .select('followee_id')
-              .eq('follower_id', userId)
-          as List<dynamic>;
-  final ids = followRows
-      .map((row) => (row as Map<String, dynamic>)['followee_id'] as String)
-      .toList();
-  if (ids.isEmpty) return const <UserSummary>[];
-  final userRows =
-      await Supabase.instance.client
-              .from('users')
-              .select('id, username, display_name, avatar_url')
-              .inFilter('id', ids)
-          as List<dynamic>;
-  return userRows
-      .map((row) => UserSummary.fromJson(row as Map<String, dynamic>))
-      .toList();
-});
+import 'social_providers.dart';
+import 'widgets/user_list_body.dart';
 
 class FollowingListPage extends ConsumerWidget {
   const FollowingListPage({required this.userId, super.key});
@@ -40,31 +12,28 @@ class FollowingListPage extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final following = ref.watch(_followingProvider(userId));
+    final following = ref.watch(userFollowingProvider(userId));
 
     return Scaffold(
       appBar: AppBar(title: const Text('Mengikuti')),
       body: SafeArea(
-        child: following.when(
-          loading: () => const Center(child: CircularProgressIndicator()),
-          error: (error, stack) => const AppEmptyState(
-            icon: Icons.error_outline_rounded,
-            title: 'Gagal memuat',
-            message: 'Terjadi kendala saat mengambil daftar mengikuti.',
+        child: UserListBody(
+          users: following,
+          errorMessage: 'Daftar yang diikuti belum bisa dimuat. Coba lagi.',
+          emptyIcon: Icons.people_outline_rounded,
+          emptyTitle: 'Belum mengikuti siapa pun',
+          emptyMessage: 'Cari pengguna lain untuk mulai mengikuti.',
+          emptyAction: FilledButton(
+            onPressed: () => context.push('/social/search'),
+            child: const Text('Cari pengguna'),
           ),
-          data: (users) {
-            if (users.isEmpty) {
-              return const AppEmptyState(
-                icon: Icons.people_outline_rounded,
-                title: 'Belum mengikuti siapa pun',
-                message: 'Cari pengguna lain untuk mulai mengikuti.',
-              );
+          onRefresh: () async {
+            ref.invalidate(userFollowingProvider(userId));
+            try {
+              await ref.read(userFollowingProvider(userId).future);
+            } on Object {
+              // The body shows its own error state.
             }
-            return ListView.builder(
-              padding: const EdgeInsets.symmetric(vertical: 8),
-              itemCount: users.length,
-              itemBuilder: (context, index) => UserRowTile(user: users[index]),
-            );
           },
         ),
       ),

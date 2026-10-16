@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import '../../app/theme/app_theme.dart';
+
 class SectionHeader extends StatelessWidget {
   const SectionHeader({
     required this.title,
@@ -21,12 +23,17 @@ class SectionHeader extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: <Widget>[
-              Text(title, style: Theme.of(context).textTheme.titleLarge),
+              Semantics(
+                header: true,
+                child: Text(title, style: Theme.of(context).textTheme.titleLarge),
+              ),
               if (description != null) ...<Widget>[
                 const SizedBox(height: 4),
                 Text(
                   description!,
-                  style: Theme.of(context).textTheme.bodySmall,
+                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                    color: context.tk.textMuted,
+                  ),
                 ),
               ],
             ],

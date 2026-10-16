@@ -5,52 +5,224 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 
-import '../../../app/theme/app_theme.dart';
-import '../../../core/network/connectivity_provider.dart';
+import '../../../core/network/gps_status_controller.dart';
+import '../../../core/network/internet_status_controller.dart';
 import '../../../core/notifications/local_notification_service.dart';
 import '../../../core/platform/widget_sync.dart';
 import '../../../core/utils/map_launcher.dart';
-import '../../../core/widgets/data_badges.dart';
-import '../../../core/widgets/empty_state.dart';
-import '../../../core/widgets/section_header.dart';
-import '../../../core/widgets/tk_logo.dart';
-import '../../../data/providers/demo_data.dart';
+import '../../../core/widgets/tk_components.dart';
 import '../../../data/providers/provider_registry.dart';
 import '../../../domain/entities/active_trip.dart';
 import '../../../domain/entities/transit_models.dart';
-import '../../../domain/usecases/nearest_station_finder.dart';
 import '../../account/presentation/account_controller.dart';
 import '../../active_trip/presentation/active_trip_controller.dart';
+import '../../favorites/presentation/favorite_route_controller.dart';
 import '../../ride_detection/presentation/ride_detection_controller.dart';
 import '../../schedule/presentation/trip_search_controller.dart';
 import '../../settings/presentation/settings_controller.dart';
 import '../../stations/presentation/nearest_station_controller.dart';
+import '../domain/next_train_logic.dart';
+import 'widgets/active_trip_cards.dart';
+import 'widgets/anti_bablas_hint.dart';
+import 'widgets/device_status_tiles.dart';
+import 'widgets/home_header.dart';
+import 'widgets/next_train_hero.dart';
+import 'widgets/quick_actions.dart';
+import 'widgets/quick_trip_card.dart';
+import 'widgets/service_alert_banner.dart';
 
-class HomePage extends ConsumerWidget {
+/// How often the nearest station is re-measured while Home is on screen.
+const Duration homeLocationInterval = Duration(seconds: 10);
+
+/// How often the internet latency is re-measured while Home is on screen.
+const Duration homeStatusInterval = Duration(seconds: 15);
+
+/// How often countdowns are recomputed (they show whole minutes).
+const Duration homeClockInterval = Duration(seconds: 15);
+
+class HomePage extends ConsumerStatefulWidget {
   const HomePage({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<HomePage> createState() => _HomePageState();
+}
+
+class _HomePageState extends ConsumerState<HomePage>
+    with WidgetsBindingObserver {
+  Timer? _locationTimer;
+  Timer? _statusTimer;
+  Timer? _clockTimer;
+
+  bool _foreground = true;
+  bool _tabVisible = true;
+  bool _polling = false;
+
+  late DateTime _now = ref.read(clockProvider).now();
+  String? _lastNearestId;
+  DateTime? _lastDeparturesReload;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addObserver(this);
+    final lifecycle = WidgetsBinding.instance.lifecycleState;
+    _foreground = lifecycle == null || lifecycle == AppLifecycleState.resumed;
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    // The shell keeps every tab mounted but disables tickers on the hidden
+    // ones, and the navigator does the same for a page pushed on top. That
+    // makes TickerMode the signal for "Home is actually on screen".
+    _tabVisible = TickerMode.valuesOf(context).enabled;
+    _syncPolling();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    _foreground = state == AppLifecycleState.resumed;
+    _syncPolling();
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    _stopTimers();
+    super.dispose();
+  }
+
+  void _stopTimers() {
+    _locationTimer?.cancel();
+    _statusTimer?.cancel();
+    _clockTimer?.cancel();
+    _locationTimer = null;
+    _statusTimer = null;
+    _clockTimer = null;
+  }
+
+  /// Starts the 10 s / 15 s timers only while Home is visible and the app is
+  /// in the foreground, and cancels every one of them otherwise. No position
+  /// stream: each location tick is one `getCurrentPosition` call.
+  void _syncPolling() {
+    final shouldPoll = _foreground && _tabVisible;
+    if (shouldPoll == _polling) {
+      return;
+    }
+    _polling = shouldPoll;
+    if (!shouldPoll) {
+      _stopTimers();
+      return;
+    }
+    // Refresh right away (the user may have come back from Settings), after
+    // the current build so providers are not modified mid-build.
+    unawaited(
+      Future<void>.microtask(() {
+        if (!mounted || !_polling) {
+          return;
+        }
+        _tickClock();
+        unawaited(_pollLocation());
+        unawaited(_pollStatus());
+      }),
+    );
+    _locationTimer = Timer.periodic(
+      homeLocationInterval,
+      (_) => unawaited(_pollLocation()),
+    );
+    _statusTimer = Timer.periodic(
+      homeStatusInterval,
+      (_) => unawaited(_pollStatus()),
+    );
+    _clockTimer = Timer.periodic(homeClockInterval, (_) => _tickClock());
+  }
+
+  Future<void> _pollLocation() async {
+    if (!mounted || !_polling) {
+      return;
+    }
+    await ref.read(nearestStationControllerProvider.notifier).refreshQuietly();
+  }
+
+  Future<void> _pollStatus() async {
+    if (!mounted || !_polling) {
+      return;
+    }
+    await Future.wait<void>(<Future<void>>[
+      ref.read(internetStatusProvider.notifier).refresh(),
+      ref.read(gpsStatusProvider.notifier).refresh(),
+    ]);
+  }
+
+  void _tickClock() {
+    if (!mounted) {
+      return;
+    }
+    setState(() => _now = ref.read(clockProvider).now());
+  }
+
+  Future<void> _refreshAll(String boardStationId) async {
+    ref.invalidate(departuresProvider(boardStationId));
+    await Future.wait<void>(<Future<void>>[
+      ref.read(nearestStationControllerProvider.notifier).refreshQuietly(),
+      ref.read(internetStatusProvider.notifier).refresh(),
+      ref.read(gpsStatusProvider.notifier).refresh(),
+    ]);
+    if (mounted) {
+      _tickClock();
+    }
+  }
+
+  /// The list comes from one query for "the next ten from when it was
+  /// loaded", so after a while it runs dry. Reload at most once a minute.
+  void _reloadDeparturesIfStale(String stationId, List<Departure> upcoming) {
+    if (upcoming.length >= 2) {
+      return;
+    }
+    final last = _lastDeparturesReload;
+    if (last != null && _now.difference(last) < const Duration(minutes: 1)) {
+      return;
+    }
+    _lastDeparturesReload = _now;
+    unawaited(
+      Future<void>.microtask(() {
+        if (mounted) {
+          ref.invalidate(departuresProvider(stationId));
+        }
+      }),
+    );
+  }
+
+  /// Only the pre-boarding phases get a subtle banner. `confirmingTrip` is
+  /// deliberately excluded: that one navigates to a full confirmation page
+  /// (PRD section 9 treats crossing the ask threshold as an explicit prompt).
+  String? _ridePhaseLabel(ActiveTripState? state) => switch (state) {
+    ActiveTripState.nearStation => 'Mendekati stasiun',
+    ActiveTripState.atStation => 'Terdeteksi di stasiun',
+    ActiveTripState.possibleBoarding => 'Memeriksa kemungkinan naik KRL',
+    _ => null,
+  };
+
+  @override
+  Widget build(BuildContext context) {
     final settings = ref.watch(settingsControllerProvider);
     final homeStationId = settings.homeStationId ?? 'BOO';
-    final departures = ref.watch(departuresProvider(homeStationId));
-    final alerts = ref.watch(serviceAlertsProvider);
-    final stations =
-        ref.watch(stationListProvider).asData?.value ?? const <Station>[];
-    final homeStationName = stations
-            .where((station) => station.id == homeStationId)
-            .firstOrNull
-            ?.name ??
-        'stasiun favorit';
-    final nearestStations =
-        ref.watch(nearestStationControllerProvider).asData?.value ??
-            const <StationDistance>[];
-    final nearest = nearestStations.firstOrNull;
+    final stationsAsync = ref.watch(stationListProvider);
+    final stations = stationsAsync.asData?.value ?? const <Station>[];
+    final ranked =
+        ref.watch(nearestStationControllerProvider).asData?.value ?? const [];
     final ridePhase = ref.watch(rideDetectionControllerProvider);
     final activeTrip = ref.watch(activeTripControllerProvider);
+    final alerts = ref.watch(serviceAlertsProvider);
+    final vehicles =
+        ref.watch(vehiclePositionsProvider).asData?.value ??
+        const <VehiclePosition>[];
+    final favorite = ref.watch(favoriteRouteControllerProvider);
 
     // Keeps the Android home-screen widgets showing the same data the app
     // just loaded, without the widgets themselves ever touching the network.
+    // These stay keyed on the saved home station: that is what the widgets
+    // are about, whatever station Home happens to be showing.
     ref.listen(departuresProvider(homeStationId), (previous, next) {
       unawaited(syncNextDepartureAndDailyRouteWidgets(ref, homeStationId));
     });
@@ -72,953 +244,197 @@ class HomePage extends ConsumerWidget {
         }
       }
     });
-    // Self-hosted APK update check (this app is sideloaded, no Play Store).
-    // Update-available dialog is shown from `RideDetectionWatcher` instead
-    // (wraps every tab, not just Home, and re-checks on app resume too).
+
+    final choice = resolveBoardChoice(
+      ranked: ranked,
+      homeStationId: settings.homeStationId,
+      previousNearestId: _lastNearestId,
+    );
+    _lastNearestId = choice.source == BoardSource.nearest
+        ? choice.stationId
+        : null;
+    final departures = ref.watch(departuresProvider(choice.stationId));
+
+    final boardStation =
+        stations.where((s) => s.id == choice.stationId).firstOrNull ??
+        choice.nearest?.station;
+    final upcoming = departures.asData == null
+        ? const <Departure>[]
+        : upcomingDepartures(departures.asData!.value, _now);
+    if (departures.hasValue) {
+      _reloadDeparturesIfStale(choice.stationId, upcoming);
+    }
+
+    VehiclePosition? vehicle;
+    TrainProgress? progress;
+    if (upcoming.isNotEmpty && boardStation != null) {
+      vehicle = matchVehicle(upcoming.first, vehicles, _now);
+      if (vehicle != null) {
+        progress = describeTrain(vehicle, boardStation, {
+          for (final s in stations) s.id: s,
+        });
+      }
+    }
+
     final displayName = ref.watch(userDisplayNameProvider).asData?.value;
     final nameSuffix = (displayName != null && displayName.trim().isNotEmpty)
         ? ', ${displayName.trim()}'
         : '';
-    final now = DateTime.now();
-    final greeting = switch (now.hour) {
+    final greeting = switch (_now.hour) {
       < 11 => 'Selamat pagi$nameSuffix',
       < 15 => 'Selamat siang$nameSuffix',
       < 19 => 'Selamat sore$nameSuffix',
       _ => 'Selamat malam$nameSuffix',
     };
 
+    final disruptions = disruptionAlerts(
+      alerts.asData?.value ?? const <ServiceAlert>[],
+    );
+    final ridePhaseLabel = _ridePhaseLabel(ridePhase?.state);
+
+    String nameOf(String id) =>
+        stations.where((s) => s.id == id).firstOrNull?.name ?? id;
+    final favoriteParts = favorite?.split('|');
+    final hasFavorite = favoriteParts != null && favoriteParts.length == 2;
+
     return Scaffold(
-      body: CustomScrollView(
-        slivers: <Widget>[
-          SliverAppBar(
-            floating: true,
-            title: const TkLogo(size: 36),
-            actions: <Widget>[
-              IconButton(
-                tooltip: 'Pusat notifikasi',
-                onPressed: () => context.push('/notifications'),
-                icon: const Icon(Icons.notifications_none_rounded),
+      body: SafeArea(
+        bottom: false,
+        child: RefreshIndicator(
+          onRefresh: () => _refreshAll(choice.stationId),
+          child: CustomScrollView(
+            physics: const AlwaysScrollableScrollPhysics(),
+            slivers: <Widget>[
+              SliverPadding(
+                padding: const EdgeInsets.fromLTRB(16, 12, 16, 28),
+                sliver: SliverList.list(
+                  children: <Widget>[
+                    HomeHeader(
+                      greeting: greeting,
+                      dateLabel: DateFormat(
+                        'EEEE, d MMMM',
+                        'id_ID',
+                      ).format(_now),
+                    ),
+                    const SizedBox(height: 16),
+                    if (activeTrip != null) ...<Widget>[
+                      ActiveTripStatusCard(
+                        session: activeTrip,
+                        stations: stations,
+                        onTap: () => context.push('/active-trip'),
+                      ),
+                      const SizedBox(height: 12),
+                    ] else if (ridePhaseLabel != null) ...<Widget>[
+                      RideDetectionPhaseBanner(
+                        label: ridePhaseLabel,
+                        stationName: ridePhase?.stationId == null
+                            ? null
+                            : nameOf(ridePhase!.stationId!),
+                      ),
+                      const SizedBox(height: 12),
+                    ],
+                    if (disruptions.isNotEmpty) ...<Widget>[
+                      ServiceAlertBanner(alerts: disruptions),
+                      const SizedBox(height: 12),
+                    ],
+                    _buildHero(
+                      context,
+                      choice: choice,
+                      stationsAsync: stationsAsync,
+                      boardStation: boardStation,
+                      departures: departures,
+                      vehicle: vehicle,
+                      progress: progress,
+                    ),
+                    const SizedBox(height: 12),
+                    QuickActions(
+                      onSearchTrains: () => context.push('/schedule/search'),
+                      onExplore: () => context.go('/explore'),
+                    ),
+                    if (hasFavorite) ...<Widget>[
+                      const SizedBox(height: 10),
+                      FavoriteRouteTile(
+                        originName: nameOf(favoriteParts[0]),
+                        destinationName: nameOf(favoriteParts[1]),
+                        onTap: () {
+                          ref.read(tripSearchControllerProvider.notifier)
+                            ..setOrigin(favoriteParts[0])
+                            ..setDestination(favoriteParts[1]);
+                          unawaited(context.push('/schedule/search'));
+                        },
+                      ),
+                    ],
+                    if (activeTrip == null) ...<Widget>[
+                      const SizedBox(height: 20),
+                      const TkSectionLabel(
+                        'Mulai perjalanan',
+                        trailing: AntiBablasHint(),
+                      ),
+                      QuickTripCard(
+                        nearestStationId: choice.nearest?.station.id,
+                        nearestStationName: choice.nearest?.station.name,
+                        stations: stations,
+                      ),
+                    ],
+                    const SizedBox(height: 16),
+                    const DeviceStatusTiles(),
+                  ],
+                ),
               ),
-              const SizedBox(width: 8),
             ],
           ),
-          SliverPadding(
-            padding: const EdgeInsets.fromLTRB(16, 8, 16, 28),
-            sliver: SliverList.list(
-              children: <Widget>[
-                Text(greeting, style: Theme.of(context).textTheme.headlineLarge),
-                const SizedBox(height: 4),
-                const _ConnectivityIndicator(),
-                const SizedBox(height: 16),
-                if (activeTrip != null) ...<Widget>[
-                  const SizedBox(height: 12),
-                  _ActiveTripStatusCard(
-                    session: activeTrip,
-                    stations: stations,
-                    onTap: () => context.push('/active-trip'),
-                  ),
-                ] else if (_ridePhaseLabel(ridePhase?.state) != null) ...<Widget>[
-                  const SizedBox(height: 12),
-                  _RideDetectionPhaseBanner(
-                    label: _ridePhaseLabel(ridePhase?.state)!,
-                    stationName: ridePhase?.stationId == null
-                        ? null
-                        : (stations
-                                .where((s) => s.id == ridePhase!.stationId)
-                                .firstOrNull
-                                ?.name ??
-                            ridePhase?.stationId),
-                  ),
-                ],
-                const SizedBox(height: 24),
-                _NearestStationCard(
-                  fallbackStationName: homeStationName,
-                  nearest: nearest,
-                  onDepartures: () => context.push(
-                    '/station/${nearest?.station.id ?? homeStationId}',
-                  ),
-                  onDirections: () {
-                    final lat = nearest?.station.latitude ?? -6.5947;
-                    final lng = nearest?.station.longitude ?? 106.7906;
-                    final sName = nearest?.station.name ?? homeStationName;
-                    unawaited(launchMapDirections(lat, lng, label: sName));
-                  },
-                  onSeeAll: () => context.push('/nearby-stations'),
-                ),
-                const SizedBox(height: 28),
-                const SectionHeader(
-                  title: 'Mau ke mana kamu hari ini?',
-                  description: 'Pilih sendiri stasiun awal dan akhirnya.',
-                ),
-                const SizedBox(height: 12),
-                _QuickTripCard(
-                  nearestStationId: nearest?.station.id,
-                  nearestStationName: nearest?.station.name,
-                  stations: stations,
-                ),
-                const SizedBox(height: 28),
-                SectionHeader(
-                  title: 'Kereta berikutnya',
-                  description: 'Stasiun $homeStationName • estimasi',
-                  action: TextButton(
-                    onPressed: () => context.push('/station/$homeStationId'),
-                    child: const Text('Lihat semua'),
-                  ),
-                ),
-                const SizedBox(height: 12),
-                departures.when(
-                  loading: () => const _DepartureSkeleton(),
-                  error: (error, stack) => AppEmptyState(
-                    icon: Icons.cloud_off_outlined,
-                    title: 'Jadwal belum dimuat',
-                    message: 'Cache lokal tidak tersedia. Coba muat ulang.',
-                    action: OutlinedButton(
-                      onPressed: () =>
-                          ref.invalidate(departuresProvider(homeStationId)),
-                      child: const Text('Coba lagi'),
-                    ),
-                  ),
-                  data: (items) => Column(
-                    children: <Widget>[
-                      for (final item in items
-                          .where((d) => d.expectedAt.isAfter(DateTime.now()))
-                          .take(3))
-                        Padding(
-                          padding: const EdgeInsets.only(bottom: 10),
-                          child: _DepartureRow(departure: item),
-                        ),
-                    ],
-                  ),
-                ),
-                const SizedBox(height: 20),
-                const SectionHeader(title: 'Status layanan'),
-                const SizedBox(height: 12),
-                alerts.when(
-                  loading: () => const LinearProgressIndicator(),
-                  error: (error, stack) => const Text(
-                    'Status layanan tidak tersedia. Jadwal tetap dapat digunakan.',
-                  ),
-                  data: (items) => Card(
-                    child: Padding(
-                      padding: const EdgeInsets.all(16),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: <Widget>[
-                          Row(
-                            children: <Widget>[
-                              const Expanded(
-                                child: Text(
-                                  'Commuter Line Jabodetabek',
-                                  style: TextStyle(fontWeight: FontWeight.w700),
-                                ),
-                              ),
-                              ServiceStatusBadge(
-                                status: items.firstOrNull?.status ??
-                                    ServiceStatus.unavailable,
-                              ),
-                            ],
-                          ),
-                          const SizedBox(height: 10),
-                          Text(
-                            items.firstOrNull?.sourceLabel ??
-                                'Informasi belum tersedia',
-                            style: Theme.of(context).textTheme.bodySmall,
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ],
+        ),
       ),
     );
   }
 
-  /// Only the pre-boarding phases get a subtle Home banner. `confirmingTrip`
-  /// is deliberately excluded — that one navigates to a full confirmation
-  /// page instead (PRD §9 treats crossing the ask threshold as needing an
-  /// explicit prompt, not a passive banner).
-  String? _ridePhaseLabel(ActiveTripState? state) => switch (state) {
-    ActiveTripState.nearStation => 'Mendekati stasiun',
-    ActiveTripState.atStation => 'Terdeteksi di stasiun',
-    ActiveTripState.possibleBoarding => 'Memeriksa kemungkinan naik KRL…',
-    _ => null,
-  };
-
-}
-
-/// Shows real device connectivity — "Terhubung" with a green checkmark, or
-/// "Terputus" with a red X and a prompt to check the connection — driven by
-/// [connectivityProvider], never a static/hardcoded claim about which
-/// backend the app happens to be configured against.
-class _ConnectivityIndicator extends ConsumerWidget {
-  const _ConnectivityIndicator();
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final isConnected = ref.watch(connectivityProvider).asData?.value ?? true;
-    final color = isConnected ? Colors.green : Theme.of(context).colorScheme.error;
-    return Row(
-      mainAxisSize: MainAxisSize.min,
-      children: <Widget>[
-        Icon(
-          isConnected ? Icons.check_circle_rounded : Icons.cancel_rounded,
-          size: 16,
-          color: color,
-        ),
-        const SizedBox(width: 6),
-        Text(
-          isConnected ? 'Terhubung' : 'Terputus • Periksa koneksi Anda',
-          style: Theme.of(context).textTheme.bodyMedium?.copyWith(color: color),
-        ),
-      ],
-    );
-  }
-}
-
-/// The "Mau ke mana hari ini?" card. Both ends of the trip are chosen by
-/// the rider, every time — nothing is pre-filled.
-///
-/// It used to default to the saved home station → work station (with a swap
-/// button for the return leg), which is wrong for anyone whose next trip
-/// isn't their commute: the two most prominent buttons on the home screen
-/// would silently plan a journey they never asked for, and the only way to
-/// go anywhere else was a third button hidden underneath. Now the origin
-/// and destination are two empty, equal fields; the swap button, "Langsung
-/// mulai" and "Lihat detail rute" all work exactly as before, they just
-/// operate on the rider's own choice.
-///
-/// The rider's nearest station is still offered — as a one-tap suggestion
-/// chip on the origin field, never as a pre-selected value.
-class _QuickTripCard extends ConsumerStatefulWidget {
-  const _QuickTripCard({
-    required this.nearestStationId,
-    required this.nearestStationName,
-    required this.stations,
-  });
-
-  final String? nearestStationId;
-  final String? nearestStationName;
-  final List<Station> stations;
-
-  @override
-  ConsumerState<_QuickTripCard> createState() => _QuickTripCardState();
-}
-
-class _QuickTripCardState extends ConsumerState<_QuickTripCard> {
-  String? _originId;
-  String? _destinationId;
-  bool _planning = false;
-
-  bool get _isReady =>
-      _originId != null && _destinationId != null && _originId != _destinationId;
-
-  String _stationName(String id) =>
-      widget.stations.where((s) => s.id == id).firstOrNull?.name ?? id;
-
-  /// Runs the search for the two stations the rider picked and returns the
-  /// top-ranked trip (the same one "Pilihan tercepat" would show), or null
-  /// with a snackbar if nothing was found. Shared by both the instant-start
-  /// and view-detail-first actions below — only what happens with the
-  /// result differs between them.
-  Future<TransitTrip?> _search() async {
-    final originId = _originId;
-    final destinationId = _destinationId;
-    if (originId == null || destinationId == null || originId == destinationId) {
-      return null;
+  Widget _buildHero(
+    BuildContext context, {
+    required BoardChoice choice,
+    required AsyncValue<List<Station>> stationsAsync,
+    required Station? boardStation,
+    required AsyncValue<List<Departure>> departures,
+    required VehiclePosition? vehicle,
+    required TrainProgress? progress,
+  }) {
+    if (stationsAsync.isLoading && !stationsAsync.hasValue) {
+      return const NextTrainHeroSkeleton();
     }
-    final searchController = ref.read(tripSearchControllerProvider.notifier);
-    searchController
-      ..setOrigin(originId)
-      ..setDestination(destinationId);
-    if (mounted) setState(() => _planning = true);
-    await searchController.search();
-    final results = ref.read(tripSearchControllerProvider).results;
-    if (mounted) setState(() => _planning = false);
-    if (results.isEmpty) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Tidak ada jadwal ditemukan. Coba lagi nanti.'),
-          ),
-        );
-      }
-      return null;
-    }
-    return results.first;
-  }
-
-  /// Opens the top-ranked trip's detail page so the rider sees stations
-  /// passed / transfer count / schedule before confirming "Mulai
-  /// perjalanan" there themselves.
-  ///
-  /// Captures the [GoRouter] up front rather than navigating via `context`
-  /// at the end: a rebuild between the search and the navigation (e.g. this
-  /// card shifting position in `HomePage`'s unkeyed children list) can tear
-  /// down and recreate this card's element/State entirely (confirmed live
-  /// with the instant-start flow below), which would otherwise silently
-  /// drop the navigation. The router object itself stays valid regardless.
-  Future<void> _viewDetail() async {
-    final router = GoRouter.of(context);
-    final trip = await _search();
-    if (trip == null) return;
-    router.push('/trip/${trip.id}');
-  }
-
-  /// Starts the top-ranked trip immediately, skipping the detail/confirm
-  /// step — for a rider who already knows the route and just wants to go.
-  /// Same [GoRouter]-capture reasoning as [_viewDetail]: starting the trip
-  /// changes `activeTripControllerProvider`, which `HomePage` watches and
-  /// reacts to by inserting a status card above this one, tearing this
-  /// card's element down mid-flight (confirmed live).
-  Future<void> _startNow() async {
-    final router = GoRouter.of(context);
-    final trip = await _search();
-    if (trip == null) return;
-    await ref.read(activeTripControllerProvider.notifier).start(trip);
-    router.push('/active-trip');
-  }
-
-  Future<void> _pickStation({required bool isOrigin}) async {
-    final excludedId = isOrigin ? _destinationId : _originId;
-    final selected = await showModalBottomSheet<String>(
-      context: context,
-      showDragHandle: true,
-      isScrollControlled: true,
-      builder: (sheetContext) => _StationPickerSheet(
-        title: isOrigin ? 'Pilih stasiun awal' : 'Pilih stasiun akhir',
-        stations: widget.stations,
-        selectedId: isOrigin ? _originId : _destinationId,
-        excludedId: excludedId,
-      ),
-    );
-    if (selected == null || !mounted) return;
-    setState(() {
-      if (isOrigin) {
-        _originId = selected;
-      } else {
-        _destinationId = selected;
-      }
-    });
-  }
-
-  void _swap() {
-    setState(() {
-      final previousOrigin = _originId;
-      _originId = _destinationId;
-      _destinationId = previousOrigin;
-    });
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final activeTrip = ref.watch(activeTripControllerProvider);
-    if (activeTrip != null) {
-      return Card(
-        child: Padding(
-          padding: const EdgeInsets.all(16),
-          child: SizedBox(
-            width: double.infinity,
-            child: FilledButton.icon(
-              onPressed: () => context.push('/active-trip'),
-              icon: const Icon(Icons.train_rounded),
-              label: const Text('Buka perjalanan aktif'),
-            ),
-          ),
+    if (stationsAsync.hasError && !stationsAsync.hasValue) {
+      return TkCard(
+        child: TkErrorState(
+          title: 'Stasiun belum dimuat',
+          message: 'Daftar stasiun belum bisa dibaca. Coba lagi.',
+          onRetry: () => ref.invalidate(stationListProvider),
         ),
       );
     }
-
-    final nearestId = widget.nearestStationId;
-    final nearestName = widget.nearestStationName;
-    final canSuggestNearest =
-        nearestId != null && nearestName != null && _originId != nearestId;
-
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: <Widget>[
-            Row(
-              children: <Widget>[
-                Expanded(
-                  child: Column(
-                    children: <Widget>[
-                      _StationField(
-                        label: 'Stasiun awal',
-                        icon: Icons.trip_origin_rounded,
-                        stationName:
-                            _originId == null ? null : _stationName(_originId!),
-                        onTap: _planning
-                            ? null
-                            : () => _pickStation(isOrigin: true),
-                      ),
-                      const SizedBox(height: 8),
-                      _StationField(
-                        label: 'Stasiun akhir',
-                        icon: Icons.place_rounded,
-                        stationName: _destinationId == null
-                            ? null
-                            : _stationName(_destinationId!),
-                        onTap: _planning
-                            ? null
-                            : () => _pickStation(isOrigin: false),
-                      ),
-                    ],
-                  ),
-                ),
-                const SizedBox(width: 8),
-                IconButton.filledTonal(
-                  tooltip: 'Tukar stasiun awal dan akhir',
-                  onPressed: _planning ||
-                          (_originId == null && _destinationId == null)
-                      ? null
-                      : _swap,
-                  icon: const Icon(Icons.swap_vert_rounded),
-                ),
-              ],
-            ),
-            if (canSuggestNearest) ...<Widget>[
-              const SizedBox(height: 10),
-              Align(
-                alignment: Alignment.centerLeft,
-                child: ActionChip(
-                  avatar: const Icon(Icons.near_me_outlined, size: 16),
-                  label: Text('Mulai dari $nearestName (lokasi saat ini)'),
-                  onPressed: _planning
-                      ? null
-                      : () => setState(() {
-                            _originId = nearestId;
-                            if (_destinationId == nearestId) {
-                              _destinationId = null;
-                            }
-                          }),
-                ),
-              ),
-            ],
-            if (_originId != null &&
-                _destinationId != null &&
-                _originId == _destinationId) ...<Widget>[
-              const SizedBox(height: 10),
-              Text(
-                'Stasiun awal dan akhir tidak boleh sama.',
-                style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                  color: Theme.of(context).colorScheme.error,
-                ),
-              ),
-            ],
-            const SizedBox(height: 14),
-            if (_planning)
-              const SizedBox(
-                width: double.infinity,
-                child: FilledButton(
-                  onPressed: null,
-                  child: SizedBox.square(
-                    dimension: 18,
-                    child: CircularProgressIndicator(strokeWidth: 2),
-                  ),
-                ),
-              )
-            else
-              Row(
-                children: <Widget>[
-                  Expanded(
-                    child: FilledButton.icon(
-                      onPressed: _isReady ? _startNow : null,
-                      icon: const Icon(Icons.navigation_rounded, size: 18),
-                      label: const Text(
-                        'Langsung mulai',
-                        style: TextStyle(fontSize: 12),
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: OutlinedButton.icon(
-                      onPressed: _isReady ? _viewDetail : null,
-                      icon: const Icon(Icons.route_outlined, size: 18),
-                      label: const Text(
-                        'Lihat detail rute',
-                        style: TextStyle(fontSize: 12),
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            if (_originId != null) ...<Widget>[
-              const Divider(height: 24),
-              SizedBox(
-                width: double.infinity,
-                child: OutlinedButton.icon(
-                  onPressed: () {
-                    final station = widget.stations
-                        .where((s) => s.id == _originId)
-                        .firstOrNull;
-                    if (station != null) {
-                      unawaited(
-                        launchMapDirections(
-                          station.latitude,
-                          station.longitude,
-                          label: station.name,
-                        ),
-                      );
-                    }
-                  },
-                  icon: const Icon(Icons.navigation_outlined, size: 18),
-                  label: Text(
-                    'Arahkan ke ${_stationName(_originId!)}',
-                    style: const TextStyle(fontSize: 12),
-                  ),
-                ),
-              ),
-            ],
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-/// One end of the trip: a tappable field that reads "Pilih stasiun…" until
-/// the rider chooses. Deliberately identical in weight for origin and
-/// destination — neither is the one the app assumes.
-class _StationField extends StatelessWidget {
-  const _StationField({
-    required this.label,
-    required this.icon,
-    required this.stationName,
-    required this.onTap,
-  });
-
-  final String label;
-  final IconData icon;
-  final String? stationName;
-  final VoidCallback? onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final isEmpty = stationName == null;
-    return InkWell(
-      onTap: onTap,
-      borderRadius: BorderRadius.circular(12),
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-        child: Row(
-          children: <Widget>[
-            Icon(icon, size: 18, color: theme.colorScheme.primary),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: <Widget>[
-                  Text(label, style: theme.textTheme.bodySmall),
-                  const SizedBox(height: 2),
-                  Text(
-                    stationName ?? 'Pilih stasiun…',
-                    style: theme.textTheme.titleMedium?.copyWith(
-                      fontWeight: FontWeight.w700,
-                      color: isEmpty
-                          ? theme.textTheme.bodySmall?.color
-                          : theme.textTheme.titleMedium?.color,
-                    ),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                ],
-              ),
-            ),
-            const Icon(Icons.expand_more_rounded, size: 20),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-/// Searchable station list. The unfiltered list runs to the full KRL
-/// network, which is far too long to scroll to "Universitas Pancasila" —
-/// the picker this replaced had no search at all.
-class _StationPickerSheet extends StatefulWidget {
-  const _StationPickerSheet({
-    required this.title,
-    required this.stations,
-    required this.selectedId,
-    required this.excludedId,
-  });
-
-  final String title;
-  final List<Station> stations;
-  final String? selectedId;
-
-  /// The station already chosen for the *other* end of the trip — shown but
-  /// not selectable, so a rider can't build an origin-equals-destination
-  /// trip and then wonder why nothing was found.
-  final String? excludedId;
-
-  @override
-  State<_StationPickerSheet> createState() => _StationPickerSheetState();
-}
-
-class _StationPickerSheetState extends State<_StationPickerSheet> {
-  String _query = '';
-
-  @override
-  Widget build(BuildContext context) {
-    final query = _query.trim().toLowerCase();
-    final matches = widget.stations.where((station) {
-      if (query.isEmpty) return true;
-      return station.name.toLowerCase().contains(query) ||
-          station.id.toLowerCase().contains(query);
-    }).toList(growable: false);
-
-    return DraggableScrollableSheet(
-      expand: false,
-      initialChildSize: 0.75,
-      maxChildSize: 0.95,
-      builder: (context, scrollController) => Column(
-        children: <Widget>[
-          Padding(
-            padding: const EdgeInsets.fromLTRB(20, 0, 20, 12),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: <Widget>[
-                Text(
-                  widget.title,
-                  style: Theme.of(context).textTheme.titleLarge,
-                ),
-                const SizedBox(height: 12),
-                TextField(
-                  autofocus: true,
-                  decoration: const InputDecoration(
-                    prefixIcon: Icon(Icons.search_rounded),
-                    hintText: 'Cari nama stasiun',
-                  ),
-                  onChanged: (value) => setState(() => _query = value),
-                ),
-              ],
-            ),
-          ),
-          Expanded(
-            child: matches.isEmpty
-                ? Center(
-                    child: Text(
-                      'Stasiun "$_query" tidak ditemukan.',
-                      style: Theme.of(context).textTheme.bodyMedium,
-                    ),
-                  )
-                : ListView.builder(
-                    controller: scrollController,
-                    padding: const EdgeInsets.fromLTRB(8, 0, 8, 24),
-                    itemCount: matches.length,
-                    itemBuilder: (context, index) {
-                      final station = matches[index];
-                      final isExcluded = station.id == widget.excludedId;
-                      return ListTile(
-                        leading: const Icon(Icons.train_outlined),
-                        title: Text(station.name),
-                        subtitle: isExcluded
-                            ? const Text('Sudah dipakai di ujung lainnya')
-                            : null,
-                        selected: station.id == widget.selectedId,
-                        enabled: !isExcluded,
-                        onTap: () => Navigator.pop(context, station.id),
-                      );
-                    },
-                  ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-
-class _ActiveTripStatusCard extends StatelessWidget {
-  const _ActiveTripStatusCard({
-    required this.session,
-    required this.stations,
-    required this.onTap,
-  });
-
-  final ActiveTripSession session;
-  final List<Station> stations;
-  final VoidCallback onTap;
-
-  String _nameOf(String? id) {
-    if (id == null) return '-';
-    return stations.where((s) => s.id == id).firstOrNull?.name ??
-        demoStations.where((s) => s.id == id).firstOrNull?.name ??
-        id;
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final nextName = session.nextStationId == null
-        ? 'Tiba di tujuan'
-        : _nameOf(session.nextStationId);
-    final currentName = _nameOf(session.currentStationId);
-    final destinationName = _nameOf(session.trip.destinationStationId);
-    final remainingTransfers = session.trip.transferBoundaries
-        .where((b) => b.index >= session.currentStationIndex)
-        .length;
-    final nextTransferName = session.nextTransferBoundary == null
-        ? null
-        : _nameOf(
-            session.trip.stationIds[session.nextTransferBoundary!.index],
+    final station = boardStation;
+    return NextTrainHero(
+      choice: choice,
+      stationName: station?.name ?? choice.stationId,
+      departures: departures,
+      now: _now,
+      vehicle: vehicle,
+      progress: progress,
+      onOpenStation: () => context.push('/station/${choice.stationId}'),
+      onSeeAllNearby: () => context.push('/nearby-stations'),
+      onRetry: () => ref.invalidate(departuresProvider(choice.stationId)),
+      onDirections: () {
+        if (station == null) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Lokasi stasiun belum tersedia.')),
           );
-
-    return Card(
-      color: Theme.of(context).colorScheme.primaryContainer,
-      child: InkWell(
-        borderRadius: BorderRadius.circular(12),
-        onTap: onTap,
-        child: Padding(
-          padding: const EdgeInsets.all(16),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: <Widget>[
-              Row(
-                children: <Widget>[
-                  const Icon(Icons.train_rounded),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: Text(
-                      'Perjalanan sedang berlangsung',
-                      style: Theme.of(context).textTheme.titleSmall,
-                    ),
-                  ),
-                  const Icon(Icons.chevron_right_rounded),
-                ],
-              ),
-              const SizedBox(height: 10),
-              Text(
-                'Baru saja melewati $currentName',
-                style: Theme.of(context).textTheme.bodySmall,
-              ),
-              const SizedBox(height: 2),
-              Text(
-                'Stasiun berikutnya: $nextName',
-                style: Theme.of(
-                  context,
-                ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold),
-              ),
-              const SizedBox(height: 2),
-              Text(
-                '${session.remainingStops} stasiun lagi menuju $destinationName',
-                style: Theme.of(context).textTheme.bodySmall,
-              ),
-              const SizedBox(height: 6),
-              Text(
-                remainingTransfers == 0
-                    ? 'Tanpa transit lagi'
-                    : 'Transit $remainingTransfers kali lagi'
-                          '${nextTransferName == null ? '' : ', berikutnya di $nextTransferName'}',
-                style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
-            ],
+          return;
+        }
+        unawaited(
+          launchMapDirections(
+            station.latitude,
+            station.longitude,
+            label: station.name,
           ),
-        ),
-      ),
-    );
-  }
-}
-
-class _RideDetectionPhaseBanner extends StatelessWidget {
-  const _RideDetectionPhaseBanner({required this.label, this.stationName});
-
-  final String label;
-  final String? stationName;
-
-  @override
-  Widget build(BuildContext context) {
-    return Semantics(
-      label: stationName == null ? label : '$label $stationName',
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-        decoration: BoxDecoration(
-          color: Theme.of(context).colorScheme.surfaceContainerHighest,
-          borderRadius: BorderRadius.circular(12),
-        ),
-        child: Row(
-          children: <Widget>[
-            const Icon(Icons.sensors_rounded, size: 18),
-            const SizedBox(width: 8),
-            Expanded(
-              child: Text(
-                stationName == null ? label : '$label $stationName',
-                style: Theme.of(context).textTheme.bodySmall,
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _NearestStationCard extends StatelessWidget {
-  const _NearestStationCard({
-    required this.fallbackStationName,
-    required this.nearest,
-    required this.onDepartures,
-    required this.onDirections,
-    required this.onSeeAll,
-  });
-
-  final String fallbackStationName;
-  final StationDistance? nearest;
-  final VoidCallback onDepartures;
-  final VoidCallback onDirections;
-  final VoidCallback onSeeAll;
-
-  @override
-  Widget build(BuildContext context) {
-    final distance = nearest;
-    final displayName = distance?.station.name ?? fallbackStationName;
-    final subtitle = distance == null
-        ? 'Jarak pengguna belum dihitung'
-        : '${_formatDistance(distance.distanceMeters)} • '
-              '${distance.walkingMinutes} menit jalan kaki';
-
-    return Card(
-      color: AppColors.navy,
-      child: Padding(
-        padding: const EdgeInsets.all(20),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: <Widget>[
-            Row(
-              children: <Widget>[
-                const Icon(Icons.near_me_outlined, color: AppColors.softBlue),
-                const SizedBox(width: 8),
-                Text(
-                  distance == null ? 'Stasiun favorit' : 'Stasiun terdekat',
-                  style: const TextStyle(color: AppColors.softBlue),
-                ),
-                const Spacer(),
-                TextButton(
-                  onPressed: onSeeAll,
-                  style: TextButton.styleFrom(
-                    foregroundColor: AppColors.softBlue,
-                  ),
-                  child: const Text('Lihat semua'),
-                ),
-              ],
-            ),
-            const SizedBox(height: 14),
-            Text(
-              'Stasiun $displayName',
-              style: Theme.of(context).textTheme.headlineMedium?.copyWith(
-                color: AppColors.surfaceLight,
-              ),
-            ),
-            const SizedBox(height: 6),
-            Text(subtitle, style: const TextStyle(color: AppColors.textSecondaryDark)),
-            const SizedBox(height: 18),
-            Wrap(
-              spacing: 10,
-              runSpacing: 10,
-              children: <Widget>[
-                FilledButton(
-                  onPressed: onDepartures,
-                  child: const Text('Lihat kereta'),
-                ),
-                OutlinedButton(
-                  style: OutlinedButton.styleFrom(
-                    foregroundColor: AppColors.surfaceLight,
-                    side: const BorderSide(color: AppColors.borderDark),
-                  ),
-                  onPressed: onDirections,
-                  child: const Text('Arah ke stasiun'),
-                ),
-              ],
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  String _formatDistance(double meters) {
-    if (meters >= 1000) {
-      return '${(meters / 1000).toStringAsFixed(1)} km';
-    }
-    return '${meters.round()} m';
-  }
-}
-
-class _DepartureRow extends StatelessWidget {
-  const _DepartureRow({required this.departure});
-
-  final Departure departure;
-
-  @override
-  Widget build(BuildContext context) {
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(14),
-        child: Row(
-          children: <Widget>[
-            SizedBox(
-              width: 58,
-              child: Text(
-                DateFormat.Hm('id_ID').format(departure.expectedAt),
-                style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                  fontFeatures: const <FontFeature>[FontFeature.tabularFigures()],
-                ),
-              ),
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: <Widget>[
-                  Text(
-                    departure.destination,
-                    style: const TextStyle(fontWeight: FontWeight.w700),
-                  ),
-                  Text(
-                    departure.tripNumber ?? 'Nomor belum tersedia',
-                    style: Theme.of(context).textTheme.bodySmall,
-                  ),
-                ],
-              ),
-            ),
-            DataFreshnessBadge(freshness: departure.freshness, compact: true),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _DepartureSkeleton extends StatelessWidget {
-  const _DepartureSkeleton();
-
-  @override
-  Widget build(BuildContext context) {
-    return Semantics(
-      label: 'Memuat jadwal',
-      child: Column(
-        children: List<Widget>.generate(
-          3,
-          (index) => Container(
-            height: 76,
-            margin: const EdgeInsets.only(bottom: 10),
-            decoration: BoxDecoration(
-              color: Theme.of(context).colorScheme.surfaceContainerHighest,
-              borderRadius: BorderRadius.circular(18),
-            ),
-          ),
-        ),
-      ),
+        );
+      },
     );
   }
 }

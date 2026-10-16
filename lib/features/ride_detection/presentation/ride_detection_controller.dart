@@ -50,9 +50,7 @@ class RideDetectionController extends Notifier<RideDetectionPhase?> {
 
   @override
   RideDetectionPhase? build() {
-    ref.watch(
-      settingsControllerProvider.select((s) => s.rideDetectionEnabled),
-    );
+    ref.watch(settingsControllerProvider.select((s) => s.rideDetectionEnabled));
     return null;
   }
 
@@ -161,7 +159,11 @@ class RideDetectionController extends Notifier<RideDetectionPhase?> {
           // Newly near a *different* station while an exit is still
           // pending is the strongest signal: the user is moving along a
           // rail corridor, not just wandering back to the same platform.
-          await _evaluate(pendingStationId, pendingAt, subsequentStationId: nearest.id);
+          await _evaluate(
+            pendingStationId,
+            pendingAt,
+            subsequentStationId: nearest.id,
+          );
           _pendingExitStationId = null;
           _pendingExitAt = null;
         } else if (_isPreBoardPhase) {
@@ -208,7 +210,9 @@ class RideDetectionController extends Notifier<RideDetectionPhase?> {
       return const <Station>[];
     }
     final stations = await ref.read(stationProvider).getStations();
-    return stations.where((station) => ids.contains(station.id)).toList(growable: false);
+    return stations
+        .where((station) => ids.contains(station.id))
+        .toList(growable: false);
   }
 
   /// Same permission posture as `NearestStationController`/
@@ -223,7 +227,8 @@ class RideDetectionController extends Notifier<RideDetectionPhase?> {
         return null;
       }
       final permission = await Geolocator.checkPermission();
-      final granted = permission == LocationPermission.always ||
+      final granted =
+          permission == LocationPermission.always ||
           permission == LocationPermission.whileInUse;
       if (!granted) {
         return null;
@@ -289,7 +294,9 @@ class RideDetectionController extends Notifier<RideDetectionPhase?> {
           ? ActiveTripState.possibleBoarding
           : ActiveTripState.confirmingTrip,
       stationId: stationId,
-      assessment: assessment.level == RideDetectionLevel.none ? null : assessment,
+      assessment: assessment.level == RideDetectionLevel.none
+          ? null
+          : assessment,
     );
 
     // Auto-start without confirmation for ANY strong-confidence assessment
@@ -301,11 +308,13 @@ class RideDetectionController extends Notifier<RideDetectionPhase?> {
     // new signals.
     if (assessment.level == RideDetectionLevel.strong &&
         assessment.suggestedDestinationId != null) {
-      unawaited(_autoStartRecognizedTrip(
-        fromStationId: stationId,
-        toStationId: assessment.suggestedDestinationId!,
-        exitedAt: exitedAt,
-      ));
+      unawaited(
+        _autoStartRecognizedTrip(
+          fromStationId: stationId,
+          toStationId: assessment.suggestedDestinationId!,
+          exitedAt: exitedAt,
+        ),
+      );
     }
   }
 
@@ -317,13 +326,15 @@ class RideDetectionController extends Notifier<RideDetectionPhase?> {
     required DateTime exitedAt,
   }) async {
     try {
-      final trips = await ref.read(transitScheduleProvider).searchTrips(
-        TripSearchQuery(
-          originStationId: fromStationId,
-          destinationStationId: toStationId,
-          departureAt: exitedAt,
-        ),
-      );
+      final trips = await ref
+          .read(transitScheduleProvider)
+          .searchTrips(
+            TripSearchQuery(
+              originStationId: fromStationId,
+              destinationStationId: toStationId,
+              departureAt: exitedAt,
+            ),
+          );
       final best = const RouteRanker().rank(trips, exitedAt).firstOrNull;
       if (best == null) return;
       if (!ref.mounted) return;
@@ -373,13 +384,15 @@ class RideDetectionController extends Notifier<RideDetectionPhase?> {
     }
 
     try {
-      final trips = await ref.read(transitScheduleProvider).searchTrips(
-        TripSearchQuery(
-          originStationId: assessment.stationId,
-          destinationStationId: destination,
-          departureAt: assessment.exitedAt,
-        ),
-      );
+      final trips = await ref
+          .read(transitScheduleProvider)
+          .searchTrips(
+            TripSearchQuery(
+              originStationId: assessment.stationId,
+              destinationStationId: destination,
+              departureAt: assessment.exitedAt,
+            ),
+          );
       final best = const RouteRanker()
           .rank(trips, assessment.exitedAt)
           .firstOrNull;

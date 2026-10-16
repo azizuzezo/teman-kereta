@@ -3,6 +3,9 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../../app/config/app_environment.dart';
 import '../../../core/preferences/preferences_store.dart';
+import 'auth_errors.dart';
+
+const _unavailable = 'Layanan akun belum tersedia. Silakan hubungi admin.';
 
 /// An account is optional. Guest mode preferences and display names are stored
 /// on device, while authenticated accounts sync to Supabase when enabled.
@@ -21,50 +24,122 @@ class AccountController extends Notifier<AsyncValue<User?>> {
     return AsyncValue.data(auth.currentSession?.user);
   }
 
-  Future<String?> signIn({required String email, required String password}) async {
+  /// `needsVerification` is true when the account exists but its email was
+  /// never confirmed: the caller sends the user to the code screen.
+  Future<({String? error, bool needsVerification})> signIn({
+    required String email,
+    required String password,
+  }) async {
     if (!AppEnvironment.supabaseEnabled) {
-      return 'Layanan akun belum tersedia. Silakan hubungi admin.';
+      return (error: _unavailable, needsVerification: false);
     }
     try {
       await Supabase.instance.client.auth.signInWithPassword(
         email: email,
         password: password,
       );
-      return null;
-    } on Object {
-      return 'Email atau kata sandi salah. Silakan coba lagi.';
+      return (error: null, needsVerification: false);
+    } on Object catch (error) {
+      final failure = mapAuthError(error, AuthFlow.signIn);
+      return (
+        error: failure.message,
+        needsVerification: failure.needsVerification,
+      );
     }
   }
 
-  /// `needsEmailConfirmation` is true when Auth requires confirming the email
-  /// before a session is issued — caller tells the user to check inbox.
-  Future<({String? error, bool needsEmailConfirmation})> signUp({
+  /// Creates the account and makes Supabase email a 6 digit code.
+  ///
+  /// With "Confirm email" enabled on the project Auth returns no session
+  /// until the code is verified, so `needsEmailConfirmation` is true and the
+  /// router gate (`currentUser != null`) keeps the user out of the app.
+  /// If the project has confirmation switched off Auth hands back a session
+  /// at once and `needsEmailConfirmation` is false.
+  Future<({String? error, bool needsEmailConfirmation, bool alreadyRegistered})>
+  signUp({
     required String email,
     required String password,
     String? displayName,
   }) async {
     if (!AppEnvironment.supabaseEnabled) {
       return (
-        error: 'Layanan akun belum tersedia. Silakan hubungi admin.',
+        error: _unavailable,
         needsEmailConfirmation: false,
+        alreadyRegistered: false,
       );
     }
     try {
-      await Supabase.instance.client.auth.signUp(
+      final response = await Supabase.instance.client.auth.signUp(
         email: email,
         password: password,
-        data: displayName != null ? {'display_name': displayName} : null,
+        data: displayName != null && displayName.trim().isNotEmpty
+            ? <String, dynamic>{'display_name': displayName.trim()}
+            : null,
       );
-      if (displayName != null && displayName.trim().isNotEmpty) {
-        await updateDisplayName(displayName.trim());
+      // An already confirmed address does not raise an error when
+      // confirmation is on (that would leak which emails exist). Auth returns
+      // an obfuscated user with no identities and sends no email.
+      if (response.session == null &&
+          (response.user?.identities?.isEmpty ?? false)) {
+        return (
+          error: mapAuthError(
+            const AuthException('', code: 'user_already_exists'),
+            AuthFlow.signUp,
+          ).message,
+          needsEmailConfirmation: false,
+          alreadyRegistered: true,
+        );
       }
-      final needsEmailConfirmation = Supabase.instance.client.auth.currentSession == null;
-      return (error: null, needsEmailConfirmation: needsEmailConfirmation);
-    } on Object {
+      final needsEmailConfirmation = response.session == null;
+      if (needsEmailConfirmation) OtpCooldown.markSent(email);
       return (
-        error: 'Pendaftaran gagal. Pastikan email belum terdaftar dan coba lagi.',
-        needsEmailConfirmation: false,
+        error: null,
+        needsEmailConfirmation: needsEmailConfirmation,
+        alreadyRegistered: false,
       );
+    } on Object catch (error) {
+      final failure = mapAuthError(error, AuthFlow.signUp);
+      return (
+        error: failure.message,
+        needsEmailConfirmation: false,
+        alreadyRegistered: failure.alreadyRegistered,
+      );
+    }
+  }
+
+  /// Checks the 6 digit code from the sign-up email. Returns an error message
+  /// or null on success, in which case Auth has issued a session.
+  Future<String?> verifySignupOtp({
+    required String email,
+    required String code,
+  }) async {
+    if (!AppEnvironment.supabaseEnabled) return _unavailable;
+    try {
+      await Supabase.instance.client.auth.verifyOTP(
+        type: OtpType.signup,
+        email: email,
+        token: code,
+      );
+      return null;
+    } on Object catch (error) {
+      return mapAuthError(error, AuthFlow.verifyOtp).message;
+    }
+  }
+
+  /// Emails a fresh code. Returns an error message or null on success.
+  Future<String?> resendSignupOtp({required String email}) async {
+    if (!AppEnvironment.supabaseEnabled) return _unavailable;
+    try {
+      await Supabase.instance.client.auth.resend(
+        type: OtpType.signup,
+        email: email,
+      );
+      OtpCooldown.markSent(email);
+      return null;
+    } on Object catch (error) {
+      final failure = mapAuthError(error, AuthFlow.resendOtp);
+      if (failure.rateLimited) OtpCooldown.markSent(email);
+      return failure.message;
     }
   }
 
@@ -215,6 +290,73 @@ class AccountController extends Notifier<AsyncValue<User?>> {
     await Supabase.instance.client.auth.signOut();
   }
 
+  /// Permanently deletes the signed-in account and everything attached to it
+  /// (profile, preferences, favorites, device tokens, follows, forum posts,
+  /// comments, likes) via the `delete_my_account` RPC, whose cascades do the
+  /// database side. Uploaded files are removed first, best-effort, since a
+  /// storage hiccup shouldn't stop someone from deleting their account.
+  /// Returns an error message on failure, or null on success.
+  Future<String?> deleteAccount() async {
+    if (!AppEnvironment.supabaseEnabled) {
+      return 'Layanan akun belum tersedia.';
+    }
+    final client = Supabase.instance.client;
+    final user = client.auth.currentUser;
+    if (user == null) return 'Masuk dulu untuk menghapus akun.';
+    try {
+      await _removeUserFiles('avatars', user.id);
+      await _removeUserFiles('forum-post-images', user.id);
+    } on Object {
+      // Best-effort; see above.
+    }
+    try {
+      await client.rpc<void>('delete_my_account');
+    } on Object {
+      return 'Gagal menghapus akun. Periksa koneksi lalu coba lagi.';
+    }
+    // The server-side session is gone with the account, so only clear the
+    // local one; a server round-trip here would just fail.
+    try {
+      await client.auth.signOut(scope: SignOutScope.local);
+    } on Object {
+      // Nothing left to clean up on the server.
+    }
+    return null;
+  }
+
+  /// Removes every object under `<bucket>/<prefix>/`, descending into the
+  /// per-post subfolders forum images are stored in.
+  Future<void> _removeUserFiles(String bucket, String prefix) async {
+    final storage = Supabase.instance.client.storage.from(bucket);
+    // `list` returns at most one page (100 by default), so walk every page
+    // before deleting; otherwise files past the first page would be orphaned
+    // for good once the account (and the RLS that lets us reach them) is gone.
+    const pageSize = 100;
+    final entries = <FileObject>[];
+    for (var offset = 0; ; offset += pageSize) {
+      final page = await storage.list(
+        path: prefix,
+        searchOptions: SearchOptions(limit: pageSize, offset: offset),
+      );
+      entries.addAll(page);
+      if (page.length < pageSize) {
+        break;
+      }
+    }
+    final files = <String>[];
+    for (final entry in entries) {
+      // Folders come back without an id; files have one.
+      if (entry.id == null) {
+        await _removeUserFiles(bucket, '$prefix/${entry.name}');
+      } else {
+        files.add('$prefix/${entry.name}');
+      }
+    }
+    if (files.isNotEmpty) {
+      await storage.remove(files);
+    }
+  }
+
   /// Sends a password reset email. Returns an error string or null on success.
   Future<String?> resetPassword({required String email}) async {
     if (!AppEnvironment.supabaseEnabled) {
@@ -226,8 +368,8 @@ class AccountController extends Notifier<AsyncValue<User?>> {
         redirectTo: 'temankereta://app/account/reset-password',
       );
       return null;
-    } on Object {
-      return 'Gagal mengirim email reset. Silakan coba lagi.';
+    } on Object catch (error) {
+      return mapAuthError(error, AuthFlow.resetPassword).message;
     }
   }
 }

@@ -1,17 +1,18 @@
 import 'package:flutter/material.dart';
 
 import '../../../app/theme/app_theme.dart';
+import '../../../core/widgets/tk_components.dart';
 
-/// One station in [TripRailTimeline] — already resolved to a display name
+/// One station in [TripRailTimeline], already resolved to a display name
 /// and (when this station is a real transfer point) its instruction text,
 /// so the widget itself stays free of station-lookup/domain-model concerns.
 typedef RailStation = ({String name, String? transferInstruction});
 
 /// The vertical rail line making up the "Urutan stasiun" list on the active
-/// trip screen: past stops in solid green, the hop currently underway
-/// filling in blue as [hopFraction] grows from GPS, everything ahead left
-/// neutral. Replaces the old plain icon+text list with something that
-/// visibly moves as the rider does.
+/// trip screen: past stops and the line already travelled in the primary
+/// color, the hop currently underway filling in as [hopFraction] grows from
+/// GPS, everything ahead left neutral, and the destination marked with the
+/// accent. It visibly moves as the rider does.
 ///
 /// Long routes collapse the middle of the already-passed stops behind a
 /// single "N stasiun terlewat" row (tap to expand) and auto-scroll to the
@@ -33,7 +34,7 @@ class TripRailTimeline extends StatefulWidget {
   final double hopFraction;
 
   /// True when the line-fill and pulse should render their end state
-  /// immediately instead of animating — device reduce-motion, or the
+  /// immediately instead of animating: device reduce-motion, or the
   /// trip's own battery-saver mode.
   final bool reduceMotion;
 
@@ -105,6 +106,7 @@ class _TripRailTimelineState extends State<TripRailTimeline> {
           name: station.name,
           isPast: isPast,
           isCurrent: isCurrent,
+          isNext: index == widget.currentIndex + 1,
           isDestination: isDestination,
           isLast: index == total - 1,
           transferInstruction: station.transferInstruction,
@@ -126,36 +128,41 @@ class _CollapsedPastDivider extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return InkWell(
-      onTap: onTap,
-      borderRadius: BorderRadius.circular(10),
-      child: Padding(
-        padding: const EdgeInsets.symmetric(vertical: 10),
-        child: Row(
-          children: <Widget>[
-            SizedBox(
-              width: 22,
-              child: Icon(
-                Icons.more_vert_rounded,
-                size: 18,
-                color: Theme.of(context).colorScheme.outline,
+    final tk = context.tk;
+    return Semantics(
+      button: true,
+      label: '$count stasiun terlewat, ketuk untuk menampilkan',
+      excludeSemantics: true,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(10),
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(minHeight: 48),
+          child: Row(
+            children: <Widget>[
+              SizedBox(
+                width: 28,
+                child: Icon(
+                  Icons.more_vert_rounded,
+                  size: 20,
+                  color: tk.textMuted,
+                ),
               ),
-            ),
-            const SizedBox(width: 12),
-            Text(
-              '$count stasiun terlewat',
-              style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                color: Theme.of(context).colorScheme.outline,
-                fontWeight: FontWeight.w600,
+              const SizedBox(width: 14),
+              Flexible(
+                child: Text(
+                  '$count stasiun terlewat',
+                  overflow: TextOverflow.ellipsis,
+                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                    color: tk.textMuted,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
               ),
-            ),
-            const SizedBox(width: 6),
-            Icon(
-              Icons.expand_more_rounded,
-              size: 16,
-              color: Theme.of(context).colorScheme.outline,
-            ),
-          ],
+              const SizedBox(width: 6),
+              Icon(Icons.expand_more_rounded, size: 18, color: tk.textMuted),
+            ],
+          ),
         ),
       ),
     );
@@ -167,6 +174,7 @@ class _RailRow extends StatelessWidget {
     required this.name,
     required this.isPast,
     required this.isCurrent,
+    required this.isNext,
     required this.isDestination,
     required this.isLast,
     required this.belowFraction,
@@ -178,14 +186,15 @@ class _RailRow extends StatelessWidget {
   final String name;
   final bool isPast;
   final bool isCurrent;
+  final bool isNext;
   final bool isDestination;
   final bool isLast;
-  // Non-null exactly when this row is a real transfer station — gives it a
+  // Non-null exactly when this row is a real transfer station: gives it a
   // distinct marker from an ordinary pass-through stop, per the platform
   // guidance already computed for this trip (see transfer_platform_guidance).
   final String? transferInstruction;
 
-  /// How much of the line below this node is already-travelled (green):
+  /// How much of the line below this node is already-travelled:
   /// 1.0 for a past stop, 0.0 for one still ahead, and the live [hopFraction]
   /// for the one hop currently underway.
   final double belowFraction;
@@ -193,14 +202,18 @@ class _RailRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final tk = context.tk;
+    final textTheme = Theme.of(context).textTheme;
     final isTransfer = transferInstruction != null;
-    final nodeColor = isCurrent
-        ? AppColors.blue
+    final (nodeColor, iconColor) = isDestination
+        ? (tk.accent, tk.onAccent)
+        : isCurrent
+        ? (tk.primary, tk.onPrimary)
         : isPast
-        ? AppColors.success
+        ? (tk.primary, tk.onPrimary)
         : isTransfer
-        ? AppColors.warning
-        : Theme.of(context).colorScheme.outline;
+        ? (tk.warning, tk.surface)
+        : (tk.surface, tk.textMuted);
     final icon = isDestination
         ? Icons.flag_rounded
         : isCurrent
@@ -217,106 +230,108 @@ class _RailRow extends StatelessWidget {
         : isTransfer
         ? '$name, stasiun transit: $transferInstruction'
         : name;
+    final emphasized = isCurrent || isDestination || isNext;
 
     return Semantics(
       label: label,
       child: IntrinsicHeight(
-        child: Padding(
-          padding: const EdgeInsets.only(bottom: 2),
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: <Widget>[
-              SizedBox(
-                width: 22,
-                child: Column(
-                  children: <Widget>[
-                    _RailNode(
-                      icon: icon,
-                      color: nodeColor,
-                      pulse: isCurrent,
-                      reduceMotion: reduceMotion,
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: <Widget>[
+            SizedBox(
+              width: 28,
+              child: Column(
+                children: <Widget>[
+                  _RailNode(
+                    icon: icon,
+                    color: nodeColor,
+                    iconColor: iconColor,
+                    ring:
+                        !isPast && !isCurrent && !isDestination && !isTransfer,
+                    pulse: isCurrent,
+                    reduceMotion: reduceMotion,
+                  ),
+                  if (!isLast)
+                    Expanded(
+                      child: _RailConnector(
+                        fraction: belowFraction,
+                        reduceMotion: reduceMotion,
+                      ),
                     ),
-                    if (!isLast)
-                      Expanded(
-                        child: _RailConnector(
-                          fraction: belowFraction,
-                          reduceMotion: reduceMotion,
+                ],
+              ),
+            ),
+            const SizedBox(width: 14),
+            Expanded(
+              child: Padding(
+                padding: EdgeInsets.only(bottom: isLast ? 0 : 16, top: 1),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: <Widget>[
+                    Row(
+                      children: <Widget>[
+                        Expanded(
+                          child: Text(
+                            name,
+                            style:
+                                (emphasized
+                                        ? textTheme.titleMedium
+                                        : textTheme.bodyLarge)
+                                    ?.copyWith(
+                                      fontWeight: emphasized
+                                          ? FontWeight.w800
+                                          : FontWeight.w500,
+                                      color: isPast ? tk.textMuted : tk.text,
+                                    ),
+                          ),
+                        ),
+                        if (isTransfer) ...<Widget>[
+                          const SizedBox(width: 8),
+                          const TkPill(
+                            label: 'Transit',
+                            tone: TkPillTone.warning,
+                            dense: true,
+                          ),
+                        ] else if (isCurrent) ...<Widget>[
+                          const SizedBox(width: 8),
+                          const TkPill(
+                            label: 'Sekarang',
+                            tone: TkPillTone.primary,
+                            dense: true,
+                          ),
+                        ] else if (isDestination) ...<Widget>[
+                          const SizedBox(width: 8),
+                          const TkPill(
+                            label: 'Tujuan',
+                            tone: TkPillTone.accent,
+                            dense: true,
+                          ),
+                        ] else if (isNext) ...<Widget>[
+                          const SizedBox(width: 8),
+                          const TkPill(
+                            label: 'Berikutnya',
+                            tone: TkPillTone.neutral,
+                            dense: true,
+                          ),
+                        ],
+                      ],
+                    ),
+                    if (isTransfer)
+                      Padding(
+                        padding: const EdgeInsets.only(top: 2),
+                        child: Text(
+                          transferInstruction!,
+                          style: textTheme.bodyMedium?.copyWith(
+                            color: tk.warning,
+                            fontWeight: FontWeight.w600,
+                          ),
                         ),
                       ),
                   ],
                 ),
               ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Padding(
-                  padding: EdgeInsets.only(bottom: isLast ? 0 : 14, top: 2),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: <Widget>[
-                      Row(
-                        children: <Widget>[
-                          Expanded(
-                            child: Text(
-                              name,
-                              style: TextStyle(
-                                fontWeight: isCurrent || isDestination
-                                    ? FontWeight.w700
-                                    : FontWeight.w400,
-                                color: isPast
-                                    ? Theme.of(
-                                        context,
-                                      ).colorScheme.onSurfaceVariant
-                                    : null,
-                              ),
-                            ),
-                          ),
-                          if (isTransfer)
-                            _TransferChip()
-                          else if (isCurrent)
-                            const Text('Sekarang'),
-                        ],
-                      ),
-                      if (isTransfer)
-                        Padding(
-                          padding: const EdgeInsets.only(top: 2),
-                          child: Text(
-                            transferInstruction!,
-                            style: Theme.of(context).textTheme.bodySmall
-                                ?.copyWith(
-                                  color: AppColors.warning,
-                                  fontWeight: FontWeight.w600,
-                                ),
-                          ),
-                        ),
-                    ],
-                  ),
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class _TransferChip extends StatelessWidget {
-  const _TransferChip();
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-      decoration: BoxDecoration(
-        color: AppColors.warning.withValues(alpha: 0.14),
-        borderRadius: BorderRadius.circular(999),
-      ),
-      child: const Text(
-        'Transit',
-        style: TextStyle(
-          color: AppColors.warning,
-          fontSize: 11,
-          fontWeight: FontWeight.w700,
+            ),
+          ],
         ),
       ),
     );
@@ -331,30 +346,31 @@ class _RailConnector extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final tk = context.tk;
     final clamped = fraction.clamp(0.0, 1.0);
-    final backgroundColor = Theme.of(context).colorScheme.outlineVariant;
-    final filledColor = clamped >= 1.0 ? AppColors.success : AppColors.blue;
     // A CustomPainter, not a Stack+FractionallySizedBox: this connector sits
     // inside an Expanded under IntrinsicHeight (to match the row's real
     // text height), and FractionallySizedBox has no sane answer when asked
-    // for its *intrinsic* height — it crashed the layout pass here. A
+    // for its *intrinsic* height: it crashed the layout pass here. A
     // childless CustomPaint reports 0 for that query (same as a plain
     // Container would), then paints the real fill against the concrete size
     // it gets during actual layout.
-    return SizedBox(
-      width: 2,
-      child: TweenAnimationBuilder<double>(
-        tween: Tween<double>(begin: 0, end: clamped),
-        duration: reduceMotion
-            ? Duration.zero
-            : const Duration(milliseconds: 500),
-        curve: Curves.easeOut,
-        builder: (context, value, _) => CustomPaint(
-          size: Size.infinite,
-          painter: _RailConnectorPainter(
-            fraction: value,
-            backgroundColor: backgroundColor,
-            filledColor: filledColor,
+    return Center(
+      child: SizedBox(
+        width: 4,
+        child: TweenAnimationBuilder<double>(
+          tween: Tween<double>(begin: 0, end: clamped),
+          duration: reduceMotion
+              ? Duration.zero
+              : const Duration(milliseconds: 500),
+          curve: Curves.easeOut,
+          builder: (context, value, _) => CustomPaint(
+            size: Size.infinite,
+            painter: _RailConnectorPainter(
+              fraction: value,
+              backgroundColor: tk.border,
+              filledColor: tk.primary,
+            ),
           ),
         ),
       ),
@@ -396,12 +412,18 @@ class _RailNode extends StatefulWidget {
   const _RailNode({
     required this.icon,
     required this.color,
+    required this.iconColor,
+    required this.ring,
     required this.pulse,
     required this.reduceMotion,
   });
 
   final IconData icon;
   final Color color;
+  final Color iconColor;
+
+  /// Draws a hairline ring (stops still ahead) so they read as open.
+  final bool ring;
   final bool pulse;
   final bool reduceMotion;
 
@@ -448,17 +470,24 @@ class _RailNodeState extends State<_RailNode>
 
   @override
   Widget build(BuildContext context) {
-    final dot = DecoratedBox(
-      decoration: BoxDecoration(shape: BoxShape.circle, color: widget.color),
-      child: Padding(
-        padding: const EdgeInsets.all(3),
-        child: Icon(widget.icon, size: 14, color: AppColors.surfaceLight),
+    final tk = context.tk;
+    final dot = Container(
+      width: 24,
+      height: 24,
+      alignment: Alignment.center,
+      decoration: BoxDecoration(
+        shape: BoxShape.circle,
+        color: widget.color,
+        border: widget.ring ? Border.all(color: tk.border, width: 2) : null,
+      ),
+      child: ExcludeSemantics(
+        child: Icon(widget.icon, size: 15, color: widget.iconColor),
       ),
     );
     if (!widget.pulse) {
-      return dot;
+      return SizedBox(width: 28, height: 28, child: Center(child: dot));
     }
-    // A single breathing halo behind the "current" node only — one live
+    // A single breathing halo behind the "current" node only: one live
     // marker per screen, not a glow scattered across every element.
     final controller = _controller;
     Widget haloCircle(double opacity) => Container(

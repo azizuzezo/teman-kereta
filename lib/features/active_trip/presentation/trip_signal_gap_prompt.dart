@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../app/theme/app_theme.dart';
 import '../../../core/utils/geo.dart';
 import 'active_trip_controller.dart';
 import 'trip_signal_gap.dart';
@@ -28,7 +29,10 @@ Future<void> showTripSignalGapPrompt(
   final stillOnBoard = await showDialog<bool>(
     context: context,
     builder: (dialogContext) => AlertDialog(
-      icon: const Icon(Icons.location_searching_rounded),
+      icon: Icon(
+        Icons.location_searching_rounded,
+        color: dialogContext.tk.primary,
+      ),
       title: const Text('Masih di kereta?'),
       content: Column(
         mainAxisSize: MainAxisSize.min,
@@ -43,7 +47,9 @@ Future<void> showTripSignalGapPrompt(
             'Sinyal sempat hilang ${formatDuration(gap.gap)} '
             'dan kamu berpindah sekitar ${formatDistanceMeters(gap.movedMeters)}. '
             'Perjalanan sudah kami lanjutkan otomatis ke posisi terbarumu.',
-            style: Theme.of(dialogContext).textTheme.bodySmall,
+            style: Theme.of(dialogContext).textTheme.bodySmall?.copyWith(
+              color: dialogContext.tk.textMuted,
+            ),
           ),
         ],
       ),

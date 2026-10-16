@@ -1,334 +1,411 @@
+import 'dart:async';
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:latlong2/latlong.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../../../app/theme/app_theme.dart';
 import '../../../core/widgets/empty_state.dart';
+import '../../../core/widgets/tk_components.dart';
 import '../../../data/providers/provider_registry.dart';
 import '../../../data/providers/rail_line_shapes.dart';
 import '../../../domain/entities/transit_models.dart';
+import 'live_map_geometry.dart';
 import 'live_trip_position_controller.dart';
+import 'map_panels.dart';
+import 'map_points_layer.dart';
+import 'map_tiles.dart';
 
-/// Real geographic live map: OpenStreetMap tiles with each KRL line drawn as
-/// a polyline through its real stations (in real per-line stop order, via
-/// `Station.stopOrderByLine`) plus station markers, real train markers from
-/// [vehiclePositionsProvider] (see below), and, while an Active Trip is on
-/// board, the rider's own approximate live position — see
-/// `LiveTripPositionController`.
+/// Live map of the KRL network.
 ///
-/// The train markers are genuinely real, not the raster KAI map image or
-/// hand-drawn schematic this page used to show (both removed for being
-/// unreliable/fake-looking). They're built from `public.vehicle_positions`,
-/// which `pg_cron` refreshes every minute from two real sources: an
-/// official/GTFS feed when configured, and — always available, since it
-/// only needs this app's own riders — an anonymized, averaged fold of
-/// `crowd_position_reports` (see `CrowdPositionReporter` and
-/// `refresh_crowd_vehicle_positions()`). A marker only renders while its
-/// `recordedAt` is recent — a stale row never lingers pretending to be
-/// live — and each one's own [DataFreshnessBadge] tier (real-time,
-/// near-real-time, or estimated) is shown honestly, never smoothed over.
-class LiveMapPage extends ConsumerStatefulWidget {
+/// Draws each line on its real track (OpenStreetMap rail geometry bundled in
+/// `rail_line_shapes.dart`) in the line's own colour, stations as hollow dots,
+/// estimated and reported train positions, and, during an active trip, the
+/// rider's position. Tiles come from [MapTileSource] through a disk cache.
+///
+/// Why it is cheap to pan: the base layer is cached raster tiles; the track
+/// layer is one stable `PolylineLayer` instance (flutter_map throws away its
+/// projection cache every time it receives a *new* layer widget); stations,
+/// trains and the rider are one canvas pass ([MapPointsLayer]) instead of
+/// ~100 marker widgets; and selection, line filter and live positions each
+/// update only their own layer through listenables instead of rebuilding the
+/// page.
+class LiveMapPage extends ConsumerWidget {
   const LiveMapPage({super.key});
 
   @override
-  ConsumerState<LiveMapPage> createState() => _LiveMapPageState();
+  Widget build(BuildContext context, WidgetRef ref) {
+    final stations = ref.watch(stationListProvider);
+    return Scaffold(
+      backgroundColor: context.tk.bg,
+      body: stations.when(
+        loading: () => const _MapLoading(),
+        error: (error, stack) => SafeArea(
+          child: TkErrorState(
+            title: 'Peta belum bisa dibuka',
+            message:
+                'Data stasiun belum bisa dimuat. Periksa koneksi, lalu coba lagi.',
+            onRetry: () => ref.invalidate(stationListProvider),
+          ),
+        ),
+        data: (items) {
+          if (items.isEmpty) {
+            return const SafeArea(
+              child: AppEmptyState(
+                icon: Icons.map_outlined,
+                title: 'Peta belum tersedia',
+                message: 'Belum ada data stasiun untuk digambar.',
+              ),
+            );
+          }
+          return _MapBody(stations: items);
+        },
+      ),
+    );
+  }
 }
 
-class _LiveMapPageState extends ConsumerState<LiveMapPage> {
-  final MapController _mapController = MapController();
-  LatLng? _myLocation;
-  bool _locatingMe = false;
-
-  static const Map<String, String> _lineLabels = {
-    'BOGOR': 'Lintas Bogor',
-    'NAMBO': 'Lintas Bogor - Nambo (Cabang)',
-    'CIKARANG': 'Lintas Cikarang',
-    'RANGKASBITUNG': 'Lintas Rangkasbitung',
-    'TANGERANG': 'Lintas Tangerang',
-    'TANJUNG_PRIOK': 'Lintas Tanjung Priok',
-    'BEKASI': 'Lintas Bekasi',
-    'SERPONG': 'Lintas Serpong',
-  };
-
-  /// Used only when a line code has no matching row in `public.lines` (via
-  /// [lineColorsProvider]) — should not normally happen since every real
-  /// line is seeded there with its correct KAI Commuterline brand color.
-  static const Color _fallbackLineColor = Color(0xFF9CA3AF);
-
-  // Central Jakarta — a sensible default center before real station data
-  // has loaded.
-  static const LatLng _defaultCenter = LatLng(-6.2088, 106.8456);
+class _MapLoading extends StatelessWidget {
+  const _MapLoading();
 
   @override
   Widget build(BuildContext context) {
-    final stations = ref.watch(stationListProvider);
-    final youAreHere = ref.watch(liveTripPositionControllerProvider);
-    final lineColors =
-        ref.watch(lineColorsProvider).asData?.value ?? const <String, Color>{};
-    final vehicles =
-        ref.watch(vehiclePositionsProvider).asData?.value ??
-        const <VehiclePosition>[];
-
-    return Scaffold(
-      appBar: AppBar(title: const Text('Peta perjalanan')),
-      body: SafeArea(
-        child: stations.when(
-          loading: () => const Center(child: CircularProgressIndicator()),
-          error: (e, _) => const AppEmptyState(
-            icon: Icons.map_outlined,
-            title: 'Peta belum tersedia',
-            message: 'Data jalur tidak dapat dimuat.',
-          ),
-          data: (items) {
-            if (items.isEmpty) {
-              return const AppEmptyState(
-                icon: Icons.map_outlined,
-                title: 'Peta belum tersedia',
-                message: 'Belum ada data stasiun.',
-              );
-            }
-            return _buildMap(items, youAreHere, lineColors, vehicles);
-          },
+    return const SafeArea(
+      child: Padding(
+        padding: EdgeInsets.fromLTRB(16, 8, 16, 16),
+        child: Column(
+          children: <Widget>[
+            TkSkeleton(height: 48, radius: TkRadius.control),
+            SizedBox(height: 8),
+            Row(
+              children: <Widget>[
+                TkSkeleton(height: 40, width: 72, radius: TkRadius.control),
+                SizedBox(width: 8),
+                TkSkeleton(height: 40, width: 96, radius: TkRadius.control),
+                SizedBox(width: 8),
+                TkSkeleton(height: 40, width: 96, radius: TkRadius.control),
+              ],
+            ),
+            SizedBox(height: 12),
+            Expanded(child: _FillSkeleton()),
+          ],
         ),
       ),
     );
   }
+}
 
-  /// A vehicle position older than this is treated as stale and hidden —
-  /// belt-and-suspenders on top of `refresh_crowd_vehicle_positions()`
-  /// already deleting+rebuilding its own slice every minute from a 3-minute
-  /// lookback, so nothing here should ever actually be this old in
-  /// practice, but a stalled cron must never leave a ghost train frozen on
-  /// the map looking live.
-  static const _vehicleStaleAfter = Duration(minutes: 5);
+class _FillSkeleton extends StatelessWidget {
+  const _FillSkeleton();
 
-  Widget _buildMap(
-    List<Station> stations,
-    LatLng? youAreHere,
-    Map<String, Color> lineColors,
-    List<VehiclePosition> vehicles,
-  ) {
-    final allLineIds = stations.expand((s) => s.lineIds).toSet().toList()
-      ..sort();
-    final freshVehicles = vehicles
-        .where(
-          (v) => DateTime.now().difference(v.recordedAt) <= _vehicleStaleAfter,
-        )
-        .toList(growable: false);
+  @override
+  Widget build(BuildContext context) {
+    return LayoutBuilder(
+      builder: (context, constraints) =>
+          TkSkeleton(height: constraints.maxHeight, radius: TkRadius.card),
+    );
+  }
+}
 
-    final polylines = <Polyline<Object>>[
-      for (var i = 0; i < allLineIds.length; i += 1)
-        if (_lineTrackPoints(stations, allLineIds[i]) case final points
-            when points.length >= 2)
-          Polyline<Object>(
-            points: points,
-            color: lineColors[allLineIds[i]] ?? _fallbackLineColor,
-            strokeWidth: 4,
-          ),
+class _MapBody extends ConsumerStatefulWidget {
+  const _MapBody({required this.stations});
+
+  final List<Station> stations;
+
+  @override
+  ConsumerState<_MapBody> createState() => _MapBodyState();
+}
+
+class _MapBodyState extends ConsumerState<_MapBody> {
+  static const _packageName = 'id.temankereta.teman_kereta';
+
+  final MapController _mapController = MapController();
+  final ValueNotifier<MapSelection?> _selection = ValueNotifier(null);
+  final ValueNotifier<String?> _lineFilter = ValueNotifier(null);
+  final ValueNotifier<LatLng?> _myLocation = ValueNotifier(null);
+  final ValueNotifier<bool> _locating = ValueNotifier(false);
+  final TileHealthTracker _tileHealth = TileHealthTracker();
+  final StreamController<void> _tileReset = StreamController<void>.broadcast();
+
+  late List<MapStationPoint> _points;
+  late List<String> _lineIds;
+  late List<LineTrack> _tracks;
+  late Map<String, Station> _stationsByCode;
+  late LatLngBounds _stationBounds;
+
+  // Memoised so unrelated rebuilds hand flutter_map the very same layer
+  // widgets (see class comment).
+  Map<String, Color>? _colorsSource;
+  bool? _colorsDark;
+  Map<String, Color> _colors = const <String, Color>{};
+  Object? _trackKey;
+  Widget? _trackLayer;
+  Widget? _tileLayer;
+
+  @override
+  void initState() {
+    super.initState();
+    _derive();
+  }
+
+  @override
+  void didUpdateWidget(_MapBody oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (!identical(oldWidget.stations, widget.stations)) {
+      _derive();
+      _trackKey = null;
+    }
+  }
+
+  void _derive() {
+    final stations = widget.stations;
+    _points = <MapStationPoint>[for (final s in stations) MapStationPoint(s)];
+    _lineIds = lineIdsOf(stations);
+    _tracks = <LineTrack>[
+      for (final id in _lineIds)
+        ?buildLineTrack(lineId: id, stations: stations, shapes: railLineShapes),
     ];
+    _stationsByCode = <String, Station>{for (final s in stations) s.code: s};
+    _stationBounds = LatLngBounds.fromPoints(<LatLng>[
+      for (final p in _points) p.point,
+    ]);
+  }
 
-    final center = stations.isNotEmpty
-        ? LatLng(stations.first.latitude, stations.first.longitude)
-        : _defaultCenter;
+  @override
+  void dispose() {
+    _selection.dispose();
+    _lineFilter.dispose();
+    _myLocation.dispose();
+    _locating.dispose();
+    _tileHealth.dispose();
+    unawaited(_tileReset.close());
+    _mapController.dispose();
+    super.dispose();
+  }
 
-    return Stack(
-      children: <Widget>[
-        FlutterMap(
-          mapController: _mapController,
-          options: MapOptions(
-            initialCenter: center,
-            initialZoom: 11,
-            minZoom: 9,
-            maxZoom: 18,
-          ),
-          children: <Widget>[
-            TileLayer(
-              urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
-              userAgentPackageName: 'id.temankereta.teman_kereta',
-            ),
-            PolylineLayer<Object>(polylines: polylines),
-            MarkerLayer(
-              markers: <Marker>[
-                for (final station in stations)
-                  Marker(
-                    point: LatLng(station.latitude, station.longitude),
-                    width: 110,
-                    height: 14,
-                    alignment: Alignment.centerLeft,
-                    child: GestureDetector(
-                      onTap: () => _showStationName(station),
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: <Widget>[
-                          Container(
-                            width: 10,
-                            height: 10,
-                            decoration: BoxDecoration(
-                              color: AppColors.navy,
-                              shape: BoxShape.circle,
-                              border: Border.all(color: Colors.white, width: 2),
-                            ),
-                          ),
-                          const SizedBox(width: 4),
-                          Flexible(
-                            child: Text(
-                              station.name,
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                              style: const TextStyle(
-                                fontSize: 9,
-                                fontWeight: FontWeight.w600,
-                                shadows: <Shadow>[
-                                  Shadow(
-                                    color: Colors.white,
-                                    offset: Offset(0.5, 0.5),
-                                    blurRadius: 1,
-                                  ),
-                                  Shadow(
-                                    color: Colors.white,
-                                    offset: Offset(-0.5, -0.5),
-                                    blurRadius: 1,
-                                  ),
-                                ],
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-                for (final vehicle in freshVehicles)
-                  Marker(
-                    point: LatLng(vehicle.latitude, vehicle.longitude),
-                    width: 34,
-                    height: 34,
-                    child: GestureDetector(
-                      onTap: () => _showVehicleInfo(vehicle, stations),
-                      child: const _VehicleMarker(),
-                    ),
-                  ),
-                if (youAreHere != null)
-                  Marker(
-                    point: youAreHere,
-                    width: 22,
-                    height: 22,
-                    child: const _YouAreHereMarker(),
-                  ),
-                if (_myLocation != null)
-                  Marker(
-                    point: _myLocation!,
-                    width: 20,
-                    height: 20,
-                    child: const _MyLocationMarker(),
-                  ),
-              ],
-            ),
-          ],
-        ),
-        Positioned(
-          right: 12,
-          top: 12,
-          child: _MapControls(
-            onZoomIn: () => _zoomBy(1),
-            onZoomOut: () => _zoomBy(-1),
-            onLocateMe: _goToMyLocation,
-            locating: _locatingMe,
-          ),
-        ),
-        Positioned(
-          left: 12,
-          right: 12,
-          bottom: 12,
-          child: _LineLegend(
-            lineIds: allLineIds,
-            labels: _lineLabels,
-            colors: lineColors,
-            fallbackColor: _fallbackLineColor,
-            showVehicleEntry: freshVehicles.isNotEmpty,
-          ),
-        ),
-      ],
+  Map<String, Color> _lineColorsFor(Map<String, Color> db, bool dark) {
+    if (!identical(db, _colorsSource) || dark != _colorsDark) {
+      _colorsSource = db;
+      _colorsDark = dark;
+      _colors = resolveLineColors(
+        lineIds: _lineIds,
+        dbColors: db,
+        mapBackground: dark
+            ? MapTileSource.darkBackgroundReference
+            : MapTileSource.lightBackgroundReference,
+      );
+    }
+    return _colors;
+  }
+
+  Widget _buildTileLayer() {
+    return _tileLayer ??= TileLayer(
+      urlTemplate: MapTileSource.urlTemplate,
+      userAgentPackageName: _packageName,
+      tileProvider: ref.read(mapTileProviderProvider),
+      maxNativeZoom: 19,
+      maxZoom: 18,
+      keepBuffer: 2,
+      panBuffer: 1,
+      tileDisplay: const TileDisplay.instantaneous(),
+      evictErrorTileStrategy: EvictErrorTileStrategy.notVisible,
+      errorTileCallback: (tile, error, stackTrace) => _tileHealth.recordError(),
+      reset: _tileReset.stream,
     );
   }
 
-  /// Older/mock data uses long-form line codes that don't match the real
-  /// production `lines.code` values in [railLineShapes] — map them so both
-  /// naming schemes resolve to the same real track geometry.
-  static const Map<String, String> _lineIdAliases = <String, String>{
-    'RANGKASBITUNG': 'RANGKAS',
-    'TANJUNG_PRIOK': 'PRIOK',
-  };
-
-  /// The polyline to draw for [lineId]: the real track geometry from
-  /// [railLineShapes] (sourced from OpenStreetMap route relations) when
-  /// available, otherwise a straight-segment fallback through
-  /// [_orderedLineStations] for lines OSM data hasn't been fetched for yet.
-  List<LatLng> _lineTrackPoints(List<Station> stations, String lineId) {
-    final shape =
-        railLineShapes[lineId] ?? railLineShapes[_lineIdAliases[lineId]];
-    if (shape != null) {
-      return shape
-          .map((point) => LatLng(point[0], point[1]))
-          .toList(growable: false);
+  Widget _buildTrackLayer(String? filter, TkColors tk) {
+    final key = Object.hash(
+      filter,
+      tk.isDark,
+      identityHashCode(_colors),
+      _tracks.length,
+    );
+    if (_trackLayer != null && _trackKey == key) {
+      return _trackLayer!;
     }
-    return _orderedLineStations(
-      stations,
-      lineId,
-    ).map((s) => LatLng(s.latitude, s.longitude)).toList(growable: false);
+    _trackKey = key;
+    // A white outline keeps each line readable over the red/orange roads of
+    // the base map and where parallel lines run side by side.
+    final casing = Colors.white.withValues(alpha: tk.isDark ? 0.85 : 0.95);
+    Polyline<Object> line(
+      LineTrack track, {
+      required bool dim,
+      required bool bold,
+    }) {
+      final base = _colors[track.lineId] ?? tk.primary;
+      return Polyline<Object>(
+        points: track.points,
+        color: dim ? base.withValues(alpha: 0.22) : base,
+        strokeWidth: bold ? 6 : (dim ? 3 : 4.5),
+        borderStrokeWidth: dim ? 0 : 2,
+        borderColor: casing,
+        pattern: track.isRealTrack
+            ? const StrokePattern.solid()
+            : StrokePattern.dashed(segments: const <double>[10, 8]),
+      );
+    }
+
+    final dimmed = <Polyline<Object>>[];
+    final normal = <Polyline<Object>>[];
+    for (final track in _tracks) {
+      if (filter == null) {
+        normal.add(line(track, dim: false, bold: false));
+      } else if (track.lineId == filter) {
+        normal.add(line(track, dim: false, bold: true));
+      } else {
+        dimmed.add(line(track, dim: true, bold: false));
+      }
+    }
+    return _trackLayer = PolylineLayer<Object>(
+      polylines: <Polyline<Object>>[...dimmed, ...normal],
+    );
   }
 
-  /// Real stations on [lineId], ordered by `Station.stopOrderByLine[lineId]`
-  /// — used only as a fallback polyline (straight segments between
-  /// consecutive stations) for lines not covered by [railLineShapes].
-  List<Station> _orderedLineStations(List<Station> stations, String lineId) {
-    final onLine = stations
-        .where((s) => s.lineIds.contains(lineId))
-        .toList(growable: false);
-    onLine.sort((a, b) {
-      final orderA = a.stopOrderByLine[lineId];
-      final orderB = b.stopOrderByLine[lineId];
-      if (orderA != null && orderB != null) {
-        return orderA.compareTo(orderB);
-      }
-      // Stations missing stop-order data (non-Supabase providers) fall back
-      // to latitude so the line still draws something reasonable rather
-      // than nothing.
-      return a.latitude.compareTo(b.latitude);
-    });
-    return onLine;
+  void _onMapTap(TapPosition position, LatLng latLng) {
+    final tap = position.relative;
+    if (tap == null) {
+      return;
+    }
+    final vehicles = freshVehicles(
+      ref.read(vehiclePositionsProvider).asData?.value ??
+          const <VehiclePosition>[],
+      DateTime.now(),
+    );
+    _selection.value = hitTestMapPoints(
+      camera: _mapController.camera,
+      tap: tap,
+      stations: _points,
+      vehicles: vehicles,
+      lineFilter: _lineFilter.value,
+    );
   }
 
   void _zoomBy(double delta) {
     final camera = _mapController.camera;
-    _mapController.move(camera.center, (camera.zoom + delta).clamp(9, 18));
+    _mapController.move(camera.center, camera.clampZoom(camera.zoom + delta));
   }
 
-  /// Centers the map on the device's current position, requesting location
-  /// permission if needed — an explicit tap on a clearly-labeled "lokasi
-  /// saya" button already explains why, matching the pattern in
-  /// `NearestStationController.requestPermissionAndRefresh`.
-  Future<void> _goToMyLocation() async {
-    if (_locatingMe) {
+  void _selectLine(String? lineId) {
+    _lineFilter.value = lineId;
+    final current = _selection.value;
+    if (lineId != null &&
+        current is StationSelection &&
+        !stationIsOnLine(current.station, lineId)) {
+      _selection.value = null;
+    }
+    final track = lineId == null
+        ? null
+        : _tracks.where((t) => t.lineId == lineId).firstOrNull;
+    final bounds = track != null && track.points.isNotEmpty
+        ? LatLngBounds.fromPoints(track.points)
+        : _stationBounds;
+    _mapController.fitCamera(
+      CameraFit.bounds(
+        bounds: bounds,
+        padding: const EdgeInsets.fromLTRB(40, 150, 40, 120),
+        maxZoom: 14,
+      ),
+    );
+  }
+
+  Future<void> _openSearch() async {
+    final picked = await showStationSearchSheet(
+      context,
+      stations: widget.stations,
+      lineColors: _colors,
+    );
+    if (picked == null || !mounted) {
       return;
     }
-    setState(() => _locatingMe = true);
+    final camera = _mapController.camera;
+    _mapController.move(
+      LatLng(picked.latitude, picked.longitude),
+      math.max(camera.zoom, 14.5),
+    );
+    _selection.value = StationSelection(picked);
+  }
+
+  Future<bool> _explainLocation() async {
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Tampilkan lokasimu di peta?'),
+        content: const Text(
+          'Teman Kereta membaca lokasimu sekali, saat kamu menekan tombol ini, '
+          'hanya untuk menunjukkan posisimu di peta. Lokasi tidak disimpan '
+          'dan tidak dikirim ke mana pun.',
+        ),
+        actions: <Widget>[
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(false),
+            child: const Text('Nanti saja'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(dialogContext).pop(true),
+            child: const Text('Lanjut'),
+          ),
+        ],
+      ),
+    );
+    return ok ?? false;
+  }
+
+  void _toast(String message, {SnackBarAction? action}) {
+    if (!mounted) {
+      return;
+    }
+    ScaffoldMessenger.of(context)
+      ..hideCurrentSnackBar()
+      ..showSnackBar(
+        SnackBar(
+          content: Text(message),
+          action: action,
+          duration: const Duration(seconds: 4),
+        ),
+      );
+  }
+
+  Future<void> _goToMyLocation() async {
+    if (_locating.value) {
+      return;
+    }
+    _locating.value = true;
     try {
-      final serviceEnabled = await Geolocator.isLocationServiceEnabled();
-      if (!serviceEnabled) {
-        _showLocationMessage('Aktifkan layanan lokasi di perangkat Anda.');
+      if (!await Geolocator.isLocationServiceEnabled()) {
+        _toast(
+          'Layanan lokasi di HP belum aktif.',
+          action: SnackBarAction(
+            label: 'Aktifkan',
+            onPressed: () => unawaited(Geolocator.openLocationSettings()),
+          ),
+        );
         return;
       }
       var permission = await Geolocator.checkPermission();
       if (permission == LocationPermission.denied) {
+        if (!await _explainLocation() || !mounted) {
+          return;
+        }
         permission = await Geolocator.requestPermission();
       }
-      final granted =
-          permission == LocationPermission.always ||
-          permission == LocationPermission.whileInUse;
-      if (!granted) {
-        _showLocationMessage('Izin lokasi diperlukan untuk fitur ini.');
+      if (permission == LocationPermission.deniedForever) {
+        _toast(
+          'Izin lokasi dimatikan. Aktifkan dari pengaturan aplikasi.',
+          action: SnackBarAction(
+            label: 'Buka pengaturan',
+            onPressed: () => unawaited(Geolocator.openAppSettings()),
+          ),
+        );
+        return;
+      }
+      if (permission != LocationPermission.always &&
+          permission != LocationPermission.whileInUse) {
+        _toast('Lokasi belum diizinkan, jadi posisimu belum bisa ditampilkan.');
         return;
       }
       final position = await Geolocator.getCurrentPosition(
@@ -341,161 +418,172 @@ class _LiveMapPageState extends ConsumerState<LiveMapPage> {
         return;
       }
       final here = LatLng(position.latitude, position.longitude);
-      setState(() => _myLocation = here);
-      _mapController.move(here, 15);
+      _myLocation.value = here;
+      _mapController.move(here, math.max(_mapController.camera.zoom, 15));
     } on Object {
-      _showLocationMessage('Tidak dapat mengambil lokasi saat ini.');
+      _toast('Lokasimu belum bisa dibaca. Coba lagi sebentar lagi.');
     } finally {
-      if (mounted) {
-        setState(() => _locatingMe = false);
-      }
+      _locating.value = false;
     }
   }
 
-  void _showLocationMessage(String message) {
-    if (!mounted) {
-      return;
+  void _retryTiles() {
+    _tileHealth.reset();
+    _tileReset.add(null);
+  }
+
+  Future<void> _openAttribution() async {
+    try {
+      await launchUrl(
+        Uri.parse(MapTileSource.attributionUrl),
+        mode: LaunchMode.externalApplication,
+      );
+    } on Object {
+      // Nothing useful to show: the credit text itself is already visible.
     }
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(message), duration: const Duration(seconds: 2)),
-    );
   }
-
-  void _showStationName(Station station) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(station.name),
-        duration: const Duration(seconds: 2),
-      ),
-    );
-  }
-
-  /// [VehiclePosition.previousStationId]/`nextStationId` already resolved to
-  /// station *codes* (not names) by `SupabaseTransitProvider`, so this looks
-  /// the real station name up the same way the station markers' labels do.
-  void _showVehicleInfo(VehiclePosition vehicle, List<Station> stations) {
-    final byCode = {for (final s in stations) s.code: s};
-    final next = vehicle.nextStationId == null
-        ? null
-        : byCode[vehicle.nextStationId];
-    final freshnessLabel = switch (vehicle.freshness) {
-      DataFreshness.realtime => 'real-time',
-      DataFreshness.nearRealtime => 'hampir real-time',
-      DataFreshness.estimated => 'estimasi',
-      DataFreshness.unavailable => 'tidak tersedia',
-    };
-    final message = next == null
-        ? 'Posisi kereta • $freshnessLabel'
-        : 'Menuju ${next.name} • $freshnessLabel';
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(message), duration: const Duration(seconds: 2)),
-    );
-  }
-}
-
-class _VehicleMarker extends StatelessWidget {
-  const _VehicleMarker();
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      decoration: BoxDecoration(
-        color: AppColors.blue,
-        shape: BoxShape.circle,
-        border: Border.all(color: Colors.white, width: 2.5),
-        boxShadow: const <BoxShadow>[
-          BoxShadow(color: Colors.black26, blurRadius: 4),
-        ],
-      ),
-      child: const Icon(Icons.train_rounded, size: 17, color: Colors.white),
+    final tk = context.tk;
+    final dbColors =
+        ref.watch(lineColorsProvider).asData?.value ?? const <String, Color>{};
+    final colors = _lineColorsFor(dbColors, tk.isDark);
+
+    final tiles = _buildTileLayer();
+    final initialFit = _points.length >= 2
+        ? CameraFit.bounds(
+            bounds: _stationBounds,
+            padding: const EdgeInsets.fromLTRB(32, 150, 32, 110),
+            maxZoom: 13,
+          )
+        : null;
+    final constraintBounds = LatLngBounds(
+      LatLng(_stationBounds.south - 0.4, _stationBounds.west - 0.4),
+      LatLng(_stationBounds.north + 0.4, _stationBounds.east + 0.4),
     );
-  }
-}
 
-class _YouAreHereMarker extends StatelessWidget {
-  const _YouAreHereMarker();
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      decoration: BoxDecoration(
-        color: AppColors.coral,
-        shape: BoxShape.circle,
-        border: Border.all(color: Colors.white, width: 3),
-        boxShadow: const <BoxShadow>[
-          BoxShadow(color: Colors.black26, blurRadius: 4),
-        ],
-      ),
-      child: const Icon(Icons.person_pin_circle, size: 14, color: Colors.white),
-    );
-  }
-}
-
-class _MyLocationMarker extends StatelessWidget {
-  const _MyLocationMarker();
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      decoration: const BoxDecoration(
-        color: Colors.blue,
-        shape: BoxShape.circle,
-        border: Border.fromBorderSide(
-          BorderSide(color: Colors.white, width: 3),
-        ),
-        boxShadow: <BoxShadow>[BoxShadow(color: Colors.black26, blurRadius: 4)],
-      ),
-    );
-  }
-}
-
-class _MapControls extends StatelessWidget {
-  const _MapControls({
-    required this.onZoomIn,
-    required this.onZoomOut,
-    required this.onLocateMe,
-    required this.locating,
-  });
-
-  final VoidCallback onZoomIn;
-  final VoidCallback onZoomOut;
-  final VoidCallback onLocateMe;
-  final bool locating;
-
-  @override
-  Widget build(BuildContext context) {
-    return Column(
+    return Stack(
+      fit: StackFit.expand,
       children: <Widget>[
-        _MapControlButton(
-          icon: locating
-              ? const SizedBox(
-                  width: 18,
-                  height: 18,
-                  child: CircularProgressIndicator(strokeWidth: 2),
-                )
-              : const Icon(Icons.my_location),
-          onPressed: locating ? null : onLocateMe,
-          tooltip: 'Lokasi saya',
-        ),
-        const SizedBox(height: 8),
-        Material(
-          color: Theme.of(context).colorScheme.surface.withValues(alpha: 0.95),
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(12),
-          ),
-          elevation: 2,
-          child: Column(
-            children: <Widget>[
-              IconButton(
-                icon: const Icon(Icons.add),
-                tooltip: 'Perbesar',
-                onPressed: onZoomIn,
+        Semantics(
+          label:
+              'Peta jalur KRL. Untuk memilih stasiun, pakai kolom Cari stasiun.',
+          child: FlutterMap(
+            mapController: _mapController,
+            options: MapOptions(
+              initialCenter: _points.first.point,
+              initialZoom: 12,
+              initialCameraFit: initialFit,
+              minZoom: 9,
+              maxZoom: 18,
+              backgroundColor: tk.surfaceAlt,
+              cameraConstraint: CameraConstraint.containCenter(
+                bounds: constraintBounds,
               ),
-              const Divider(height: 1),
-              IconButton(
-                icon: const Icon(Icons.remove),
-                tooltip: 'Perkecil',
-                onPressed: onZoomOut,
+              interactionOptions: const InteractionOptions(
+                flags: InteractiveFlag.all & ~InteractiveFlag.rotate,
+              ),
+              onTap: _onMapTap,
+            ),
+            children: <Widget>[
+              if (tk.isDark)
+                ColorFiltered(
+                  colorFilter: MapTileSource.darkMutedTileFilter,
+                  child: tiles,
+                )
+              else
+                tiles,
+              ValueListenableBuilder<String?>(
+                valueListenable: _lineFilter,
+                builder: (context, filter, _) => _buildTrackLayer(filter, tk),
+              ),
+              _PointsHost(
+                points: _points,
+                lineColors: colors,
+                lineFilter: _lineFilter,
+                selection: _selection,
+                myLocation: _myLocation,
+                colors: tk,
+              ),
+            ],
+          ),
+        ),
+        Positioned(
+          top: 0,
+          left: 0,
+          right: 0,
+          child: SafeArea(
+            bottom: false,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: <Widget>[
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
+                  child: MapSearchField(onTap: _openSearch),
+                ),
+                if (_lineIds.isNotEmpty)
+                  ValueListenableBuilder<String?>(
+                    valueListenable: _lineFilter,
+                    builder: (context, filter, _) => MapLineChips(
+                      lineIds: _lineIds,
+                      lineColors: colors,
+                      selected: filter,
+                      onSelected: _selectLine,
+                    ),
+                  ),
+                ListenableBuilder(
+                  listenable: _tileHealth,
+                  builder: (context, _) => _tileHealth.isDegraded
+                      ? MapTileErrorBanner(onRetry: _retryTiles)
+                      : const SizedBox.shrink(),
+                ),
+              ],
+            ),
+          ),
+        ),
+        Positioned(
+          left: 0,
+          right: 0,
+          bottom: 0,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: <Widget>[
+              Padding(
+                padding: const EdgeInsets.fromLTRB(12, 0, 12, 8),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.end,
+                  children: <Widget>[
+                    Flexible(
+                      child: Align(
+                        alignment: Alignment.bottomLeft,
+                        child: _AttributionChip(onTap: _openAttribution),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    ValueListenableBuilder<bool>(
+                      valueListenable: _locating,
+                      builder: (context, locating, _) => MapControls(
+                        onZoomIn: () => _zoomBy(1),
+                        onZoomOut: () => _zoomBy(-1),
+                        onLocate: _goToMyLocation,
+                        locating: locating,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              ValueListenableBuilder<MapSelection?>(
+                valueListenable: _selection,
+                builder: (context, selection, _) => selection == null
+                    ? const SizedBox.shrink()
+                    : MapSelectionPanel(
+                        selection: selection,
+                        lineColors: colors,
+                        stationsByCode: _stationsByCode,
+                        onClose: () => _selection.value = null,
+                      ),
               ),
             ],
           ),
@@ -505,98 +593,114 @@ class _MapControls extends StatelessWidget {
   }
 }
 
-class _MapControlButton extends StatelessWidget {
-  const _MapControlButton({
-    required this.icon,
-    required this.onPressed,
-    required this.tooltip,
+/// Rebuilds only the stations/trains/rider canvas when live data, selection or
+/// filter change. A timer re-checks train freshness so a stale marker leaves
+/// the map even when no new data arrives.
+class _PointsHost extends ConsumerStatefulWidget {
+  const _PointsHost({
+    required this.points,
+    required this.lineColors,
+    required this.lineFilter,
+    required this.selection,
+    required this.myLocation,
+    required this.colors,
   });
 
-  final Widget icon;
-  final VoidCallback? onPressed;
-  final String tooltip;
+  final List<MapStationPoint> points;
+  final Map<String, Color> lineColors;
+  final ValueNotifier<String?> lineFilter;
+  final ValueNotifier<MapSelection?> selection;
+  final ValueNotifier<LatLng?> myLocation;
+  final TkColors colors;
+
+  @override
+  ConsumerState<_PointsHost> createState() => _PointsHostState();
+}
+
+class _PointsHostState extends ConsumerState<_PointsHost> {
+  Timer? _staleTimer;
+
+  @override
+  void initState() {
+    super.initState();
+    _staleTimer = Timer.periodic(const Duration(seconds: 30), (_) {
+      if (mounted) {
+        setState(() {});
+      }
+    });
+  }
+
+  @override
+  void dispose() {
+    _staleTimer?.cancel();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
-    return Material(
-      color: Theme.of(context).colorScheme.surface.withValues(alpha: 0.95),
-      shape: const CircleBorder(),
-      elevation: 2,
-      child: IconButton(icon: icon, tooltip: tooltip, onPressed: onPressed),
+    final vehicles = freshVehicles(
+      ref.watch(vehiclePositionsProvider).asData?.value ??
+          const <VehiclePosition>[],
+      DateTime.now(),
+    );
+    final trip = ref.watch(liveTripPositionControllerProvider);
+    return ListenableBuilder(
+      listenable: Listenable.merge(<Listenable>[
+        widget.lineFilter,
+        widget.selection,
+        widget.myLocation,
+      ]),
+      builder: (context, _) => MapPointsLayer(
+        stations: widget.points,
+        vehicles: vehicles,
+        lineColors: widget.lineColors,
+        lineFilter: widget.lineFilter.value,
+        selection: widget.selection.value,
+        myLocation: widget.myLocation.value,
+        tripPosition: trip,
+        colors: widget.colors,
+      ),
     );
   }
 }
 
-class _LineLegend extends StatelessWidget {
-  const _LineLegend({
-    required this.lineIds,
-    required this.labels,
-    required this.colors,
-    required this.fallbackColor,
-    required this.showVehicleEntry,
-  });
+class _AttributionChip extends StatelessWidget {
+  const _AttributionChip({required this.onTap});
 
-  final List<String> lineIds;
-  final Map<String, String> labels;
-  final Map<String, Color> colors;
-  final Color fallbackColor;
-
-  /// Only shown once at least one real train marker is on screen, so the
-  /// legend never explains a symbol that isn't there (e.g. a quiet period
-  /// with no crowd-sourced reports yet).
-  final bool showVehicleEntry;
+  final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
-    if (lineIds.isEmpty) {
-      return const SizedBox.shrink();
-    }
-    return Card(
-      color: Theme.of(context).colorScheme.surface.withValues(alpha: 0.95),
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-        child: Wrap(
-          spacing: 12,
-          runSpacing: 4,
-          children: <Widget>[
-            if (showVehicleEntry)
-              Row(
-                mainAxisSize: MainAxisSize.min,
-                children: <Widget>[
-                  Container(
-                    width: 14,
-                    height: 14,
-                    decoration: const BoxDecoration(
-                      color: AppColors.blue,
-                      shape: BoxShape.circle,
-                    ),
-                    child: const Icon(
-                      Icons.train_rounded,
-                      size: 10,
-                      color: Colors.white,
-                    ),
-                  ),
-                  const SizedBox(width: 6),
-                  const Text('Posisi kereta', style: TextStyle(fontSize: 11)),
-                ],
+    final tk = context.tk;
+    return Semantics(
+      button: true,
+      link: true,
+      label: 'Hak cipta peta, ${MapTileSource.attributionText}',
+      excludeSemantics: true,
+      child: InkWell(
+        onTap: onTap,
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(minHeight: 48),
+          child: Center(
+            widthFactor: 1,
+            child: DecoratedBox(
+              decoration: BoxDecoration(
+                color: tk.surface.withValues(alpha: 0.88),
+                borderRadius: BorderRadius.circular(8),
               ),
-            for (final lineId in lineIds)
-              Row(
-                mainAxisSize: MainAxisSize.min,
-                children: <Widget>[
-                  Container(
-                    width: 12,
-                    height: 4,
-                    color: colors[lineId] ?? fallbackColor,
-                  ),
-                  const SizedBox(width: 6),
-                  Text(
-                    labels[lineId] ?? lineId,
-                    style: const TextStyle(fontSize: 11),
-                  ),
-                ],
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                child: Text(
+                  '© ${MapTileSource.attributionText}',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: Theme.of(
+                    context,
+                  ).textTheme.labelSmall?.copyWith(color: tk.textMuted),
+                ),
               ),
-          ],
+            ),
+          ),
         ),
       ),
     );

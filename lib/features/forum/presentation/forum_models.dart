@@ -108,6 +108,35 @@ class ForumComment {
   final UserSummary? author;
 }
 
+/// What the feed is currently narrowed to. [followingOnly] limits it to
+/// accounts the signed-in user follows; [lineId] to posts tagged with one
+/// line. The two combine.
+class ForumFeedFilter {
+  const ForumFeedFilter({this.lineId, this.followingOnly = false});
+
+  static const all = ForumFeedFilter();
+
+  final String? lineId;
+  final bool followingOnly;
+
+  bool get isActive => lineId != null || followingOnly;
+
+  ForumFeedFilter withLine(String? id) =>
+      ForumFeedFilter(lineId: id, followingOnly: followingOnly);
+
+  ForumFeedFilter withFollowingOnly({required bool value}) =>
+      ForumFeedFilter(lineId: lineId, followingOnly: value);
+
+  @override
+  bool operator ==(Object other) =>
+      other is ForumFeedFilter &&
+      other.lineId == lineId &&
+      other.followingOnly == followingOnly;
+
+  @override
+  int get hashCode => Object.hash(lineId, followingOnly);
+}
+
 /// A minimal row from `public.lines`, just enough to power the composer's
 /// optional line-tag picker (there is no existing Flutter-side line list
 /// provider to reuse — `transit_providers.dart` only exposes stations).

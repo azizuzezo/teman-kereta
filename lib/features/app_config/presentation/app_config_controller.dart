@@ -45,7 +45,9 @@ class AppConfigController extends Notifier<AppConfigState> {
       final byKey = {
         for (final row in rows) row['key'] as String: row['value'],
       };
-      state = AppConfigState(maintenanceMode: byKey['maintenance_mode'] == true);
+      state = AppConfigState(
+        maintenanceMode: byKey['maintenance_mode'] == true,
+      );
     } on Object {
       // Best-effort: if app_config can't be reached, the app just behaves as
       // if maintenance mode is off rather than blocking on a config fetch.

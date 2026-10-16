@@ -9,7 +9,10 @@ import '../../core/widgets/empty_state.dart';
 import '../../features/account/presentation/login_page.dart';
 import '../../features/account/presentation/reset_password_page.dart';
 import '../../features/account/presentation/set_username_page.dart';
+import '../../features/account/presentation/verify_otp_page.dart';
 import '../../features/active_trip/presentation/active_trip_page.dart';
+import '../../features/active_trip/presentation/trip_complete_page.dart';
+import '../../features/forum/presentation/blocked_users_page.dart';
 import '../../features/forum/presentation/forum_feed_page.dart';
 import '../../features/forum/presentation/forum_post_composer_page.dart';
 import '../../features/forum/presentation/forum_post_detail_page.dart';
@@ -32,7 +35,6 @@ import '../../features/settings/presentation/notification_settings_page.dart';
 import '../../features/settings/presentation/profile_page.dart';
 import '../../features/settings/presentation/settings_controller.dart';
 import '../../features/settings/presentation/sound_test_page.dart';
-import '../../features/settings/presentation/widget_settings_page.dart';
 import '../../features/social/presentation/followers_list_page.dart';
 import '../../features/social/presentation/following_list_page.dart';
 import '../../features/social/presentation/user_profile_page.dart';
@@ -56,6 +58,7 @@ const _authGateExemptRoutes = <String>{
   '/account/login',
   '/account/reset-password',
   '/account/set-username',
+  '/account/verify-otp',
 };
 
 /// Bridges a `Stream` (here, Supabase's auth-state-change stream) to a
@@ -162,8 +165,7 @@ final appRouterProvider = Provider<GoRouter>((Ref ref) {
                 path: '/explore',
                 builder: (context, state) => ExplorePage(
                   key: state.pageKey,
-                  initialStationId:
-                      state.uri.queryParameters['station'] ?? 'SUD',
+                  initialStationId: state.uri.queryParameters['station'],
                 ),
               ),
             ],
@@ -218,6 +220,11 @@ final appRouterProvider = Provider<GoRouter>((Ref ref) {
         path: '/help',
         parentNavigatorKey: _rootNavigatorKey,
         builder: (context, state) => const HelpPage(),
+      ),
+      GoRoute(
+        path: '/blocked-users',
+        parentNavigatorKey: _rootNavigatorKey,
+        builder: (context, state) => const BlockedUsersPage(),
       ),
       GoRoute(
         path: '/privacy',
@@ -286,11 +293,6 @@ final appRouterProvider = Provider<GoRouter>((Ref ref) {
         builder: (context, state) => const AccessibilitySettingsPage(),
       ),
       GoRoute(
-        path: '/settings/widgets',
-        parentNavigatorKey: _rootNavigatorKey,
-        builder: (context, state) => const WidgetSettingsPage(),
-      ),
-      GoRoute(
         path: '/forum/compose',
         parentNavigatorKey: _rootNavigatorKey,
         builder: (context, state) => const ForumPostComposerPage(),
@@ -338,6 +340,14 @@ final appRouterProvider = Provider<GoRouter>((Ref ref) {
         path: '/account/set-username',
         parentNavigatorKey: _rootNavigatorKey,
         builder: (context, state) => const SetUsernamePage(),
+      ),
+      GoRoute(
+        path: '/account/verify-otp',
+        parentNavigatorKey: _rootNavigatorKey,
+        builder: (context, state) => VerifyOtpPage(
+          email: state.uri.queryParameters['email'] ?? '',
+          resendOnOpen: state.uri.queryParameters['resend'] == '1',
+        ),
       ),
     ],
     errorBuilder: (context, state) => Scaffold(

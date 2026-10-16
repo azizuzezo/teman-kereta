@@ -15,6 +15,14 @@ class MainActivity : FlutterActivity() {
     private lateinit var activityRecognitionManager: ActivityRecognitionManager
     private var pendingActivityPermissionResult: MethodChannel.Result? = null
 
+    // Opening the app (e.g. by tapping the alert) means the rider noticed:
+    // silence the bell, like Dart's "Matikan alarm" handling. Only the bell:
+    // the spoken announcement is short and is allowed to finish.
+    override fun onResume() {
+        super.onResume()
+        AlertAudioPlayer.silenceBell()
+    }
+
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
         activityRecognitionManager = ActivityRecognitionManager(this)
@@ -43,8 +51,32 @@ class MainActivity : FlutterActivity() {
             "requestIgnoreBatteryOptimizations" -> requestIgnoreBatteryOptimizations(result)
             "openManufacturerBatterySettings" -> openManufacturerBatterySettings(result)
             "requestPinAppWidget" -> requestPinAppWidget(call.argumentsMap(), result)
+            "getAudioRoute" -> result.success(AlertAudioPlayer.routeSnapshot(this))
+            "playAlertAudio" -> playAlertAudio(call.argumentsMap(), result)
+            "silenceAlertBell" -> {
+                AlertAudioPlayer.silenceBell()
+                result.success(null)
+            }
+            "stopAlertAudio" -> {
+                AlertAudioPlayer.stop()
+                result.success(null)
+            }
             else -> result.notImplemented()
         }
+    }
+
+    /// Alert audio for alerts Dart decided itself (manual "Lanjut", the
+    /// "Tes suara" page): same player as the native alerts, so the voice,
+    /// the bell after it and the headset routing behave identically.
+    private fun playAlertAudio(arguments: Map<*, *>?, result: MethodChannel.Result) {
+        val voice = (arguments?.get("voice") as? String)?.takeIf { it.isNotBlank() }
+        val bell = arguments?.get("bell") == true
+        if (voice == null && !bell) {
+            result.invalidArguments("playAlertAudio memerlukan voice atau bell.")
+            return
+        }
+        AlertAudioPlayer.play(this, voice, bell)
+        result.success(null)
     }
 
     private fun requestActivityRecognitionUpdates(result: MethodChannel.Result) {

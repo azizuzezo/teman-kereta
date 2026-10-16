@@ -2,6 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../../app/theme/tk_colors.dart';
+
+const _paletteKey = 'theme_palette';
 const _onboardingKey = 'onboarding_complete';
 const _themeKey = 'theme_mode';
 const _reduceMotionKey = 'reduce_motion';
@@ -27,6 +30,7 @@ class StoredPreferences {
   const StoredPreferences({
     this.onboardingComplete = false,
     this.themeMode = ThemeMode.system,
+    this.palette = TkPaletteId.navyKrl,
     this.reduceMotion = false,
     this.favoriteRoute,
     this.activeTripSnapshot,
@@ -49,6 +53,7 @@ class StoredPreferences {
 
   final bool onboardingComplete;
   final ThemeMode themeMode;
+  final TkPaletteId palette;
   final bool reduceMotion;
   final String? favoriteRoute;
   final String? activeTripSnapshot;
@@ -89,6 +94,7 @@ class StoredPreferences {
   StoredPreferences copyWith({
     bool? onboardingComplete,
     ThemeMode? themeMode,
+    TkPaletteId? palette,
     bool? reduceMotion,
     Object? favoriteRoute = _unset,
     Object? activeTripSnapshot = _unset,
@@ -111,6 +117,7 @@ class StoredPreferences {
     return StoredPreferences(
       onboardingComplete: onboardingComplete ?? this.onboardingComplete,
       themeMode: themeMode ?? this.themeMode,
+      palette: palette ?? this.palette,
       reduceMotion: reduceMotion ?? this.reduceMotion,
       favoriteRoute: identical(favoriteRoute, _unset)
           ? this.favoriteRoute
@@ -171,6 +178,8 @@ abstract interface class PreferencesStore {
   Future<void> setReduceMotion(bool value);
 
   Future<void> setThemeMode(ThemeMode value);
+
+  Future<void> setPalette(TkPaletteId value);
 
   Future<void> setHomeStation(String? stationId);
 
@@ -233,6 +242,7 @@ class SharedPreferencesStore implements PreferencesStore {
       _preferences.getBool(_dailyRouteEnabledKey),
       _preferences.getString(_dailyRouteFromKey),
       _preferences.getString(_dailyRouteToKey),
+      _preferences.getString(_paletteKey),
     ]);
 
     _snapshot = StoredPreferences(
@@ -256,6 +266,7 @@ class SharedPreferencesStore implements PreferencesStore {
       dailyRouteEnabled: values[17] as bool? ?? false,
       dailyRouteFromStationId: values[18] as String?,
       dailyRouteToStationId: values[19] as String?,
+      palette: TkPalettes.decode(values[20] as String?),
     );
   }
 
@@ -287,6 +298,12 @@ class SharedPreferencesStore implements PreferencesStore {
   Future<void> setThemeMode(ThemeMode value) async {
     await _preferences.setString(_themeKey, value.name);
     _snapshot = _snapshot.copyWith(themeMode: value);
+  }
+
+  @override
+  Future<void> setPalette(TkPaletteId value) async {
+    await _preferences.setString(_paletteKey, value.name);
+    _snapshot = _snapshot.copyWith(palette: value);
   }
 
   @override
@@ -423,6 +440,11 @@ class MemoryPreferencesStore implements PreferencesStore {
   @override
   Future<void> setThemeMode(ThemeMode value) async {
     _snapshot = _snapshot.copyWith(themeMode: value);
+  }
+
+  @override
+  Future<void> setPalette(TkPaletteId value) async {
+    _snapshot = _snapshot.copyWith(palette: value);
   }
 
   @override

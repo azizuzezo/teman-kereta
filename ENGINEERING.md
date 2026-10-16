@@ -2932,3 +2932,42 @@ written out, but the outbound `send-push-notification` call was blocked by
 this session's permission classifier. Left for the project owner to send;
 the release itself is live and discoverable without it, since the
 `app_releases` row is what `UpdateCheckerController` polls.
+
+## Round 28 — Full redesign, OTP sign-up, share cards, report-with-logs, audio fix (2026-10-16)
+
+Direction lives in `DESIGN.md` (navy + KRL red, dials ENERGY 2 / RHYTHM 2 / MOTION 1). This round touched almost every screen, so only the parts that change how the code works are listed.
+
+### Design system
+- Colors only through `context.tk` (`lib/app/theme/tk_colors.dart`, a `ThemeExtension`). Three palettes (Navy KRL default, Biru Klasik, Hijau Stasiun) x light/dark, all text pairs verified >= WCAG AA with a contrast script. `AppColors` in `app_theme.dart` is legacy and has no remaining users outside that file.
+- Shared widgets in `lib/core/widgets/tk_components.dart` (`TkCard`, `TkPill`, `TkRow`/`TkRowGroup`, `TkAvatar`, `TkSkeleton`, `TkErrorState`, `TkRouteDots`). `ThemeSwitcherCard` (Profil > Tampilan) switches mode and palette live; the palette is persisted as `theme_palette` in `PreferencesStore`.
+- Gotcha found on device: `ColorScheme.secondaryContainer` drives every tonal button. It is `primarySoft`, not the red accent, otherwise all tonal buttons turn red.
+
+### Account
+- Sign-up is email OTP: `signUp` then `/account/verify-otp` (`verifyOTP(type: signup)`). It only works when the Supabase project has "Confirm email" ON and the "Confirm signup" template prints `{{ .Token }}`. Steps for the hosted project: `docs/auth-otp-setup.md`. Local template: `supabase/templates/confirmation.html`.
+- `PasswordField` (show/hide) is used on every password input.
+
+### Home / nearest station / status
+- Nearest-station estimate ("37 mnt jalan kaki · 5 mnt naik kendaraan") refreshes every 10 s with a one-shot GPS fix, only while Home is visible and the app is foregrounded (never requests permission). Pure logic: `lib/domain/usecases/travel_estimate.dart`.
+- "Kereta berikutnya" follows GPS nearest station, then home station, then a default, and says which. "Status perangkat" replaces "Status layanan": internet latency probe (green < 300 ms, yellow 300-800, red above or offline, probe `{supabaseUrl}/auth/v1/health`) and GPS state.
+
+### Map
+- Still `flutter_map`. Lag came from rebuilding `PolylineLayer` (resets its cache) and ~100 widget markers per frame; replaced with stable layers and one canvas painter. Tiles are OSM with disk cache and attribution (CARTO now needs an API key). Lines without real shape data (BEKASI, SERPONG) are drawn dashed through stations in stop order and are NOT true track. Frame smoothness has not been measured on a real phone; next step if it still janks is MapLibre with OpenFreeMap (dependency already present).
+
+### Share cards
+- `lib/features/history/presentation/share/`: off-screen `RepaintBoundary` render to PNG (1080x1350 and 1080x1920) + `share_plus`. Cards use fixed brand colors. Verified on the emulator through the Android share sheet.
+
+### Reports with logs
+- `lib/core/diagnostics/` (ring-buffer log with redaction, installed in `main.dart`), `lib/features/support/` (report page, offline queue). Backend: `supabase/migrations/20261016090000_app_reports.sql` and Edge Function `supabase/functions/send-report-email` (Cloudflare Email Service to support@temankereta.web.id). Neither is applied or deployed yet; setup in `docs/support-reports.md`. Admin reads them at `/app-reports`.
+- Anonymous reports share one global limit of 30/hour (any abuser can exhaust it); a real fix needs Turnstile or a per-IP limit in the function.
+
+### Audio
+- Arrival announcements (`N stasiun lagi`, transit) were cut off because the bell was a fixed timer equal to the wav length while the system started the notification sound later. `AlertAudioPlayer.kt` now plays voice then bell from completion callbacks with audio focus held, and routes to a connected headset only (volume raised to 90% of max, restored after). Compiles in the debug APK; not yet listened to on hardware.
+
+### Removed
+- Profile: "Stasiun komuter" section and Widget settings page (`/settings/widgets`). The native widgets and `requestPinAppWidget` remain as dead-end code. Home/work station can now only be changed by repeating onboarding.
+
+### Web / admin
+- Privacy policy and delete-account pages live on the website (`landing_page/privacy.html`, `delete-account.html`); the admin routes redirect (308) to them. Admin panel redesigned with tokens, shell, dark mode, new favicon.
+
+### Verification state
+- `flutter analyze`: no errors. `flutter test`: 549 pass; `test/widget_test.dart` fails unless run with `--dart-define=SUPABASE_ENABLED=false` (router touches `Supabase.instance`), it was failing before this round. `npm run build` for admin passes.

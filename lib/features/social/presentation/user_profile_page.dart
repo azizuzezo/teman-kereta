@@ -1,68 +1,94 @@
-import 'package:cached_network_image/cached_network_image.dart';
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
 
+import '../../../app/theme/app_theme.dart';
 import '../../../core/widgets/empty_state.dart';
-import '../../../core/widgets/tk_logo.dart';
+import '../../../core/widgets/tk_components.dart';
 import '../../../domain/entities/social_models.dart';
-import '../../forum/presentation/forum_models.dart';
+import '../../forum/presentation/forum_controller.dart';
+import '../../forum/presentation/forum_format.dart';
+import '../../forum/presentation/forum_session.dart';
+import '../../forum/presentation/widgets/forum_moderation_actions.dart';
 import '../../forum/presentation/widgets/forum_post_card.dart';
+import '../../forum/presentation/widgets/forum_skeletons.dart';
+import 'social_providers.dart';
 import 'widgets/follow_button.dart';
 
-final _userSummaryProvider = FutureProvider.family<UserSummary?, String>((
-  ref,
-  userId,
-) async {
-  final row = await Supabase.instance.client
-      .from('users')
-      .select('id, username, display_name, avatar_url, follower_count, following_count')
-      .eq('id', userId)
-      .maybeSingle();
-  if (row == null) return null;
-  return UserSummary.fromJson(row);
-});
-
-final _userPostsProvider = FutureProvider.family<List<ForumPost>, String>((
-  ref,
-  userId,
-) async {
-  final rows =
-      await Supabase.instance.client
-              .from('forum_posts')
-              .select('*, users(username, display_name, avatar_url)')
-              .eq('user_id', userId)
-              .eq('status', 'visible')
-              .order('created_at', ascending: false)
-          as List<dynamic>;
-  return rows
-      .map((row) => ForumPost.fromJson(row as Map<String, dynamic>))
-      .toList();
-});
-
-/// Shows another user's public profile (display name, avatar,
-/// follower/following counts, their posts). Also reachable for the
-/// signed-in user's own id — the [FollowButton] simply renders nothing then.
+/// Another user's public profile: avatar, name, @username, follower and
+/// following counts (each opens its list), a follow button and their posts.
+/// Also reachable for the signed-in user's own id, where the follow button and
+/// the block action simply don't appear.
 class UserProfilePage extends ConsumerWidget {
   const UserProfilePage({required this.userId, super.key});
 
   final String userId;
 
+  Future<void> _refresh(WidgetRef ref) async {
+    ref
+      ..invalidate(userSummaryProvider(userId))
+      ..invalidate(forumUserPostsProvider(userId));
+    try {
+      await ref.read(forumUserPostsProvider(userId).future);
+    } on Object {
+      // The posts section shows its own error state.
+    }
+  }
+
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final userAsync = ref.watch(_userSummaryProvider(userId));
-    final postsAsync = ref.watch(_userPostsProvider(userId));
+    final userAsync = ref.watch(userSummaryProvider(userId));
+    final user = userAsync.asData?.value;
+    final canBlock =
+        user != null &&
+        currentForumUserId() != null &&
+        currentForumUserId() != userId;
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Profil pengguna')),
+      appBar: AppBar(
+        title: Text(
+          user?.username != null && user!.username!.isNotEmpty
+              ? '@${user.username}'
+              : 'Profil',
+        ),
+        actions: <Widget>[
+          if (canBlock)
+            PopupMenuButton<String>(
+              tooltip: 'Opsi profil',
+              icon: const Icon(Icons.more_horiz_rounded),
+              onSelected: (value) async {
+                if (value != 'block') return;
+                final blocked = await blockForumUser(
+                  context,
+                  ref,
+                  userId: userId,
+                  displayName: forumAuthorLabel(user).name,
+                );
+                if (blocked && context.mounted) {
+                  unawaited(Navigator.of(context).maybePop());
+                }
+              },
+              itemBuilder: (context) => <PopupMenuEntry<String>>[
+                forumMenuItem(
+                  context,
+                  value: 'block',
+                  icon: Icons.block_rounded,
+                  label: 'Blokir pengguna',
+                  destructive: true,
+                ),
+              ],
+            ),
+        ],
+      ),
       body: SafeArea(
         child: userAsync.when(
-          loading: () => const Center(child: CircularProgressIndicator()),
-          error: (error, stack) => const AppEmptyState(
-            icon: Icons.error_outline_rounded,
-            title: 'Gagal memuat profil',
-            message: 'Terjadi kendala saat mengambil data pengguna ini.',
+          loading: () => const _ProfileSkeleton(),
+          error: (error, stack) => TkErrorState(
+            title: 'Profil gagal dimuat',
+            message: 'Periksa koneksimu, lalu coba lagi.',
+            onRetry: () => ref.invalidate(userSummaryProvider(userId)),
           ),
           data: (user) {
             if (user == null) {
@@ -72,94 +98,142 @@ class UserProfilePage extends ConsumerWidget {
                 message: 'Akun ini mungkin sudah dihapus.',
               );
             }
-            final hasAvatar =
-                user.avatarUrl != null && user.avatarUrl!.isNotEmpty;
-            return ListView(
-              padding: const EdgeInsets.all(16),
-              children: <Widget>[
-                Row(
-                  children: <Widget>[
-                    CircleAvatar(
-                      radius: 32,
-                      backgroundImage: hasAvatar
-                          ? CachedNetworkImageProvider(user.avatarUrl!)
-                          : null,
-                      child: hasAvatar
-                          ? null
-                          : const TkLogo(size: 40, showLabel: false),
-                    ),
-                    const SizedBox(width: 16),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: <Widget>[
-                          Text(
-                            user.resolvedName,
-                            style: Theme.of(context).textTheme.titleLarge,
-                          ),
-                          if (user.username != null && user.username!.isNotEmpty)
-                            Text('@${user.username}'),
-                        ],
-                      ),
-                    ),
-                    FollowButton(targetUserId: user.id),
-                  ],
-                ),
-                const SizedBox(height: 16),
-                Row(
-                  children: <Widget>[
-                    _StatBlock(
-                      count: user.followerCount ?? 0,
-                      label: 'Pengikut',
-                      onTap: () => context.push('/social/followers/${user.id}'),
-                    ),
-                    const SizedBox(width: 24),
-                    _StatBlock(
-                      count: user.followingCount ?? 0,
-                      label: 'Mengikuti',
-                      onTap: () => context.push('/social/following/${user.id}'),
-                    ),
-                  ],
-                ),
-                const Divider(height: 32),
-                Text('Postingan', style: Theme.of(context).textTheme.titleMedium),
-                const SizedBox(height: 8),
-                postsAsync.when(
-                  loading: () => const Padding(
-                    padding: EdgeInsets.symmetric(vertical: 20),
-                    child: Center(child: CircularProgressIndicator()),
-                  ),
-                  error: (error, stack) =>
-                      const Text('Gagal memuat postingan pengguna ini.'),
-                  data: (posts) {
-                    if (posts.isEmpty) {
-                      return const Padding(
-                        padding: EdgeInsets.symmetric(vertical: 12),
-                        child: Text('Belum ada postingan.'),
-                      );
-                    }
-                    return Column(
-                      children: <Widget>[
-                        for (final post in posts)
-                          Padding(
-                            padding: const EdgeInsets.only(bottom: 10),
-                            child: ForumPostCard(post: post),
-                          ),
-                      ],
-                    );
-                  },
-                ),
-              ],
+            return RefreshIndicator(
+              onRefresh: () => _refresh(ref),
+              child: CustomScrollView(
+                physics: const AlwaysScrollableScrollPhysics(),
+                slivers: <Widget>[
+                  SliverToBoxAdapter(child: _ProfileHeader(user: user)),
+                  const SliverToBoxAdapter(child: _PostsTabHeader()),
+                  ..._postSlivers(context, ref),
+                ],
+              ),
             );
           },
         ),
       ),
     );
   }
+
+  List<Widget> _postSlivers(BuildContext context, WidgetRef ref) {
+    final tk = context.tk;
+    final posts = ref.watch(forumUserPostsProvider(userId));
+    return posts.when(
+      loading: () => const <Widget>[
+        SliverToBoxAdapter(child: ForumPostSkeleton(count: 3)),
+      ],
+      error: (error, stack) => <Widget>[
+        SliverToBoxAdapter(
+          child: TkErrorState(
+            title: 'Postingan gagal dimuat',
+            message: 'Periksa koneksimu, lalu coba lagi.',
+            onRetry: () => ref.invalidate(forumUserPostsProvider(userId)),
+          ),
+        ),
+      ],
+      data: (list) {
+        if (list.isEmpty) {
+          return const <Widget>[
+            SliverToBoxAdapter(
+              child: Padding(
+                padding: EdgeInsets.symmetric(vertical: 24),
+                child: AppEmptyState(
+                  icon: Icons.forum_outlined,
+                  title: 'Belum ada postingan',
+                  message: 'Postingan pengguna ini akan muncul di sini.',
+                ),
+              ),
+            ),
+          ];
+        }
+        return <Widget>[
+          SliverList.separated(
+            itemCount: list.length,
+            separatorBuilder: (_, _) => Divider(height: 1, color: tk.border),
+            itemBuilder: (context, index) => ForumPostCard(
+              key: ValueKey<String>(list[index].id),
+              post: list[index],
+            ),
+          ),
+          SliverToBoxAdapter(child: Divider(height: 1, color: tk.border)),
+          const SliverToBoxAdapter(child: SizedBox(height: 24)),
+        ];
+      },
+    );
+  }
 }
 
-class _StatBlock extends StatelessWidget {
-  const _StatBlock({
+class _ProfileHeader extends StatelessWidget {
+  const _ProfileHeader({required this.user});
+
+  final UserSummary user;
+
+  @override
+  Widget build(BuildContext context) {
+    final tk = context.tk;
+    final textTheme = Theme.of(context).textTheme;
+    final label = forumAuthorLabel(user);
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: <Widget>[
+          Row(
+            children: <Widget>[
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: <Widget>[
+                    Text(
+                      label.name,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: textTheme.headlineMedium,
+                    ),
+                    if (label.handle != null)
+                      Padding(
+                        padding: const EdgeInsets.only(top: 2),
+                        child: Text(
+                          label.handle!,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: textTheme.bodyMedium?.copyWith(
+                            color: tk.textMuted,
+                          ),
+                        ),
+                      ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 16),
+              TkAvatar(name: label.name, imageUrl: user.avatarUrl, size: 76),
+            ],
+          ),
+          const SizedBox(height: 4),
+          Row(
+            children: <Widget>[
+              _CountLink(
+                count: user.followerCount ?? 0,
+                label: 'Pengikut',
+                onTap: () => context.push('/social/followers/${user.id}'),
+              ),
+              const SizedBox(width: 20),
+              _CountLink(
+                count: user.followingCount ?? 0,
+                label: 'Mengikuti',
+                onTap: () => context.push('/social/following/${user.id}'),
+              ),
+            ],
+          ),
+          FollowButton(targetUserId: user.id, expanded: true),
+        ],
+      ),
+    );
+  }
+}
+
+class _CountLink extends StatelessWidget {
+  const _CountLink({
     required this.count,
     required this.label,
     required this.onTap,
@@ -171,24 +245,111 @@ class _StatBlock extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return InkWell(
-      onTap: onTap,
-      borderRadius: BorderRadius.circular(8),
-      child: Padding(
-        padding: const EdgeInsets.symmetric(vertical: 4, horizontal: 2),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: <Widget>[
-            Text(
-              '$count',
-              style: Theme.of(
-                context,
-              ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700),
-            ),
-            const SizedBox(width: 6),
-            Text(label, style: Theme.of(context).textTheme.bodyMedium),
-          ],
+    final tk = context.tk;
+    final textTheme = Theme.of(context).textTheme;
+    return Semantics(
+      button: true,
+      label: '$count $label',
+      excludeSemantics: true,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(8),
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(minHeight: 48),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: <Widget>[
+              Text(compactCount(count), style: textTheme.titleMedium),
+              const SizedBox(width: 6),
+              Text(
+                label,
+                style: textTheme.bodyMedium?.copyWith(color: tk.textMuted),
+              ),
+            ],
+          ),
         ),
+      ),
+    );
+  }
+}
+
+/// Single tab ("Postingan") with the same underline as the feed tabs, so the
+/// list below reads as a tab's content.
+class _PostsTabHeader extends StatelessWidget {
+  const _PostsTabHeader();
+
+  @override
+  Widget build(BuildContext context) {
+    final tk = context.tk;
+    return Container(
+      height: 48,
+      alignment: Alignment.bottomLeft,
+      padding: const EdgeInsets.symmetric(horizontal: 16),
+      decoration: BoxDecoration(
+        border: Border(
+          top: BorderSide(color: tk.border),
+          bottom: BorderSide(color: tk.border),
+        ),
+      ),
+      child: Stack(
+        alignment: Alignment.center,
+        children: <Widget>[
+          Align(
+            alignment: Alignment.centerLeft,
+            child: Text(
+              'Postingan',
+              style: Theme.of(context).textTheme.titleSmall,
+            ),
+          ),
+          Align(
+            alignment: Alignment.bottomLeft,
+            child: Container(
+              width: 36,
+              height: 3,
+              decoration: BoxDecoration(
+                color: tk.primary,
+                borderRadius: BorderRadius.circular(2),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _ProfileSkeleton extends StatelessWidget {
+  const _ProfileSkeleton();
+
+  @override
+  Widget build(BuildContext context) {
+    return const SingleChildScrollView(
+      physics: NeverScrollableScrollPhysics(),
+      child: Column(
+        children: <Widget>[
+          Padding(
+            padding: EdgeInsets.fromLTRB(16, 12, 16, 20),
+            child: Row(
+              children: <Widget>[
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: <Widget>[
+                      TkSkeleton(height: 24, width: 180),
+                      SizedBox(height: 10),
+                      TkSkeleton(height: 14, width: 100),
+                      SizedBox(height: 28),
+                      TkSkeleton(height: 14, width: 160),
+                    ],
+                  ),
+                ),
+                SizedBox(width: 16),
+                TkSkeleton(height: 76, width: 76, radius: 38),
+              ],
+            ),
+          ),
+          ForumPostSkeleton(count: 3),
+        ],
       ),
     );
   }

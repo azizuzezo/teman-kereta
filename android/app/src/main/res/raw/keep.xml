@@ -24,4 +24,4 @@
       unzip -l build/app/outputs/flutter-apk/app-release.apk | grep res/raw
 -->
 <resources xmlns:tools="http://schemas.android.com/tools"
-    tools:keep="@raw/arrive_station,@raw/alert_terlewat,@raw/remaining_station_1,@raw/remaining_station_2,@raw/remaining_station_3,@raw/remaining_transit_1,@raw/remaining_transit_2,@raw/remaining_transit_3,@raw/transit_reminder" />
+    tools:keep="@raw/arrive_station,@raw/terlewat,@raw/remaining_station_1,@raw/remaining_station_2,@raw/remaining_station_3,@raw/remaining_transit_1,@raw/remaining_transit_2,@raw/remaining_transit_3,@raw/transit_reminder" />

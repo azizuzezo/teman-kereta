@@ -1,82 +1,59 @@
 import 'dart:async';
+import 'dart:math' as math;
 
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:share_plus/share_plus.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
 
-import '../../../../core/utils/relative_time.dart';
-import '../../../../core/widgets/tk_logo.dart';
+import '../../../../app/theme/app_theme.dart';
+import '../../../../core/widgets/tk_components.dart';
 import '../../../social/presentation/widgets/follow_button.dart';
 import '../forum_controller.dart';
+import '../forum_format.dart';
 import '../forum_models.dart';
+import '../forum_session.dart';
+import 'forum_byline.dart';
+import 'forum_line_chip.dart';
+import 'forum_moderation_actions.dart';
 import 'mentions.dart';
 
-/// A single feed post rendered Instagram/Facebook-style: full-bleed photo,
-/// a bold "N suka" line, an Instagram-caption-style "**username** body"
-/// line, and a double-tap-the-photo-to-like gesture — used both by the
-/// forum feed and (read-only, no like/comment actions needed there beyond
-/// navigation) another user's profile page. Keeps its own optimistic like
-/// state so it renders correctly even when the post isn't part of
-/// [ForumController]'s current feed page (e.g. viewed from a profile).
+/// A forum post in the social-feed layout: avatar on the left, then name,
+/// @username and time on one line, the text with mentions highlighted, an
+/// optional photo and an action row (like, reply, share). Posts are separated
+/// by hairlines supplied by the list, not by boxes.
+///
+/// With [threaded] the card becomes the head of a conversation on the detail
+/// page: larger text, full body, a follow button, no tap-to-open, and (with
+/// [threadLine]) a vertical line from the avatar down to the first reply.
+///
+/// Keeps its own optimistic like state so it renders correctly even when the
+/// post isn't part of [ForumController]'s current feed page (e.g. viewed from
+/// a profile).
 class ForumPostCard extends ConsumerStatefulWidget {
-  const ForumPostCard({required this.post, super.key});
+  const ForumPostCard({
+    required this.post,
+    super.key,
+    this.threaded = false,
+    this.threadLine = false,
+  });
 
   final ForumPost post;
+  final bool threaded;
+  final bool threadLine;
 
   @override
   ConsumerState<ForumPostCard> createState() => _ForumPostCardState();
 }
 
-/// Small colored chip naming the KRL line a post is tagged with, using the
-/// same per-line brand color the composer's picker and the live map use.
-/// Renders nothing while [forumLineOptionsByIdProvider] is still loading or
-/// if [lineId] doesn't resolve (a line deactivated after the post was made),
-/// rather than showing a placeholder for a tag that may not exist.
-class _ForumLineTag extends ConsumerWidget {
-  const _ForumLineTag({required this.lineId});
-
-  final String lineId;
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final option = ref
-        .watch(forumLineOptionsByIdProvider)
-        .asData
-        ?.value[lineId];
-    if (option == null) {
-      return const SizedBox.shrink();
-    }
-    final color = option.resolvedColor ?? Theme.of(context).colorScheme.primary;
-    return Padding(
-      padding: const EdgeInsets.only(left: 6),
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-        decoration: BoxDecoration(
-          color: color.withValues(alpha: 0.14),
-          borderRadius: BorderRadius.circular(999),
-          border: Border.all(color: color.withValues(alpha: 0.4)),
-        ),
-        child: Text(
-          option.code,
-          style: Theme.of(context).textTheme.labelSmall?.copyWith(
-            color: color,
-            fontWeight: FontWeight.w700,
-          ),
-        ),
-      ),
-    );
-  }
-}
-
 class _ForumPostCardState extends ConsumerState<ForumPostCard>
-    with SingleTickerProviderStateMixin {
+    with TickerProviderStateMixin {
   late bool _liked;
   late int _likeCount;
   late String _body;
-  late final AnimationController _heartBurstController;
+  late final AnimationController _likePop;
+  late final AnimationController _heartBurst;
 
   @override
   void initState() {
@@ -84,7 +61,11 @@ class _ForumPostCardState extends ConsumerState<ForumPostCard>
     _liked = widget.post.likedByMe;
     _likeCount = widget.post.likeCount;
     _body = widget.post.body;
-    _heartBurstController = AnimationController(
+    _likePop = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 220),
+    );
+    _heartBurst = AnimationController(
       vsync: this,
       duration: const Duration(milliseconds: 550),
     );
@@ -93,18 +74,29 @@ class _ForumPostCardState extends ConsumerState<ForumPostCard>
   @override
   void didUpdateWidget(covariant ForumPostCard oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (oldWidget.post.id != widget.post.id) {
-      _liked = widget.post.likedByMe;
-      _likeCount = widget.post.likeCount;
-      _body = widget.post.body;
+    final post = widget.post;
+    if (oldWidget.post.id != post.id) {
+      _liked = post.likedByMe;
+      _likeCount = post.likeCount;
+      _body = post.body;
+    } else {
+      if (oldWidget.post.likedByMe != post.likedByMe ||
+          oldWidget.post.likeCount != post.likeCount) {
+        _liked = post.likedByMe;
+        _likeCount = post.likeCount;
+      }
+      if (oldWidget.post.body != post.body) _body = post.body;
     }
   }
 
   @override
   void dispose() {
-    _heartBurstController.dispose();
+    _likePop.dispose();
+    _heartBurst.dispose();
     super.dispose();
   }
+
+  bool get _reduceMotion => MediaQuery.disableAnimationsOf(context);
 
   Future<void> _toggleLike() async {
     final wasLiked = _liked;
@@ -112,54 +104,55 @@ class _ForumPostCardState extends ConsumerState<ForumPostCard>
       _liked = !wasLiked;
       _likeCount += wasLiked ? -1 : 1;
     });
+    if (!wasLiked && !_reduceMotion) unawaited(_likePop.forward(from: 0));
     await ref
         .read(forumControllerProvider.notifier)
         .toggleLike(widget.post.id, wasLiked);
   }
 
   Future<void> _onDoubleTapImage() async {
-    unawaited(_heartBurstController.forward(from: 0));
-    if (!_liked) {
-      await _toggleLike();
-    }
+    if (!_reduceMotion) unawaited(_heartBurst.forward(from: 0));
+    if (!_liked) await _toggleLike();
   }
 
   Future<void> _share() async {
+    final name = forumAuthorLabel(widget.post.author).name;
     await SharePlus.instance.share(
-      ShareParams(
-        text:
-            'Lihat postingan di Teman Kereta: '
-            '"${widget.post.body}"',
-      ),
+      ShareParams(text: '$name di Teman Kereta: "$_body"'),
     );
   }
 
-  Future<void> _confirmDelete(BuildContext context) async {
+  Future<void> _confirmDelete() async {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (dialogContext) => AlertDialog(
         title: const Text('Hapus postingan?'),
-        content: const Text('Postingan yang dihapus tidak dapat dikembalikan.'),
+        content: const Text(
+          'Postingan dan semua balasannya akan hilang. '
+          'Ini tidak bisa dibatalkan.',
+        ),
         actions: <Widget>[
           TextButton(
             onPressed: () => Navigator.of(dialogContext).pop(false),
             child: const Text('Batal'),
           ),
           FilledButton(
+            style: FilledButton.styleFrom(
+              backgroundColor: dialogContext.tk.danger,
+              foregroundColor: dialogContext.tk.onAccent,
+            ),
             onPressed: () => Navigator.of(dialogContext).pop(true),
             child: const Text('Hapus'),
           ),
         ],
       ),
     );
-    if (confirmed ?? false) {
-      await ref
-          .read(forumControllerProvider.notifier)
-          .deletePost(widget.post.id);
-    }
+    if (confirmed != true) return;
+    await ref.read(forumControllerProvider.notifier).deletePost(widget.post.id);
+    if (widget.threaded && mounted) unawaited(Navigator.of(context).maybePop());
   }
 
-  Future<void> _editPost(BuildContext context) async {
+  Future<void> _editPost() async {
     final controller = TextEditingController(text: _body);
     final formKey = GlobalKey<FormState>();
     final newBody = await showDialog<String>(
@@ -174,7 +167,7 @@ class _ForumPostCardState extends ConsumerState<ForumPostCard>
             maxLines: 6,
             minLines: 3,
             maxLength: 2000,
-            decoration: const InputDecoration(hintText: 'Tulis sesuatu...'),
+            decoration: const InputDecoration(hintText: 'Tulis sesuatu'),
             validator: (value) {
               if (value == null || value.trim().isEmpty) {
                 return 'Postingan tidak boleh kosong.';
@@ -198,11 +191,12 @@ class _ForumPostCardState extends ConsumerState<ForumPostCard>
         ],
       ),
     );
-    if (newBody == null || newBody == _body) return;
+    controller.dispose();
+    if (newBody == null || newBody == _body || !mounted) return;
     final error = await ref
         .read(forumControllerProvider.notifier)
         .updatePost(widget.post.id, newBody);
-    if (!context.mounted) return;
+    if (!mounted) return;
     if (error != null) {
       ScaffoldMessenger.of(
         context,
@@ -211,140 +205,382 @@ class _ForumPostCardState extends ConsumerState<ForumPostCard>
     }
     setState(() => _body = newBody);
     // Refreshes the post-detail page's copy (fed by a separate provider from
-    // the feed's), which the feed itself already picked up above via the
+    // the feed's), which the feed itself already picked up via the
     // controller state update.
     ref.invalidate(forumPostProvider(widget.post.id));
   }
 
+  void _openPost() => context.push('/forum/post/${widget.post.id}');
+
+  void _openProfile() => context.push('/social/user/${widget.post.userId}');
+
+  void _onMenu(String value, String authorName) {
+    switch (value) {
+      case 'edit':
+        unawaited(_editPost());
+      case 'delete':
+        unawaited(_confirmDelete());
+      case 'report':
+        unawaited(reportForumContent(context, ref, postId: widget.post.id));
+      case 'block':
+        unawaited(
+          blockForumUser(
+            context,
+            ref,
+            userId: widget.post.userId,
+            displayName: authorName,
+          ),
+        );
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
+    final tk = context.tk;
+    final textTheme = Theme.of(context).textTheme;
     final post = widget.post;
-    final author = post.author;
-    final currentUserId = Supabase.instance.client.auth.currentUser?.id;
-    final isOwner = currentUserId != null && currentUserId == post.userId;
-    final hasAvatar =
-        author?.avatarUrl != null && author!.avatarUrl!.isNotEmpty;
-    final authorName = author?.resolvedName ?? 'Pengguna Teman Kereta';
-    final theme = Theme.of(context);
+    final threaded = widget.threaded;
+    final label = forumAuthorLabel(post.author);
+    final isOwner = currentForumUserId() == post.userId;
+    final hasImage = post.imageUrl != null && post.imageUrl!.isNotEmpty;
 
-    return Column(
+    final avatar = Semantics(
+      button: true,
+      label: 'Buka profil ${label.name}',
+      excludeSemantics: true,
+      child: InkResponse(
+        onTap: _openProfile,
+        radius: 26,
+        child: SizedBox(
+          width: 48,
+          height: 48,
+          child: Center(
+            child: TkAvatar(
+              name: label.name,
+              imageUrl: post.author?.avatarUrl,
+              size: 40,
+            ),
+          ),
+        ),
+      ),
+    );
+
+    final header = Padding(
+      padding: const EdgeInsets.only(right: 44),
+      child: ForumByline(
+        name: label.name,
+        handle: label.handle,
+        time: post.createdAt,
+        onTap: _openProfile,
+      ),
+    );
+
+    final details = Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: <Widget>[
-        // --- Header: avatar, name, timestamp, follow/menu ---
-        Padding(
-          padding: const EdgeInsets.fromLTRB(12, 10, 8, 10),
+        header,
+        if (_body.isNotEmpty)
+          Padding(
+            padding: const EdgeInsets.only(top: 4, right: 16),
+            child: MentionText(
+              _body,
+              maxLines: threaded ? null : 12,
+              style: (threaded ? textTheme.bodyLarge : textTheme.bodyMedium)
+                  ?.copyWith(color: tk.text),
+            ),
+          ),
+        if (post.lineId != null) _PostLineTag(lineId: post.lineId!),
+        if (hasImage)
+          Padding(
+            padding: const EdgeInsets.only(top: 10, right: 16),
+            child: _PostImage(
+              url: post.imageUrl!,
+              burst: _heartBurst,
+              onTap: threaded ? null : _openPost,
+              onDoubleTap: _onDoubleTapImage,
+            ),
+          ),
+        Transform.translate(
+          offset: const Offset(-12, 0),
           child: Row(
             children: <Widget>[
-              InkWell(
-                onTap: () => context.push('/social/user/${post.userId}'),
-                borderRadius: BorderRadius.circular(20),
-                child: CircleAvatar(
-                  radius: 18,
-                  backgroundImage: hasAvatar
-                      ? CachedNetworkImageProvider(author.avatarUrl!)
-                      : null,
-                  child: hasAvatar
-                      ? null
-                      : const TkLogo(size: 22, showLabel: false),
-                ),
-              ),
-              const SizedBox(width: 10),
-              Expanded(
-                child: InkWell(
-                  onTap: () => context.push('/social/user/${post.userId}'),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: <Widget>[
-                      Text(
-                        authorName,
-                        style: theme.textTheme.titleSmall?.copyWith(
-                          fontWeight: FontWeight.w700,
-                        ),
-                      ),
-                      Text(
-                        relativeTime(post.createdAt),
-                        style: theme.textTheme.bodySmall?.copyWith(
-                          color: theme.colorScheme.onSurfaceVariant,
-                        ),
-                      ),
-                    ],
+              _ActionButton(
+                label: _likeCount > 0 ? compactCount(_likeCount) : null,
+                semanticLabel: _liked
+                    ? 'Batal suka, $_likeCount suka'
+                    : 'Suka, $_likeCount suka',
+                color: _liked ? tk.accent : tk.textMuted,
+                onTap: _toggleLike,
+                icon: ScaleTransition(
+                  scale: Tween<double>(begin: 1, end: 1.3).animate(
+                    CurvedAnimation(parent: _likePop, curve: const _PopCurve()),
+                  ),
+                  child: Icon(
+                    _liked
+                        ? Icons.favorite_rounded
+                        : Icons.favorite_border_rounded,
+                    size: 22,
+                    color: _liked ? tk.accent : tk.textMuted,
                   ),
                 ),
               ),
-              if (post.lineId != null) _ForumLineTag(lineId: post.lineId!),
-              if (!isOwner) FollowButton(targetUserId: post.userId),
-              if (isOwner)
-                PopupMenuButton<String>(
-                  icon: const Icon(Icons.more_horiz_rounded),
-                  onSelected: (value) {
-                    if (value == 'edit') unawaited(_editPost(context));
-                    if (value == 'delete') unawaited(_confirmDelete(context));
-                  },
-                  itemBuilder: (context) => const <PopupMenuEntry<String>>[
-                    PopupMenuItem<String>(
-                      value: 'edit',
-                      child: Text('Edit postingan'),
-                    ),
-                    PopupMenuItem<String>(
-                      value: 'delete',
-                      child: Text('Hapus postingan'),
-                    ),
-                  ],
+              _ActionButton(
+                label: post.commentCount > 0
+                    ? compactCount(post.commentCount)
+                    : null,
+                semanticLabel: 'Balas, ${post.commentCount} balasan',
+                color: tk.textMuted,
+                onTap: threaded ? null : _openPost,
+                icon: Icon(
+                  Icons.mode_comment_outlined,
+                  size: 22,
+                  color: tk.textMuted,
                 ),
+              ),
+              _ActionButton(
+                semanticLabel: 'Bagikan postingan',
+                color: tk.textMuted,
+                onTap: _share,
+                icon: Icon(
+                  Icons.ios_share_rounded,
+                  size: 22,
+                  color: tk.textMuted,
+                ),
+              ),
+              if (threaded && !isOwner) ...<Widget>[
+                const Spacer(),
+                Padding(
+                  padding: const EdgeInsets.only(right: 12),
+                  child: FollowButton(targetUserId: post.userId),
+                ),
+              ],
             ],
           ),
         ),
+      ],
+    );
 
-        // --- Caption / post text ---
-        if (_body.isNotEmpty)
-          Padding(
-            padding: const EdgeInsets.fromLTRB(12, 0, 12, 10),
-            child: MentionText(
-              _body,
-              style: theme.textTheme.bodyMedium?.copyWith(
-                color: theme.colorScheme.onSurface,
+    final menu = PopupMenuButton<String>(
+      tooltip: 'Opsi postingan',
+      icon: Icon(Icons.more_horiz_rounded, color: tk.textMuted),
+      onSelected: (value) => _onMenu(value, label.name),
+      itemBuilder: (context) => isOwner
+          ? <PopupMenuEntry<String>>[
+              forumMenuItem(
+                context,
+                value: 'edit',
+                icon: Icons.edit_outlined,
+                label: 'Edit postingan',
               ),
+              forumMenuItem(
+                context,
+                value: 'delete',
+                icon: Icons.delete_outline_rounded,
+                label: 'Hapus postingan',
+                destructive: true,
+              ),
+            ]
+          : forumModerationMenuItems(context),
+    );
+
+    final Widget plainRow = Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: <Widget>[
+        avatar,
+        const SizedBox(width: 8),
+        Expanded(child: details),
+      ],
+    );
+    // The thread line is laid over the row instead of sized with
+    // IntrinsicHeight, so it follows the text height without the intrinsic
+    // pass (which the byline's LayoutBuilder cannot answer).
+    final Widget row = threaded && widget.threadLine
+        ? Stack(
+            clipBehavior: Clip.none,
+            children: <Widget>[
+              plainRow,
+              // Runs on past the cell's bottom padding to meet the first
+              // reply's avatar.
+              Positioned(
+                left: 23,
+                top: 50,
+                bottom: -24,
+                width: 2,
+                child: ColoredBox(color: tk.border),
+              ),
+            ],
+          )
+        : plainRow;
+
+    final content = Stack(
+      children: <Widget>[
+        Padding(
+          padding: EdgeInsets.fromLTRB(12, 8, 0, threaded ? 8 : 0),
+          child: row,
+        ),
+        Positioned(top: 4, right: 4, child: menu),
+      ],
+    );
+
+    return Semantics(
+      container: true,
+      child: threaded ? content : InkWell(onTap: _openPost, child: content),
+    );
+  }
+}
+
+/// 0 -> 1 -> 0 hump used for the like "pop" so the heart returns to size.
+class _PopCurve extends Curve {
+  const _PopCurve();
+
+  @override
+  double transformInternal(double t) => math.sin(t * math.pi);
+}
+
+class _ActionButton extends StatelessWidget {
+  const _ActionButton({
+    required this.icon,
+    required this.semanticLabel,
+    required this.color,
+    required this.onTap,
+    this.label,
+  });
+
+  final Widget icon;
+  final String? label;
+  final String semanticLabel;
+  final Color color;
+  final VoidCallback? onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Semantics(
+      button: true,
+      label: semanticLabel,
+      excludeSemantics: true,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(24),
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(minHeight: 48, minWidth: 48),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 12),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: <Widget>[
+                icon,
+                if (label != null) ...<Widget>[
+                  const SizedBox(width: 6),
+                  Text(
+                    label!,
+                    style: Theme.of(
+                      context,
+                    ).textTheme.labelMedium?.copyWith(color: color),
+                  ),
+                ],
+              ],
             ),
           ),
+        ),
+      ),
+    );
+  }
+}
 
-        // --- Full-bleed photo with double-tap-to-like ---
-        if (post.imageUrl != null && post.imageUrl!.isNotEmpty)
-          GestureDetector(
-            onDoubleTap: _onDoubleTapImage,
+/// The post's line tag, resolved through [forumLineOptionsByIdProvider].
+/// Renders nothing while lines are loading or if the id doesn't resolve (a
+/// line deactivated after the post was made).
+class _PostLineTag extends ConsumerWidget {
+  const _PostLineTag({required this.lineId});
+
+  final String lineId;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final option = ref
+        .watch(forumLineOptionsByIdProvider)
+        .asData
+        ?.value[lineId];
+    if (option == null) return const SizedBox.shrink();
+    return Padding(
+      padding: const EdgeInsets.only(top: 8),
+      child: Align(
+        alignment: Alignment.centerLeft,
+        child: ForumLineChip(label: option.code, color: option.resolvedColor),
+      ),
+    );
+  }
+}
+
+class _PostImage extends StatelessWidget {
+  const _PostImage({
+    required this.url,
+    required this.burst,
+    required this.onDoubleTap,
+    required this.onTap,
+  });
+
+  final String url;
+  final Animation<double> burst;
+  final VoidCallback? onTap;
+  final VoidCallback onDoubleTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final tk = context.tk;
+    return Semantics(
+      image: true,
+      label: 'Foto postingan. Ketuk dua kali untuk menyukai.',
+      child: GestureDetector(
+        onTap: onTap,
+        onDoubleTap: onDoubleTap,
+        child: Container(
+          clipBehavior: Clip.antiAlias,
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(TkRadius.control),
+            border: Border.all(color: tk.border),
+          ),
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxHeight: 360),
             child: Stack(
               alignment: Alignment.center,
               children: <Widget>[
                 CachedNetworkImage(
-                  imageUrl: post.imageUrl!,
+                  imageUrl: url,
                   fit: BoxFit.cover,
                   width: double.infinity,
-                  placeholder: (context, url) => const AspectRatio(
-                    aspectRatio: 1,
-                    child: Center(child: CircularProgressIndicator()),
+                  placeholder: (context, url) => AspectRatio(
+                    aspectRatio: 4 / 3,
+                    child: ColoredBox(color: tk.surfaceAlt),
                   ),
-                  errorWidget: (context, url, error) => const SizedBox.shrink(),
+                  errorWidget: (context, url, error) => AspectRatio(
+                    aspectRatio: 4 / 3,
+                    child: ColoredBox(
+                      color: tk.surfaceAlt,
+                      child: Icon(
+                        Icons.broken_image_outlined,
+                        color: tk.textMuted,
+                      ),
+                    ),
+                  ),
                 ),
                 AnimatedBuilder(
-                  animation: _heartBurstController,
+                  animation: burst,
                   builder: (context, child) {
-                    final t = _heartBurstController.value;
-                    // Quick pop-in then fade-out, Instagram-style.
-                    final scale = t < 0.4 ? (t / 0.4) : 1.0;
-                    final opacity = t < 0.7 ? 1.0 : (1 - (t - 0.7) / 0.3);
+                    final t = burst.value;
                     if (t == 0 || t == 1) return const SizedBox.shrink();
+                    final scale = t < 0.4 ? t / 0.4 : 1.0;
+                    final opacity = t < 0.7 ? 1.0 : 1 - (t - 0.7) / 0.3;
                     return Opacity(
                       opacity: opacity.clamp(0.0, 1.0),
                       child: Transform.scale(
                         scale: 0.7 + 0.5 * scale,
-                        child: Icon(
+                        child: const Icon(
                           Icons.favorite_rounded,
                           color: Colors.white,
-                          size: 96,
+                          size: 88,
                           shadows: <Shadow>[
-                            Shadow(
-                              color: Colors.black.withValues(alpha: 0.35),
-                              blurRadius: 16,
-                            ),
+                            Shadow(color: Colors.black38, blurRadius: 16),
                           ],
                         ),
                       ),
@@ -354,64 +590,8 @@ class _ForumPostCardState extends ConsumerState<ForumPostCard>
               ],
             ),
           ),
-
-        // --- Action row: like, comment, share ---
-        Padding(
-          padding: const EdgeInsets.fromLTRB(4, 4, 12, 0),
-          child: Row(
-            children: <Widget>[
-              IconButton(
-                onPressed: _toggleLike,
-                icon: Icon(
-                  _liked
-                      ? Icons.favorite_rounded
-                      : Icons.favorite_border_rounded,
-                  color: _liked ? theme.colorScheme.error : null,
-                ),
-              ),
-              IconButton(
-                onPressed: () => context.push('/forum/post/${post.id}'),
-                icon: const Icon(Icons.mode_comment_outlined),
-              ),
-              IconButton(
-                onPressed: _share,
-                icon: const Icon(Icons.send_outlined),
-              ),
-            ],
-          ),
         ),
-
-        // --- Like count ---
-        if (_likeCount > 0)
-          Padding(
-            padding: const EdgeInsets.fromLTRB(12, 0, 12, 4),
-            child: Text(
-              '$_likeCount suka',
-              style: theme.textTheme.bodyMedium?.copyWith(
-                fontWeight: FontWeight.w700,
-              ),
-            ),
-          ),
-
-        // --- Comments link ---
-        if (post.commentCount > 0)
-          Padding(
-            padding: const EdgeInsets.fromLTRB(12, 0, 12, 10),
-            child: InkWell(
-              onTap: () => context.push('/forum/post/${post.id}'),
-              child: Text(
-                'Lihat semua ${post.commentCount} komentar',
-                style: theme.textTheme.bodyMedium?.copyWith(
-                  color: theme.colorScheme.onSurfaceVariant,
-                ),
-              ),
-            ),
-          )
-        else
-          const SizedBox(height: 10),
-
-        const Divider(height: 1, thickness: 1),
-      ],
+      ),
     );
   }
 }

@@ -1,21 +1,44 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:intl/intl.dart';
 
+import '../../../app/theme/app_theme.dart';
 import '../../../core/utils/geo.dart';
 import '../../../core/widgets/empty_state.dart';
+import '../../../core/widgets/tk_components.dart';
 import '../../../data/providers/demo_data.dart';
 import '../../../data/providers/provider_registry.dart';
 import '../../../domain/entities/transit_models.dart';
 import '../../../domain/usecases/krl_fare.dart';
 import '../../../domain/usecases/trip_recap.dart';
+import '../domain/history_stats.dart';
+import 'share/share_cards.dart';
+import 'share/share_data.dart';
+import 'share/share_preview_sheet.dart';
 import 'trip_history_page.dart';
+import 'weekday_habit_chart.dart';
 
-/// Recap over everything in the local completed-trip log. Rebuilds whenever
-/// either input changes — the history stream, or the station list the
-/// distance/fare figures are derived from.
+/// Period the recap page is showing. Lives in a provider so it survives
+/// rebuilds while the history stream emits.
+class RecapPeriodController extends Notifier<RecapPeriod> {
+  @override
+  RecapPeriod build() => RecapPeriod.month;
+
+  // ignore: use_setters_to_change_properties
+  void select(RecapPeriod period) => state = period;
+}
+
+final recapPeriodProvider =
+    NotifierProvider<RecapPeriodController, RecapPeriod>(
+      RecapPeriodController.new,
+    );
+
+/// Recap over the completed trips inside the selected period. Rebuilds
+/// whenever the history stream, the station list the distance/fare figures
+/// are derived from, or the period changes.
 final tripRecapProvider = Provider<AsyncValue<TripRecap>>((Ref ref) {
   final history = ref.watch(tripHistoryProvider);
+  final period = ref.watch(recapPeriodProvider);
+  final now = ref.watch(clockProvider).now();
   // Stations only refine distance and fare; a recap of counts and times is
   // still worth showing while they load or if they fail entirely.
   final stations = ref.watch(stationListProvider).value ?? const <Station>[];
@@ -24,118 +47,199 @@ final tripRecapProvider = Provider<AsyncValue<TripRecap>>((Ref ref) {
       for (final station in demoStations) station.id: station,
       for (final station in stations) station.id: station,
     };
-    return TripRecap.from(trips, byId);
+    return TripRecap.from(tripsInPeriod(trips, period, now), byId);
   });
 });
 
+/// Rekap perjalanan: a period switcher, headline numbers computed from the
+/// local trip log, habits and a weekday chart. Nothing here is estimated: a
+/// period without trips says so instead of showing zeros dressed as stats.
 class TripRecapPage extends ConsumerWidget {
   const TripRecapPage({super.key});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final history = ref.watch(tripHistoryProvider);
     final recap = ref.watch(tripRecapProvider);
+    final period = ref.watch(recapPeriodProvider);
+    final now = ref.watch(clockProvider).now();
+    final data = recap.value;
+    final canShare = data != null && !data.isEmpty;
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Rekap perjalanan')),
+      appBar: AppBar(
+        title: const Text('Rekap perjalanan'),
+        actions: <Widget>[
+          IconButton(
+            tooltip: 'Bagikan rekap',
+            onPressed: canShare
+                ? () => showSharePreviewSheet(
+                    context,
+                    RecapShareSpec(RecapShareData.fromRecap(data, period, now)),
+                  )
+                : null,
+            icon: const Icon(Icons.ios_share_rounded),
+          ),
+          const SizedBox(width: 8),
+        ],
+      ),
       body: SafeArea(
         child: recap.when(
-          loading: () => const Center(child: CircularProgressIndicator()),
-          error: (error, stack) => const AppEmptyState(
-            icon: Icons.insights_outlined,
-            title: 'Rekap tidak dapat dimuat',
-            message: 'Basis data lokal tidak dapat diakses saat ini.',
+          loading: () => const _RecapSkeleton(),
+          error: (error, stack) => TkErrorState(
+            title: 'Rekap belum bisa dimuat',
+            message:
+                'Data perjalanan di perangkat ini tidak bisa dibuka. '
+                'Coba lagi sebentar.',
+            onRetry: () => ref.invalidate(tripHistoryProvider),
           ),
-          data: (data) => data.isEmpty
-              ? const AppEmptyState(
-                  icon: Icons.insights_outlined,
-                  title: 'Belum ada yang bisa direkap',
-                  message:
-                      'Selesaikan perjalanan dulu, rekapnya akan muncul di sini.',
-                )
-              : _RecapBody(recap: data),
+          data: (value) {
+            if (history.value?.isEmpty ?? false) {
+              return const AppEmptyState(
+                icon: Icons.insights_outlined,
+                title: 'Belum ada yang bisa direkap',
+                message:
+                    'Selesaikan satu perjalanan dulu. Rekapnya muncul di '
+                    'sini, dihitung dari riwayat di perangkat ini.',
+              );
+            }
+            return _RecapBody(
+              recap: value,
+              period: period,
+              now: now,
+              onPeriod: (next) =>
+                  ref.read(recapPeriodProvider.notifier).select(next),
+            );
+          },
         ),
       ),
     );
   }
 }
 
+class _RecapSkeleton extends StatelessWidget {
+  const _RecapSkeleton();
+
+  @override
+  Widget build(BuildContext context) {
+    return const Padding(
+      padding: EdgeInsets.fromLTRB(16, 12, 16, 0),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: <Widget>[
+          TkSkeleton(height: 48, radius: 14),
+          SizedBox(height: 16),
+          TkSkeleton(height: 168, radius: 20),
+          SizedBox(height: 12),
+          TkSkeleton(height: 120, radius: 20),
+        ],
+      ),
+    );
+  }
+}
+
 class _RecapBody extends StatelessWidget {
-  const _RecapBody({required this.recap});
+  const _RecapBody({
+    required this.recap,
+    required this.period,
+    required this.now,
+    required this.onPeriod,
+  });
 
   final TripRecap recap;
+  final RecapPeriod period;
+  final DateTime now;
+  final ValueChanged<RecapPeriod> onPeriod;
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final dateFormat = DateFormat('d MMMM y', 'id_ID');
 
     return ListView(
-      padding: const EdgeInsets.fromLTRB(16, 12, 16, 28),
+      padding: const EdgeInsets.fromLTRB(16, 8, 16, 28),
       children: <Widget>[
-        _HeadlineCard(recap: recap),
-        const SizedBox(height: 14),
-        if (recap.measuredTripCount > 0) ...<Widget>[
-          _SpendCard(recap: recap),
-          const SizedBox(height: 14),
-        ],
-        Text('Kebiasaan kamu', style: theme.textTheme.titleLarge),
-        const SizedBox(height: 10),
-        Card(
-          child: Column(
+        SegmentedButton<RecapPeriod>(
+          style: SegmentedButton.styleFrom(minimumSize: const Size(0, 48)),
+          showSelectedIcon: false,
+          segments: <ButtonSegment<RecapPeriod>>[
+            for (final value in RecapPeriod.values)
+              ButtonSegment<RecapPeriod>(
+                value: value,
+                label: Text(value.label),
+              ),
+          ],
+          selected: <RecapPeriod>{period},
+          onSelectionChanged: (selection) => onPeriod(selection.first),
+        ),
+        const SizedBox(height: 16),
+        if (recap.isEmpty)
+          _PeriodEmpty(period: period)
+        else ...<Widget>[
+          _HeroCard(recap: recap, period: period, now: now),
+          const SizedBox(height: 12),
+          if (recap.measuredTripCount > 0) ...<Widget>[
+            _SpendCard(recap: recap),
+            const SizedBox(height: 12),
+          ],
+          const TkSectionLabel('Kebiasaan'),
+          TkRowGroup(
             children: <Widget>[
               if (recap.topRoute != null)
-                _RecapTile(
+                TkRow(
                   icon: Icons.route_rounded,
-                  title: 'Rute tersering',
-                  value: recap.topRoute!.label,
-                  detail: '${recap.topRoute!.count}x perjalanan',
+                  title: recap.topRoute!.label,
+                  subtitle: 'Rute tersering, ${recap.topRoute!.count}x',
                 ),
-              if (recap.topStation != null) ...<Widget>[
-                const Divider(height: 1),
-                _RecapTile(
+              if (recap.topStation != null)
+                TkRow(
                   icon: Icons.location_on_rounded,
-                  title: 'Stasiun tersering',
-                  value: recap.topStation!.label,
-                  detail: '${recap.topStation!.count}x disinggahi',
+                  title: recap.topStation!.label,
+                  subtitle: 'Stasiun tersering, ${recap.topStation!.count}x',
                 ),
-              ],
-              const Divider(height: 1),
-              _RecapTile(
-                icon: Icons.calendar_month_rounded,
-                title: 'Hari paling sering naik',
-                value: _busiestWeekdayLabel(recap.tripsByWeekday),
-                detail: _weekdaySummary(recap.tripsByWeekday),
-              ),
-              Padding(
-                padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
-                child: _WeekdayChart(counts: recap.tripsByWeekday),
-              ),
-              if (recap.longestTrip != null) ...<Widget>[
-                const Divider(height: 1),
-                _RecapTile(
+              if (recap.longestTrip != null)
+                TkRow(
                   icon: Icons.timelapse_rounded,
-                  title: 'Perjalanan terlama',
-                  value:
-                      '${recap.longestTrip!.originName} → ${recap.longestTrip!.destinationName}',
-                  detail: formatDuration(
-                    recap.longestTrip!.arrivedAt.difference(
-                      recap.longestTrip!.departedAt,
-                    ),
-                  ),
+                  title:
+                      '${recap.longestTrip!.originName} → '
+                      '${recap.longestTrip!.destinationName}',
+                  subtitle:
+                      'Perjalanan terlama, ${formatDuration(recap.longestTrip!.arrivedAt.difference(recap.longestTrip!.departedAt))}',
                 ),
-              ],
-              if (recap.firstTripAt != null) ...<Widget>[
-                const Divider(height: 1),
-                _RecapTile(
+              if (recap.firstTripAt != null)
+                TkRow(
                   icon: Icons.flag_rounded,
-                  title: 'Perjalanan pertama',
-                  value: dateFormat.format(recap.firstTripAt!),
-                  detail: '${recap.activeDayCount} hari dengan perjalanan',
+                  title: formatShortDate(recap.firstTripAt!),
+                  subtitle: 'Perjalanan pertama',
                 ),
-              ],
             ],
           ),
-        ),
+          const SizedBox(height: 12),
+          const TkSectionLabel('Hari naik kereta'),
+          TkCard(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: <Widget>[
+                if (weekdaySummary(recap.tripsByWeekday) case final summary?)
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: 12),
+                    child: Text(summary, style: theme.textTheme.titleSmall),
+                  ),
+                WeekdayHabitChart(counts: recap.tripsByWeekday),
+              ],
+            ),
+          ),
+          const SizedBox(height: 20),
+          Builder(
+            builder: (context) => FilledButton.icon(
+              onPressed: () => showSharePreviewSheet(
+                context,
+                RecapShareSpec(RecapShareData.fromRecap(recap, period, now)),
+              ),
+              icon: const Icon(Icons.ios_share_rounded),
+              label: const Text('Bagikan rekap'),
+            ),
+          ),
+        ],
         const SizedBox(height: 16),
         Text(
           'Rekap dihitung dari riwayat di perangkat ini saja. Menghapus '
@@ -147,37 +251,164 @@ class _RecapBody extends StatelessWidget {
   }
 }
 
-class _HeadlineCard extends StatelessWidget {
-  const _HeadlineCard({required this.recap});
+class _PeriodEmpty extends StatelessWidget {
+  const _PeriodEmpty({required this.period});
 
-  final TripRecap recap;
+  final RecapPeriod period;
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(18),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: <Widget>[
-            Text('Total perjalanan', style: theme.textTheme.bodyMedium),
-            const SizedBox(height: 4),
-            Text(
-              '${recap.tripCount}x',
-              style: theme.textTheme.displayLarge?.copyWith(
-                fontFeatures: const <FontFeature>[FontFeature.tabularFigures()],
+    return TkCard(
+      tone: TkCardTone.alt,
+      padding: const EdgeInsets.all(20),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: <Widget>[
+          Text(
+            'Belum ada perjalanan ${period.phrase}',
+            style: theme.textTheme.titleMedium,
+          ),
+          const SizedBox(height: 4),
+          Text(
+            'Pilih periode yang lebih panjang untuk melihat perjalanan '
+            'sebelumnya.',
+            style: theme.textTheme.bodyMedium?.copyWith(
+              color: context.tk.textMuted,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// The one focal point: how many trips in the period, then time on board and
+/// active days underneath.
+class _HeroCard extends StatelessWidget {
+  const _HeroCard({
+    required this.recap,
+    required this.period,
+    required this.now,
+  });
+
+  final TripRecap recap;
+  final RecapPeriod period;
+  final DateTime now;
+
+  @override
+  Widget build(BuildContext context) {
+    final tk = context.tk;
+    final theme = Theme.of(context);
+    final range = periodRangeLabel(period, now, recap.firstTripAt);
+    final onPrimary = tk.onPrimary;
+    final softOnPrimary = onPrimary.withValues(alpha: 0.82);
+
+    return Semantics(
+      container: true,
+      label:
+          '${recap.tripCount} perjalanan ${period.phrase}, '
+          '${formatDuration(recap.totalRideTime)} di kereta, '
+          '${recap.activeDayCount} hari aktif',
+      child: ExcludeSemantics(
+        child: Container(
+          padding: const EdgeInsets.all(20),
+          decoration: BoxDecoration(
+            color: tk.primary,
+            borderRadius: BorderRadius.circular(TkRadius.card),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: <Widget>[
+              Text(
+                range == null
+                    ? 'Perjalanan ${period.phrase}'
+                    : 'Perjalanan ${period.phrase}, $range',
+                style: theme.textTheme.bodyMedium?.copyWith(
+                  color: softOnPrimary,
+                ),
               ),
-            ),
-            const SizedBox(height: 12),
-            Text(
-              'Kamu menghabiskan ${formatDuration(recap.totalRideTime)} '
-              'di dalam kereta.',
-              style: theme.textTheme.bodyLarge,
-            ),
-          ],
+              const SizedBox(height: 4),
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.baseline,
+                textBaseline: TextBaseline.alphabetic,
+                children: <Widget>[
+                  Flexible(
+                    child: Text(
+                      '${recap.tripCount}',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: theme.textTheme.displayLarge?.copyWith(
+                        color: onPrimary,
+                        fontSize: 56,
+                        height: 1.05,
+                        fontFeatures: AppTheme.timeFeatures,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Text(
+                    'perjalanan',
+                    style: theme.textTheme.titleMedium?.copyWith(
+                      color: softOnPrimary,
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 16),
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: <Widget>[
+                  Expanded(
+                    child: _HeroStat(
+                      label: 'Di kereta',
+                      value: formatDuration(recap.totalRideTime),
+                    ),
+                  ),
+                  Expanded(
+                    child: _HeroStat(
+                      label: 'Hari aktif',
+                      value: '${recap.activeDayCount}',
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
         ),
       ),
+    );
+  }
+}
+
+class _HeroStat extends StatelessWidget {
+  const _HeroStat({required this.label, required this.value});
+
+  final String label;
+  final String value;
+
+  @override
+  Widget build(BuildContext context) {
+    final tk = context.tk;
+    final theme = Theme.of(context);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: <Widget>[
+        Text(
+          label,
+          style: theme.textTheme.bodySmall?.copyWith(
+            color: tk.onPrimary.withValues(alpha: 0.82),
+          ),
+        ),
+        const SizedBox(height: 2),
+        Text(
+          value,
+          style: theme.textTheme.titleLarge?.copyWith(
+            color: tk.onPrimary,
+            fontFeatures: AppTheme.timeFeatures,
+          ),
+        ),
+      ],
     );
   }
 }
@@ -190,41 +421,39 @@ class _SpendCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(18),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: <Widget>[
-            Row(
-              children: <Widget>[
-                Expanded(
-                  child: _BigStat(
-                    label: 'Jarak ditempuh',
-                    value: formatDistanceMeters(
-                      recap.totalDistanceMeters.toDouble(),
-                    ),
+    return TkCard(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: <Widget>[
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: <Widget>[
+              Expanded(
+                child: _BigStat(
+                  label: 'Jarak ditempuh',
+                  value: formatDistanceMeters(
+                    recap.totalDistanceMeters.toDouble(),
                   ),
                 ),
-                Expanded(
-                  child: _BigStat(
-                    label: 'Tarif terbayar',
-                    value: formatRupiah(recap.totalFareRupiah),
-                  ),
+              ),
+              Expanded(
+                child: _BigStat(
+                  label: 'Tarif terhitung',
+                  value: formatRupiah(recap.totalFareRupiah),
                 ),
-              ],
-            ),
-            if (recap.hasUnmeasuredTrips) ...<Widget>[
-              const SizedBox(height: 12),
-              Text(
-                'Dihitung dari ${recap.measuredTripCount} dari '
-                '${recap.tripCount} perjalanan — sisanya belum punya data '
-                'jalur untuk diukur, jadi tidak ikut dijumlahkan.',
-                style: theme.textTheme.bodySmall,
               ),
             ],
+          ),
+          if (recap.hasUnmeasuredTrips) ...<Widget>[
+            const SizedBox(height: 12),
+            Text(
+              'Dihitung dari ${recap.measuredTripCount} dari '
+              '${recap.tripCount} perjalanan. Sisanya belum punya data jalur '
+              'untuk diukur, jadi tidak ikut dijumlahkan.',
+              style: theme.textTheme.bodySmall,
+            ),
           ],
-        ),
+        ],
       ),
     );
   }
@@ -246,178 +475,11 @@ class _BigStat extends StatelessWidget {
         const SizedBox(height: 4),
         Text(
           value,
-          style: theme.textTheme.headlineMedium?.copyWith(
-            fontFeatures: const <FontFeature>[FontFeature.tabularFigures()],
+          style: theme.textTheme.titleLarge?.copyWith(
+            fontFeatures: AppTheme.timeFeatures,
           ),
         ),
       ],
     );
   }
-}
-
-class _RecapTile extends StatelessWidget {
-  const _RecapTile({
-    required this.icon,
-    required this.title,
-    required this.value,
-    required this.detail,
-  });
-
-  final IconData icon;
-  final String title;
-  final String value;
-  final String detail;
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    return ListTile(
-      leading: Icon(icon),
-      title: Text(title, style: theme.textTheme.bodySmall),
-      subtitle: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: <Widget>[
-          Text(value, style: theme.textTheme.titleMedium),
-          Text(detail, style: theme.textTheme.bodySmall),
-        ],
-      ),
-    );
-  }
-}
-
-class _WeekdayChart extends StatelessWidget {
-  const _WeekdayChart({required this.counts});
-
-  final Map<int, int> counts;
-
-  static const _order = <int>[
-    DateTime.monday,
-    DateTime.tuesday,
-    DateTime.wednesday,
-    DateTime.thursday,
-    DateTime.friday,
-    DateTime.saturday,
-    DateTime.sunday,
-  ];
-
-  static const _shortNames = <int, String>{
-    DateTime.monday: 'Sen',
-    DateTime.tuesday: 'Sel',
-    DateTime.wednesday: 'Rab',
-    DateTime.thursday: 'Kam',
-    DateTime.friday: 'Jum',
-    DateTime.saturday: 'Sab',
-    DateTime.sunday: 'Min',
-  };
-
-  @override
-  Widget build(BuildContext context) {
-    final maxCount = counts.values.fold<int>(0, (a, b) => a > b ? a : b);
-    return SizedBox(
-      height: 132,
-      child: Row(
-        children: <Widget>[
-          for (final day in _order)
-            Expanded(
-              child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 3),
-                child: _WeekdayBar(
-                  count: counts[day] ?? 0,
-                  maxCount: maxCount,
-                  label: _shortNames[day]!,
-                  isBusiest: maxCount > 0 && (counts[day] ?? 0) == maxCount,
-                ),
-              ),
-            ),
-        ],
-      ),
-    );
-  }
-}
-
-class _WeekdayBar extends StatelessWidget {
-  const _WeekdayBar({
-    required this.count,
-    required this.maxCount,
-    required this.label,
-    required this.isBusiest,
-  });
-
-  final int count;
-  final int maxCount;
-  final String label;
-  final bool isBusiest;
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final fraction = maxCount == 0 ? 0.0 : count / maxCount;
-    final barColor = isBusiest
-        ? theme.colorScheme.primary
-        : theme.colorScheme.primary.withValues(alpha: 0.25);
-    return Column(
-      children: <Widget>[
-        Text(
-          count == 0 ? '' : '$count',
-          style: theme.textTheme.bodySmall?.copyWith(
-            fontWeight: FontWeight.w700,
-            color: isBusiest ? theme.colorScheme.primary : null,
-          ),
-        ),
-        const SizedBox(height: 4),
-        Expanded(
-          child: Align(
-            alignment: Alignment.bottomCenter,
-            child: FractionallySizedBox(
-              heightFactor: fraction,
-              widthFactor: 1,
-              child: DecoratedBox(
-                decoration: BoxDecoration(
-                  color: barColor,
-                  borderRadius: const BorderRadius.vertical(
-                    top: Radius.circular(6),
-                  ),
-                ),
-              ),
-            ),
-          ),
-        ),
-        const SizedBox(height: 6),
-        Text(label, style: theme.textTheme.bodySmall),
-      ],
-    );
-  }
-}
-
-const _weekdayNames = <int, String>{
-  DateTime.monday: 'Senin',
-  DateTime.tuesday: 'Selasa',
-  DateTime.wednesday: 'Rabu',
-  DateTime.thursday: 'Kamis',
-  DateTime.friday: 'Jumat',
-  DateTime.saturday: 'Sabtu',
-  DateTime.sunday: 'Minggu',
-};
-
-String _busiestWeekdayLabel(Map<int, int> counts) {
-  if (counts.isEmpty) {
-    return '-';
-  }
-  final entries = counts.entries.toList()
-    ..sort((a, b) {
-      final byCount = b.value.compareTo(a.value);
-      // Ties resolve to the earlier weekday so the label is stable.
-      return byCount != 0 ? byCount : a.key.compareTo(b.key);
-    });
-  return _weekdayNames[entries.first.key] ?? '-';
-}
-
-String _weekdaySummary(Map<int, int> counts) {
-  if (counts.isEmpty) {
-    return '-';
-  }
-  final total = counts.values.reduce((a, b) => a + b);
-  final busiest = counts.values.reduce((a, b) => a > b ? a : b);
-  final percent = ((busiest / total) * 100).round();
-  return '$busiest dari $total perjalanan ($percent%)';
 }

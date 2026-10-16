@@ -5,6 +5,9 @@ import '../../data/providers/demo_data.dart';
 import '../../domain/entities/active_trip.dart';
 import '../../domain/entities/ride_detection.dart';
 import '../../domain/entities/transit_models.dart';
+import 'audio_route.dart';
+
+export 'audio_route.dart';
 
 class PinAppWidgetResult {
   const PinAppWidgetResult({required this.supported, required this.requested});
@@ -275,6 +278,40 @@ class NativeTripService {
     'still' => RideActivityType.still,
     _ => RideActivityType.unknown,
   };
+
+  /// Where trip alert audio goes right now: [AudioRoute.headset] when a
+  /// headset (wired, USB, Bluetooth A2DP/SCO/LE) is connected, otherwise the
+  /// speaker. Read fresh from the OS on every call, so the "Tes suara" page
+  /// can show [AudioRouteInfo.statusText] ("Tersambung ke headset") and
+  /// refresh it when the page resumes. Without the native side (tests, iOS)
+  /// it is always the speaker.
+  Future<AudioRouteInfo> audioRoute() async {
+    return AudioRouteInfo.fromNative(await _invokeMap('getAudioRoute'));
+  }
+
+  /// Plays a trip alert's audio through the native player: [voice] (a
+  /// `res/raw` name from `alert_audio_plan.dart`) and then, with [bell], the
+  /// bell, started when the voice line has actually finished. Routed to the
+  /// headset only when one is connected. This is also the hook for a "Tes
+  /// suara" preview that needs the audio alone.
+  Future<void> playAlertAudio({String? voice, bool bell = false}) async {
+    if (voice == null && !bell) return;
+    await _invoke('playAlertAudio', <String, Object?>{
+      'voice': voice,
+      'bell': bell,
+    });
+  }
+
+  /// The rider noticed the alert: silences the bell (playing or queued)
+  /// and lets the spoken line finish.
+  Future<void> silenceAlertBell() async {
+    await _invoke('silenceAlertBell');
+  }
+
+  /// Stops all alert audio at once.
+  Future<void> stopAlertAudio() async {
+    await _invoke('stopAlertAudio');
+  }
 
   Future<void> _invoke(String method, [Map<String, Object?>? arguments]) async {
     try {

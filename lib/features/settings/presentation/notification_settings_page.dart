@@ -2,7 +2,12 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../../core/widgets/tk_components.dart';
 import 'settings_controller.dart';
+import 'widgets/settings_rows.dart';
+
+/// How many stations before the destination the countdown alerts begin.
+const kStopAlertThresholds = <int>[5, 3, 2, 1];
 
 class NotificationSettingsPage extends ConsumerWidget {
   const NotificationSettingsPage({super.key});
@@ -18,65 +23,45 @@ class NotificationSettingsPage extends ConsumerWidget {
         child: ListView(
           padding: const EdgeInsets.fromLTRB(16, 8, 16, 28),
           children: <Widget>[
-            Text(
-              'Bentuk peringatan',
-              style: Theme.of(context).textTheme.titleLarge,
+            const TkSectionLabel('Bentuk peringatan'),
+            TkRowGroup(
+              children: <Widget>[
+                SettingsSwitchRow(
+                  icon: Icons.vibration_rounded,
+                  title: 'Getaran',
+                  value: settings.vibrationEnabled,
+                  onChanged: controller.setVibrationEnabled,
+                ),
+                SettingsSwitchRow(
+                  icon: Icons.volume_up_outlined,
+                  title: 'Suara',
+                  value: settings.soundEnabled,
+                  onChanged: controller.setSoundEnabled,
+                ),
+                TkRow(
+                  icon: Icons.play_circle_outline_rounded,
+                  title: 'Tes suara peringatan',
+                  subtitle: 'Dengarkan nada tiap peringatan sebelum jalan.',
+                  onTap: () => context.push('/settings/sound-test'),
+                ),
+              ],
             ),
-            const SizedBox(height: 10),
-            Card(
-              child: Column(
-                children: <Widget>[
-                  SwitchListTile(
-                    value: settings.vibrationEnabled,
-                    onChanged: controller.setVibrationEnabled,
-                    secondary: const Icon(Icons.vibration_rounded),
-                    title: const Text('Getaran'),
+            const SizedBox(height: 20),
+            const TkSectionLabel('Mulai peringatan dari'),
+            const SettingsIntro(
+              'Notifikasi dikirim berturut-turut mulai dari jumlah stasiun '
+              'yang kamu pilih sampai tiba di tujuan.',
+            ),
+            TkRowGroup(
+              children: <Widget>[
+                for (final threshold in kStopAlertThresholds)
+                  SettingsChoiceRow(
+                    icon: Icons.notifications_active_outlined,
+                    title: '$threshold stasiun sebelum tujuan',
+                    selected: settings.stopAlertThreshold == threshold,
+                    onTap: () => controller.setStopAlertThreshold(threshold),
                   ),
-                  const Divider(height: 1),
-                  SwitchListTile(
-                    value: settings.soundEnabled,
-                    onChanged: controller.setSoundEnabled,
-                    secondary: const Icon(Icons.volume_up_outlined),
-                    title: const Text('Suara'),
-                  ),
-                  const Divider(height: 1),
-                  ListTile(
-                    leading: const Icon(Icons.play_circle_outline_rounded),
-                    title: const Text('Tes suara peringatan'),
-                    subtitle: const Text(
-                      'Dengarkan nada tiap peringatan sebelum perjalanan asli.',
-                    ),
-                    trailing: const Icon(Icons.chevron_right_rounded),
-                    onTap: () => context.push('/settings/sound-test'),
-                  ),
-                ],
-              ),
-            ),
-            const SizedBox(height: 24),
-            Text(
-              'Waktu peringatan sebelum tujuan',
-              style: Theme.of(context).textTheme.titleLarge,
-            ),
-            const SizedBox(height: 6),
-            const Text(
-              'Notifikasi akan dikirim berturut-turut mulai dari jumlah stasiun ini.',
-            ),
-            const SizedBox(height: 10),
-            Card(
-              child: Column(
-                children: <int>[5, 3, 2, 1].map((threshold) {
-                  return RadioListTile<int>(
-                    value: threshold,
-                    groupValue: settings.stopAlertThreshold,
-                    onChanged: (value) {
-                      if (value != null) {
-                        controller.setStopAlertThreshold(value);
-                      }
-                    },
-                    title: Text('$threshold stasiun sebelum tujuan'),
-                  );
-                }).toList(growable: false),
-              ),
+              ],
             ),
           ],
         ),

@@ -1,9 +1,42 @@
+import 'package:flutter/foundation.dart' show visibleForTesting;
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../domain/entities/transit_models.dart';
 import '../../domain/providers/transit_providers.dart';
 import '../../domain/usecases/line_transfer_router.dart';
 import '../../domain/usecases/transfer_platform_guidance.dart';
+import 'station_coordinate_corrections.dart';
+
+/// How far to move [time] back by whole weeks so that its date lands inside
+/// the imported timetable window [[windowStart], [windowEnd]] on the same
+/// weekday. Zero when [time] is already inside the window; null when the
+/// window is too short to contain every weekday (fewer than 7 dates) or no
+/// whole-week shift reaches it.
+@visibleForTesting
+Duration? weekdayAlignedShift(
+  DateTime time,
+  DateTime windowStart,
+  DateTime windowEnd,
+) {
+  DateTime dayOf(DateTime d) => DateTime.utc(d.year, d.month, d.day);
+  final day = dayOf(time.toLocal());
+  final start = dayOf(windowStart);
+  final end = dayOf(windowEnd);
+  if (end.difference(start).inDays < 6) {
+    return null;
+  }
+  if (!day.isBefore(start) && !day.isAfter(end)) {
+    return Duration.zero;
+  }
+  final weeks = day.isAfter(end)
+      ? (day.difference(end).inDays + 6) ~/ 7
+      : -((start.difference(day).inDays + 6) ~/ 7);
+  final shifted = day.subtract(Duration(days: weeks * 7));
+  if (shifted.isBefore(start) || shifted.isAfter(end)) {
+    return null;
+  }
+  return Duration(days: weeks * 7);
+}
 
 /// Backs `TRANSIT_PROVIDER=local_supabase` against the schema in
 /// `supabase/migrations/`. Schedule search only resolves **direct** trips —
@@ -62,12 +95,17 @@ class SupabaseTransitProvider
               (b['stop_order'] as int?) ?? 0,
             ),
           );
+    final position = applyStationCoordinateCorrection(
+      row['code'] as String,
+      (row['latitude'] as num).toDouble(),
+      (row['longitude'] as num).toDouble(),
+    );
     return Station(
       id: row['code'] as String,
       code: row['code'] as String,
       name: row['name'] as String,
-      latitude: (row['latitude'] as num).toDouble(),
-      longitude: (row['longitude'] as num).toDouble(),
+      latitude: position.latitude,
+      longitude: position.longitude,
       wheelchairAccessible: row['wheelchair_accessible'] as bool? ?? false,
       facilities: _facilityTags(facilities),
       lineIds: stationLines
@@ -127,51 +165,130 @@ class SupabaseTransitProvider
   /// dumping every trip the schedule table happens to have.
   static const _departuresLimit = 10;
 
+  /// Spacing of the placeholder board used only when the timetable has no row.
+  static const _fallbackSlotMinutes = 7;
+
+  Future<List<dynamic>> _departureRows(String stationId, DateTime from) {
+    return _client.rpc<List<dynamic>>(
+      'get_station_departures',
+      params: <String, Object?>{
+        'p_station_code': stationId,
+        'p_from': from.toUtc().toIso8601String(),
+        // Over-fetch: trips that END at this station are dropped below, and
+        // the board should still fill its window.
+        'p_limit': _departuresLimit * 2,
+      },
+    );
+  }
+
+  /// First and last `service_date` the imported GTFS feed covers, cached for
+  /// an hour. Null when the table is empty or unreachable.
+  ({DateTime start, DateTime end})? _cachedWindow;
+  DateTime? _windowFetchedAt;
+
+  Future<({DateTime start, DateTime end})?> _serviceWindow() async {
+    final fetchedAt = _windowFetchedAt;
+    if (fetchedAt != null &&
+        DateTime.now().difference(fetchedAt) < const Duration(hours: 1)) {
+      return _cachedWindow;
+    }
+    try {
+      final first = await _client
+          .from('trips')
+          .select('service_date')
+          .order('service_date', ascending: true)
+          .limit(1);
+      final last = await _client
+          .from('trips')
+          .select('service_date')
+          .order('service_date', ascending: false)
+          .limit(1);
+      if (first.isEmpty || last.isEmpty) {
+        _cachedWindow = null;
+      } else {
+        _cachedWindow = (
+          start: DateTime.parse(first.first['service_date'] as String),
+          end: DateTime.parse(last.first['service_date'] as String),
+        );
+      }
+      _windowFetchedAt = DateTime.now();
+    } on Object {
+      return null;
+    }
+    return _cachedWindow;
+  }
+
   @override
   Future<List<Departure>> getStationDepartures(
     String stationId,
     DateTime time,
   ) async {
-    final rows = await _client.rpc<List<dynamic>>(
-      'get_station_departures',
-      params: <String, Object?>{
-        'p_station_code': stationId,
-        'p_from': time.toUtc().toIso8601String(),
-        'p_limit': _departuresLimit,
-      },
-    );
+    var rows = await _departureRows(stationId, time);
+    var shift = Duration.zero;
+    if (rows.isEmpty) {
+      // `get_station_departures` only has rows for the service_date window
+      // the last GTFS import covered (currently 2026-08-07..13), so once that
+      // window is in the past it returns nothing for "now" although the
+      // timetable keeps repeating weekly. Reuse the REAL imported times from
+      // the same weekday inside that window and re-date them to today. The
+      // times then come from the timetable and stay fixed until they pass,
+      // instead of being recomputed from the current minute.
+      final window = await _serviceWindow();
+      if (window != null) {
+        final aligned = weekdayAlignedShift(time, window.start, window.end);
+        if (aligned != null && aligned != Duration.zero) {
+          shift = aligned;
+          rows = await _departureRows(stationId, time.subtract(shift));
+        }
+      }
+    }
     if (rows.isNotEmpty) {
-      return rows
+      // A trip whose headsign IS this station ends here (it only "arrives");
+      // listing it as a departure to the same station is wrong, so drop it.
+      final stationName = (await getStation(stationId))?.name;
+      final departures = rows
           .cast<Map<String, dynamic>>()
+          .where(
+            (row) =>
+                stationName == null ||
+                !_sameName(row['headsign'] as String?, stationName),
+          )
+          .take(_departuresLimit)
           .map((row) {
             final scheduled = DateTime.parse(
               row['scheduled_departure'] as String,
-            ).toLocal();
+            ).toLocal().add(shift);
             return Departure(
-              id: row['trip_id'] as String,
+              id: shift == Duration.zero
+                  ? row['trip_id'] as String
+                  : '${row['trip_id']}@${scheduled.millisecondsSinceEpoch}',
               stationId: stationId,
               destination: row['headsign'] as String,
               lineName: (row['line_name'] as String?) ?? 'Commuter Line',
               scheduledAt: scheduled,
               expectedAt: scheduled,
-              freshness: DataFreshness.estimated,
-              sourceLabel: 'Basis data KRL • jadwal statis',
+              freshness: DataFreshness.scheduled,
+              sourceLabel: shift == Duration.zero
+                  ? 'Basis data KRL • jadwal GTFS'
+                  : 'Basis data KRL • pola jadwal GTFS mingguan',
               tripNumber: row['trip_number'] as String?,
               isDemo: row['data_source'] == 'demo',
             );
           })
           .toList(growable: false);
+      if (departures.isNotEmpty) {
+        return departures;
+      }
     }
-    // `get_station_departures` only has rows for whatever service_date
-    // window the last GTFS import covered — it rolls stale (confirmed live:
-    // the imported feed currently only covers 2026-08-07..13) and then
-    // returns nothing at all for "now", even though the line genuinely
-    // still runs. An empty departures board reads as "no trains", which is
-    // wrong; this falls back to a plausible near-term board built from the
-    // station's own real line memberships and real line-end names (never a
-    // fabricated line or destination), clearly labelled as an estimate.
+    // Nothing in the timetable at all: fall back to a plausible near-term
+    // board built from the station's own real line memberships and real
+    // line-end names (never a fabricated line or destination), clearly
+    // labelled as an estimate.
     return _fallbackDepartures(stationId, time);
   }
+
+  static bool _sameName(String? a, String b) =>
+      a != null && a.trim().toLowerCase() == b.trim().toLowerCase();
 
   /// `CIKARANG` (the Cikarang Loop line) is a genuine loop, not a simple
   /// point-to-point line — the imported `station_lines.stop_order` only
@@ -233,9 +350,18 @@ class SupabaseTransitProvider
     // multi-direction station alternates rather than clumping one
     // direction's departures together.
     final departures = <Departure>[];
+    // Slots sit on a fixed 7-minute grid counted from local midnight, so a
+    // listed time does not creep forward every minute: it stays put until it
+    // has passed and only then is replaced by the next slot.
+    final midnight = DateTime(time.year, time.month, time.day);
+    final minutesSinceMidnight = time.difference(midnight).inMinutes;
+    final firstSlot = (minutesSinceMidnight ~/ _fallbackSlotMinutes + 1) *
+        _fallbackSlotMinutes;
     for (var i = 0; i < _departuresLimit; i += 1) {
       final (lineCode, headsign) = pairs[i % pairs.length];
-      final scheduled = time.add(Duration(minutes: 6 + i * 7));
+      final scheduled = midnight.add(
+        Duration(minutes: firstSlot + i * _fallbackSlotMinutes),
+      );
       departures.add(
         Departure(
           id: 'estimasi-$stationId-$lineCode-$headsign-$i',
@@ -775,6 +901,7 @@ class SupabaseTransitProvider
       switch (status) {
         'real_time' => DataFreshness.realtime,
         'near_real_time' => DataFreshness.nearRealtime,
+        'scheduled' => DataFreshness.scheduled,
         'estimated' => DataFreshness.estimated,
         _ => DataFreshness.unavailable,
       };

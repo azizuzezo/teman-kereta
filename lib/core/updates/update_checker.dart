@@ -65,38 +65,125 @@ class UpdateCheckerController extends Notifier<PendingAppUpdate?> {
     try {
       final packageInfo = await PackageInfo.fromPlatform();
       final currentVersionCode = int.tryParse(packageInfo.buildNumber) ?? 0;
-
-      final row = await Supabase.instance.client
-          .from('app_releases')
-          .select(
-            'version_code, version_name, apk_url, changelog, min_supported_version_code',
-          )
-          .order('version_code', ascending: false)
-          .limit(1)
-          .maybeSingle();
-      if (row == null) {
-        return;
+      final row = await fetchLatestRelease();
+      final update = evaluateRelease(row, currentVersionCode);
+      if (update != null) {
+        state = update;
       }
-
-      final latestVersionCode = row['version_code'] as int;
-      if (latestVersionCode <= currentVersionCode) {
-        return;
-      }
-
-      final minSupportedVersionCode = row['min_supported_version_code'] as int?;
-      state = PendingAppUpdate(
-        versionName: row['version_name'] as String,
-        apkUrl: row['apk_url'] as String,
-        changelog: row['changelog'] as String?,
-        forceUpdate: minSupportedVersionCode != null &&
-            currentVersionCode < minSupportedVersionCode,
-      );
     } on Object {
       // Best-effort: if app_releases can't be reached, the app just behaves
       // as if no update is available rather than blocking startup on it.
     }
   }
 }
+
+/// Reads the newest `public.app_releases` row through the anon client.
+/// Returns null when the table is empty. Throws when the server is
+/// unreachable, so callers decide whether that is silent (startup check) or
+/// shown (the manual "Cek pembaruan" button).
+Future<Map<String, dynamic>?> fetchLatestRelease() {
+  return Supabase.instance.client
+      .from('app_releases')
+      .select(
+        'version_code, version_name, apk_url, changelog, min_supported_version_code',
+      )
+      .order('version_code', ascending: false)
+      .limit(1)
+      .maybeSingle();
+}
+
+/// Decides whether [row] (a `public.app_releases` row) is newer than
+/// [currentVersionCode]. Pure, so the comparison is unit-tested.
+PendingAppUpdate? evaluateRelease(
+  Map<String, dynamic>? row,
+  int currentVersionCode,
+) {
+  if (row == null) {
+    return null;
+  }
+  final latestVersionCode = row['version_code'] as int;
+  if (latestVersionCode <= currentVersionCode) {
+    return null;
+  }
+  final minSupportedVersionCode = row['min_supported_version_code'] as int?;
+  return PendingAppUpdate(
+    versionName: row['version_name'] as String,
+    apkUrl: row['apk_url'] as String,
+    changelog: row['changelog'] as String?,
+    forceUpdate:
+        minSupportedVersionCode != null &&
+        currentVersionCode < minSupportedVersionCode,
+  );
+}
+
+enum UpdateCheckPhase { idle, checking, upToDate, available, error }
+
+/// Result of the user-initiated "Cek pembaruan" check on the About page.
+class UpdateCheckState {
+  const UpdateCheckState({
+    this.phase = UpdateCheckPhase.idle,
+    this.update,
+    this.checkedAt,
+    this.errorMessage,
+  });
+
+  final UpdateCheckPhase phase;
+  final PendingAppUpdate? update;
+  final DateTime? checkedAt;
+  final String? errorMessage;
+}
+
+/// Manual counterpart of [UpdateCheckerController]: runs only when the user
+/// taps "Cek pembaruan" and reports loading, up-to-date, available and error
+/// states instead of swallowing failures.
+class ManualUpdateCheckController extends Notifier<UpdateCheckState> {
+  @override
+  UpdateCheckState build() => const UpdateCheckState();
+
+  Future<void> check() async {
+    if (state.phase == UpdateCheckPhase.checking) {
+      return;
+    }
+    state = const UpdateCheckState(phase: UpdateCheckPhase.checking);
+    if (!AppEnvironment.supabaseEnabled) {
+      state = const UpdateCheckState(
+        phase: UpdateCheckPhase.error,
+        errorMessage: 'Pemeriksaan pembaruan tidak aktif di build ini.',
+      );
+      return;
+    }
+    try {
+      final info = await ref.read(packageInfoProvider.future);
+      final currentVersionCode = int.tryParse(info.buildNumber) ?? 0;
+      final row = await ref.read(latestReleaseFetcherProvider)();
+      final update = evaluateRelease(row, currentVersionCode);
+      state = UpdateCheckState(
+        phase: update == null
+            ? UpdateCheckPhase.upToDate
+            : UpdateCheckPhase.available,
+        update: update,
+        checkedAt: DateTime.now(),
+      );
+    } on Object {
+      state = const UpdateCheckState(
+        phase: UpdateCheckPhase.error,
+        errorMessage:
+            'Tidak bisa menghubungi server. Periksa koneksi, lalu coba lagi.',
+      );
+    }
+  }
+}
+
+/// Indirection so tests can supply a release row without Supabase.
+final latestReleaseFetcherProvider =
+    Provider<Future<Map<String, dynamic>?> Function()>(
+      (ref) => fetchLatestRelease,
+    );
+
+final manualUpdateCheckProvider =
+    NotifierProvider<ManualUpdateCheckController, UpdateCheckState>(
+      ManualUpdateCheckController.new,
+    );
 
 final updateCheckerControllerProvider =
     NotifierProvider<UpdateCheckerController, PendingAppUpdate?>(

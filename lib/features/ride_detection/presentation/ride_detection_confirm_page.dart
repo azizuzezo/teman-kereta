@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 
 import '../../../app/theme/app_theme.dart';
 import '../../../core/widgets/empty_state.dart';
+import '../../../core/widgets/tk_components.dart';
 import '../../../data/providers/demo_data.dart';
 import '../../../data/providers/provider_registry.dart';
 import '../../../domain/entities/ride_detection.dart';
@@ -15,6 +16,8 @@ class RideDetectionConfirmPage extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final tk = context.tk;
+    final textTheme = Theme.of(context).textTheme;
     final assessment = ref.watch(rideDetectionControllerProvider)?.assessment;
     final controller = ref.read(rideDetectionControllerProvider.notifier);
 
@@ -43,102 +46,177 @@ class RideDetectionConfirmPage extends ConsumerWidget {
     return Scaffold(
       appBar: AppBar(title: const Text('Konfirmasi deteksi naik KRL')),
       body: SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.all(20),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: <Widget>[
-              Icon(
-                Icons.train_rounded,
-                size: 44,
-                color: isStrong ? AppColors.success : AppColors.blue,
+        child: Column(
+          children: <Widget>[
+            Expanded(
+              child: ListView(
+                padding: const EdgeInsets.fromLTRB(20, 16, 20, 16),
+                children: <Widget>[
+                  Container(
+                    width: 56,
+                    height: 56,
+                    alignment: Alignment.center,
+                    decoration: BoxDecoration(
+                      color: isStrong ? tk.successSoft : tk.primarySoft,
+                      borderRadius: BorderRadius.circular(TkRadius.control),
+                    ),
+                    child: Icon(
+                      Icons.train_rounded,
+                      size: 30,
+                      color: isStrong ? tk.success : tk.primary,
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  Text(
+                    isStrong && destinationName != null
+                        ? 'Sepertinya kamu sedang berada di Commuter Line menuju $destinationName.'
+                        : 'Sepertinya kamu baru saja meninggalkan Stasiun $stationName.',
+                    style: textTheme.headlineMedium,
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    isStrong
+                        ? 'Mulai panduan perjalanan?'
+                        : 'Apakah kamu sedang naik kereta?',
+                    style: textTheme.bodyLarge?.copyWith(color: tk.textMuted),
+                  ),
+                  if (isStrong && destinationName != null) ...<Widget>[
+                    const SizedBox(height: 16),
+                    TkCard(
+                      tone: TkCardTone.soft,
+                      child: Row(
+                        children: <Widget>[
+                          Flexible(
+                            child: Text(
+                              stationName,
+                              style: textTheme.titleSmall,
+                            ),
+                          ),
+                          const SizedBox(width: 10),
+                          Icon(
+                            Icons.arrow_forward_rounded,
+                            size: 18,
+                            color: tk.primary,
+                          ),
+                          const SizedBox(width: 10),
+                          Expanded(
+                            child: Text(
+                              destinationName,
+                              style: textTheme.titleSmall,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                  if (assessment.reasons.isNotEmpty) ...<Widget>[
+                    const SizedBox(height: 20),
+                    TkSectionLabel('Kenapa kami menduga begini'),
+                    TkCard(
+                      tone: TkCardTone.alt,
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: <Widget>[
+                          for (final reason in assessment.reasons)
+                            Padding(
+                              padding: const EdgeInsets.symmetric(vertical: 4),
+                              child: Row(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: <Widget>[
+                                  Padding(
+                                    padding: const EdgeInsets.only(top: 7),
+                                    child: Icon(
+                                      Icons.circle,
+                                      size: 6,
+                                      color: tk.textMuted,
+                                    ),
+                                  ),
+                                  const SizedBox(width: 10),
+                                  Expanded(
+                                    child: Text(
+                                      reason,
+                                      style: textTheme.bodyMedium,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ],
               ),
-              const SizedBox(height: 16),
-              Text(
-                isStrong && destinationName != null
-                    ? 'Sepertinya kamu sedang berada di Commuter Line menuju $destinationName.'
-                    : 'Sepertinya kamu baru saja meninggalkan Stasiun $stationName.',
-                style: Theme.of(context).textTheme.headlineSmall,
+            ),
+            DecoratedBox(
+              decoration: BoxDecoration(
+                color: tk.bg,
+                border: Border(top: BorderSide(color: tk.border)),
               ),
-              const SizedBox(height: 8),
-              Text(
-                isStrong
-                    ? 'Mulai panduan perjalanan?'
-                    : 'Apakah kamu sedang naik kereta?',
-                style: Theme.of(context).textTheme.bodyLarge,
-              ),
-              if (assessment.reasons.isNotEmpty) ...<Widget>[
-                const SizedBox(height: 16),
-                for (final reason in assessment.reasons)
-                  Padding(
-                    padding: const EdgeInsets.only(bottom: 6),
-                    child: Row(
-                      crossAxisAlignment: CrossAxisAlignment.start,
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(20, 12, 20, 12),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: <Widget>[
+                    if (destinationName != null)
+                      SizedBox(
+                        width: double.infinity,
+                        height: 56,
+                        child: FilledButton(
+                          onPressed: () async {
+                            await controller.confirmStart();
+                            if (context.mounted) {
+                              context.go('/active-trip');
+                            }
+                          },
+                          child: const Text('Ya, mulai'),
+                        ),
+                      ),
+                    const SizedBox(height: 10),
+                    SizedBox(
+                      width: double.infinity,
+                      height: 52,
+                      child: OutlinedButton(
+                        onPressed: () {
+                          controller.chooseAnother();
+                          context.go('/schedule/search');
+                        },
+                        child: const Text('Pilih kereta lain'),
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Row(
                       children: <Widget>[
-                        const Icon(Icons.circle, size: 6),
-                        const SizedBox(width: 8),
                         Expanded(
-                          child: Text(
-                            reason,
-                            style: Theme.of(context).textTheme.bodySmall,
+                          child: TextButton(
+                            onPressed: () {
+                              controller.dismiss();
+                              context.go('/');
+                            },
+                            child: const Text('Bukan'),
+                          ),
+                        ),
+                        Expanded(
+                          child: TextButton(
+                            onPressed: () async {
+                              await controller.dismissForToday();
+                              if (context.mounted) {
+                                context.go('/');
+                              }
+                            },
+                            child: const Text(
+                              'Jangan tanya lagi hari ini',
+                              textAlign: TextAlign.center,
+                            ),
                           ),
                         ),
                       ],
                     ),
-                  ),
-              ],
-              const Spacer(),
-              if (destinationName != null)
-                SizedBox(
-                  width: double.infinity,
-                  child: FilledButton(
-                    onPressed: () async {
-                      await controller.confirmStart();
-                      if (context.mounted) {
-                        context.go('/active-trip');
-                      }
-                    },
-                    child: const Text('Ya, mulai'),
-                  ),
-                ),
-              const SizedBox(height: 10),
-              SizedBox(
-                width: double.infinity,
-                child: OutlinedButton(
-                  onPressed: () {
-                    controller.chooseAnother();
-                    context.go('/schedule/search');
-                  },
-                  child: const Text('Pilih kereta lain'),
+                  ],
                 ),
               ),
-              const SizedBox(height: 10),
-              Row(
-                children: <Widget>[
-                  Expanded(
-                    child: TextButton(
-                      onPressed: () {
-                        controller.dismiss();
-                        context.go('/');
-                      },
-                      child: const Text('Bukan'),
-                    ),
-                  ),
-                  Expanded(
-                    child: TextButton(
-                      onPressed: () async {
-                        await controller.dismissForToday();
-                        if (context.mounted) {
-                          context.go('/');
-                        }
-                      },
-                      child: const Text('Jangan tanya lagi hari ini'),
-                    ),
-                  ),
-                ],
-              ),
-            ],
-          ),
+            ),
+          ],
         ),
       ),
     );

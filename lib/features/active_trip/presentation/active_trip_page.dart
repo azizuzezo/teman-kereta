@@ -7,8 +7,8 @@ import 'package:intl/intl.dart';
 
 import '../../../app/theme/app_theme.dart';
 import '../../../core/utils/geo.dart';
-import '../../../core/utils/map_launcher.dart';
 import '../../../core/widgets/empty_state.dart';
+import '../../../core/widgets/tk_components.dart';
 import '../../../data/providers/demo_data.dart';
 import '../../../data/providers/provider_registry.dart';
 import '../../../domain/entities/active_trip.dart';
@@ -35,11 +35,56 @@ String _resolveStationName(String? id, List<Station> stations) {
   return demoStations.where((s) => s.id == id).firstOrNull?.name ?? id;
 }
 
+/// Colors for the glanceable status block at the top of the active-trip
+/// screen. Light themes get a solid primary block; dark themes keep the
+/// surface color so a bright slab never glares in a night train. Both pairs
+/// are token-derived, so every palette stays inside its own contrast rules.
+class _HeroPalette {
+  const _HeroPalette({
+    required this.background,
+    required this.foreground,
+    required this.muted,
+    required this.track,
+    required this.bar,
+    required this.border,
+  });
+
+  factory _HeroPalette.of(TkColors tk) {
+    if (tk.isDark) {
+      return _HeroPalette(
+        background: tk.surface,
+        foreground: tk.text,
+        muted: tk.textMuted,
+        track: tk.border,
+        bar: tk.primary,
+        border: tk.border,
+      );
+    }
+    return _HeroPalette(
+      background: tk.primary,
+      foreground: tk.onPrimary,
+      muted: tk.onPrimary.withValues(alpha: 0.82),
+      track: tk.onPrimary.withValues(alpha: 0.28),
+      bar: tk.onPrimary,
+      border: Colors.transparent,
+    );
+  }
+
+  final Color background;
+  final Color foreground;
+  final Color muted;
+  final Color track;
+  final Color bar;
+  final Color border;
+}
+
 class ActiveTripPage extends ConsumerWidget {
   const ActiveTripPage({super.key});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final tk = context.tk;
+    final textTheme = Theme.of(context).textTheme;
     final session = ref.watch(activeTripControllerProvider);
     final stations = ref.watch(stationListProvider).value ?? const <Station>[];
     final gpsFix = ref.watch(latestNativeGpsFixProvider);
@@ -48,7 +93,7 @@ class ActiveTripPage extends ConsumerWidget {
     // navigation here only happens once `start()` has returned), so there's
     // no false→true transition left for a listener registered on first
     // build to catch. Watching the current value and firing once per frame
-    // where it's true — then clearing it in that same callback — catches
+    // where it's true, then clearing it in that same callback, catches
     // both "already true when this page first mounts" and any later flip.
     if (ref.watch(tripBatteryWarningProvider)) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -128,6 +173,8 @@ class ActiveTripPage extends ConsumerWidget {
     final isTransferring = session.state == ActiveTripState.transferring;
     final isApproachingTransfer =
         session.state == ActiveTripState.approachingTransfer;
+    final isApproachingDestination =
+        session.state == ActiveTripState.approachingDestination;
     final transferBoundary = session.nextTransferBoundary;
     final transferStationName = transferBoundary == null
         ? null
@@ -141,298 +188,330 @@ class ActiveTripPage extends ConsumerWidget {
               transferStationName != null
         ? transferStationName
         : nextName;
+    final headlineLabel = isArrived
+        ? 'Kamu tiba di'
+        : isTransferring
+        ? 'Turun dan transit di'
+        : isApproachingTransfer
+        ? 'Bersiap transit di'
+        : session.remainingStops == 1
+        ? 'Stasiun berikutnya adalah tujuanmu'
+        : 'Stasiun berikutnya';
+    final hero = _HeroPalette.of(tk);
+    final remaining = session.remainingStops;
 
     return Scaffold(
-      backgroundColor: AppColors.navy,
-      appBar: AppBar(
-        foregroundColor: AppColors.surfaceLight,
-        // The app's global `AppBarTheme.titleTextStyle` (see app_theme.dart)
-        // fixes a dark title color for the light-background app bars used
-        // everywhere else — it wins over `foregroundColor` above, which only
-        // covers icons once a `titleTextStyle` exists. On this page's dark
-        // navy background that made the title unreadable (dark-on-dark, no
-        // contrast) — confirmed live on-device. Overriding just the color
-        // here keeps the same size/weight while fixing the contrast.
-        titleTextStyle: Theme.of(
-          context,
-        ).appBarTheme.titleTextStyle?.copyWith(color: AppColors.surfaceLight),
-        title: const Text('Perjalanan aktif'),
-        actions: <Widget>[
-          IconButton(
-            tooltip: 'Akhiri perjalanan',
-            onPressed: () => _confirmCancel(context, ref),
-            icon: const Icon(Icons.close_rounded),
-          ),
-          const SizedBox(width: 8),
-        ],
-      ),
+      appBar: AppBar(title: const Text('Perjalanan aktif')),
       body: SafeArea(
         bottom: false,
-        child: CustomScrollView(
-          slivers: <Widget>[
-            SliverToBoxAdapter(
-              child: Padding(
-                padding: const EdgeInsets.fromLTRB(20, 20, 20, 22),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: <Widget>[
-                    Text(
-                      isArrived
-                          ? 'Kamu tiba di'
-                          : isTransferring
-                          ? 'Turun dan transit di'
-                          : isApproachingTransfer
-                          ? 'Bersiap transit di'
-                          : session.remainingStops == 1
-                          ? 'Stasiun berikutnya adalah tujuanmu'
-                          : 'Stasiun berikutnya',
-                      style: Theme.of(context).textTheme.bodyLarge?.copyWith(
-                        color: AppColors.textSecondaryDark,
-                      ),
-                    ),
-                    const SizedBox(height: 6),
-                    AnimatedSwitcher(
-                      duration: reduceMotion
-                          ? Duration.zero
-                          : const Duration(milliseconds: 220),
-                      child: Text(
-                        headlineName,
-                        key: ValueKey<String>(headlineName),
-                        style: Theme.of(context).textTheme.displayLarge
-                            ?.copyWith(color: AppColors.surfaceLight),
-                      ),
-                    ),
-                    if ((isTransferring || isApproachingTransfer) &&
-                        transferBoundary?.instruction != null) ...<Widget>[
-                      const SizedBox(height: 8),
-                      Text(
-                        transferBoundary!.instruction!,
-                        style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                          color: AppColors.textSecondaryDark,
+        child: ListView(
+          padding: const EdgeInsets.fromLTRB(16, 4, 16, 24),
+          children: <Widget>[
+            Container(
+              padding: const EdgeInsets.fromLTRB(20, 20, 20, 18),
+              decoration: BoxDecoration(
+                color: hero.background,
+                borderRadius: BorderRadius.circular(TkRadius.sheet),
+                border: Border.all(color: hero.border),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: <Widget>[
+                  Semantics(
+                    liveRegion: true,
+                    label: '$headlineLabel $headlineName',
+                    excludeSemantics: true,
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: <Widget>[
+                        Text(
+                          headlineLabel,
+                          style: textTheme.titleMedium?.copyWith(
+                            color: hero.muted,
+                            fontWeight: FontWeight.w600,
+                          ),
                         ),
+                        const SizedBox(height: 6),
+                        AnimatedSwitcher(
+                          duration: reduceMotion
+                              ? Duration.zero
+                              : const Duration(milliseconds: 220),
+                          child: Text(
+                            headlineName,
+                            key: ValueKey<String>(headlineName),
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                            style: textTheme.displayLarge?.copyWith(
+                              color: hero.foreground,
+                              fontSize: 38,
+                              height: 1.1,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  if ((isTransferring || isApproachingTransfer) &&
+                      transferBoundary?.instruction != null) ...<Widget>[
+                    const SizedBox(height: 8),
+                    Text(
+                      transferBoundary!.instruction!,
+                      style: textTheme.bodyLarge?.copyWith(
+                        color: hero.foreground,
+                        fontWeight: FontWeight.w600,
                       ),
-                    ],
-                    const SizedBox(height: 18),
-                    if (!isArrived)
-                      Row(
-                        crossAxisAlignment: CrossAxisAlignment.end,
-                        children: <Widget>[
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
+                    ),
+                  ],
+                  if (!isArrived) ...<Widget>[
+                    const SizedBox(height: 20),
+                    Row(
+                      crossAxisAlignment: CrossAxisAlignment.end,
+                      children: <Widget>[
+                        Expanded(
+                          child: Semantics(
+                            label:
+                                '$remaining stasiun lagi menuju $destinationName',
+                            excludeSemantics: true,
+                            child: Row(
+                              crossAxisAlignment: CrossAxisAlignment.end,
                               children: <Widget>[
                                 Text(
-                                  liveEtaValue != null
-                                      ? 'Estimasi tiba • live'
-                                      : 'Estimasi tiba • jadwal',
-                                  style: Theme.of(context).textTheme.bodySmall
-                                      ?.copyWith(
-                                        color: AppColors.textSecondaryDark,
-                                      ),
+                                  '$remaining',
+                                  style: textTheme.displayLarge?.copyWith(
+                                    color: hero.foreground,
+                                    fontSize: 64,
+                                    height: 1,
+                                    fontFeatures: AppTheme.timeFeatures,
+                                  ),
                                 ),
-                                Text(
-                                  DateFormat.Hm('id_ID').format(displayEta),
-                                  style: Theme.of(context)
-                                      .textTheme
-                                      .headlineSmall
-                                      ?.copyWith(
-                                        color: AppColors.surfaceLight,
-                                        fontWeight: FontWeight.w800,
-                                      ),
+                                const SizedBox(width: 10),
+                                Expanded(
+                                  child: Padding(
+                                    padding: const EdgeInsets.only(bottom: 4),
+                                    child: Column(
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.start,
+                                      children: <Widget>[
+                                        Text(
+                                          'stasiun lagi',
+                                          style: textTheme.titleMedium
+                                              ?.copyWith(
+                                                color: hero.foreground,
+                                                fontWeight: FontWeight.w700,
+                                              ),
+                                        ),
+                                        Text(
+                                          'ke $destinationName',
+                                          maxLines: 1,
+                                          overflow: TextOverflow.ellipsis,
+                                          style: textTheme.bodyMedium?.copyWith(
+                                            color: hero.muted,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
                                 ),
                               ],
                             ),
                           ),
-                          Column(
-                            crossAxisAlignment: CrossAxisAlignment.end,
-                            children: <Widget>[
-                              Text(
-                                'Stasiun saat ini',
-                                style: Theme.of(context).textTheme.bodySmall
-                                    ?.copyWith(
-                                      color: AppColors.textSecondaryDark,
-                                    ),
-                              ),
-                              Text(
-                                '$currentName • ${session.remainingStops} stasiun tersisa',
-                                textAlign: TextAlign.end,
-                                style: Theme.of(context).textTheme.bodySmall
-                                    ?.copyWith(
-                                      color: AppColors.surfaceLight,
-                                      fontWeight: FontWeight.w600,
-                                    ),
-                              ),
-                            ],
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 14),
+                    Row(
+                      crossAxisAlignment: CrossAxisAlignment.baseline,
+                      textBaseline: TextBaseline.alphabetic,
+                      children: <Widget>[
+                        Expanded(
+                          child: Text(
+                            liveEtaValue != null
+                                ? 'Estimasi tiba • live'
+                                : 'Estimasi tiba • jadwal',
+                            style: textTheme.bodyMedium?.copyWith(
+                              color: hero.muted,
+                            ),
                           ),
-                        ],
-                      ),
-                    const SizedBox(height: 12),
-                    ClipRRect(
-                      borderRadius: BorderRadius.circular(999),
-                      child: TweenAnimationBuilder<double>(
-                        tween: Tween<double>(begin: 0, end: progress),
-                        duration: reduceMotion
-                            ? Duration.zero
-                            : const Duration(milliseconds: 500),
-                        curve: Curves.easeOut,
-                        builder: (context, value, _) => LinearProgressIndicator(
-                          value: value,
-                          minHeight: 8,
-                          backgroundColor: AppColors.borderDark,
-                          color: AppColors.coral,
-                          semanticsLabel: 'Progres perjalanan',
-                          semanticsValue: '${(value * 100).round()} persen',
+                        ),
+                        const SizedBox(width: 12),
+                        Text(
+                          DateFormat.Hm('id_ID').format(displayEta),
+                          style: textTheme.headlineMedium?.copyWith(
+                            color: hero.foreground,
+                            fontWeight: FontWeight.w800,
+                            fontFeatures: AppTheme.timeFeatures,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                  const SizedBox(height: 14),
+                  Semantics(
+                    label: 'Progres perjalanan',
+                    value: '${(progress.clamp(0.0, 1.0) * 100).round()} persen',
+                    child: ExcludeSemantics(
+                      child: ClipRRect(
+                        borderRadius: BorderRadius.circular(6),
+                        child: TweenAnimationBuilder<double>(
+                          tween: Tween<double>(begin: 0, end: progress),
+                          duration: reduceMotion
+                              ? Duration.zero
+                              : const Duration(milliseconds: 500),
+                          curve: Curves.easeOut,
+                          builder: (context, value, _) =>
+                              LinearProgressIndicator(
+                                value: value.clamp(0.0, 1.0),
+                                minHeight: 10,
+                                backgroundColor: hero.track,
+                                color: hero.bar,
+                              ),
                         ),
                       ),
                     ),
-                    const SizedBox(height: 18),
-                    _TripStatsRow(session: session),
-                    const SizedBox(height: 14),
-                    const _LocationHealthRow(),
+                  ),
+                  if (!isArrived) ...<Widget>[
+                    const SizedBox(height: 10),
+                    Text(
+                      'Stasiun saat ini: $currentName',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: textTheme.bodyMedium?.copyWith(color: hero.muted),
+                    ),
                   ],
-                ),
+                  const SizedBox(height: 16),
+                  _TripStatsRow(session: session, palette: hero),
+                  const SizedBox(height: 8),
+                  _LocationHealthRow(palette: hero),
+                ],
               ),
             ),
-            SliverFillRemaining(
-              hasScrollBody: false,
-              child: Container(
-                decoration: BoxDecoration(
-                  color: Theme.of(context).scaffoldBackgroundColor,
-                  borderRadius: const BorderRadius.vertical(
-                    top: Radius.circular(28),
+            const SizedBox(height: 24),
+            Row(
+              children: <Widget>[
+                Expanded(
+                  child: Semantics(
+                    header: true,
+                    child: Text('Urutan stasiun', style: textTheme.titleLarge),
                   ),
                 ),
-                child: Padding(
-                  padding: const EdgeInsets.fromLTRB(20, 24, 20, 32),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: <Widget>[
-                      Row(
-                        children: <Widget>[
-                          Expanded(
-                            child: Text(
-                              'Urutan stasiun',
-                              style: Theme.of(context).textTheme.titleLarge,
-                            ),
-                          ),
-                          Text(
-                            session.lowBatteryMode
-                                ? 'Hemat baterai'
-                                : 'GPS akurasi tinggi',
-                            style: Theme.of(context).textTheme.bodySmall,
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 14),
-                      TripRailTimeline(
-                        stations: <RailStation>[
-                          for (
-                            var index = 0;
-                            index < session.trip.stationIds.length;
-                            index += 1
-                          )
-                            (
-                              name: _resolveStationName(
-                                session.trip.stationIds[index],
-                                stations,
-                              ),
-                              transferInstruction: _transferInstructionAt(
-                                session.trip,
-                                index,
-                              ),
-                            ),
-                        ],
-                        currentIndex: session.currentStationIndex,
-                        hopFraction: isArrived ? 0 : hopFraction,
-                        reduceMotion: reduceMotion,
-                      ),
-                      const SizedBox(height: 20),
-                      if (session.trip.isDemo && !isArrived)
-                        SizedBox(
-                          width: double.infinity,
-                          child: FilledButton.icon(
-                            onPressed: () => ref
-                                .read(activeTripControllerProvider.notifier)
-                                .advanceStop(),
-                            icon: const Icon(Icons.skip_next_rounded),
-                            label: const Text('Simulasikan stasiun berikutnya'),
-                          ),
-                        ),
-                      if (isArrived)
-                        SizedBox(
-                          width: double.infinity,
-                          child: FilledButton.icon(
-                            // Safety net only: arrival auto-completes, so
-                            // this is reachable only if that never fired.
-                            // Navigation is the app shell's job now (see
-                            // `RideDetectionWatcher`), so completing is all
-                            // this has to do — doing both would `go` twice.
-                            onPressed: () => ref
-                                .read(activeTripControllerProvider.notifier)
-                                .complete(),
-                            icon: const Icon(Icons.flag_outlined),
-                            label: const Text('Selesaikan perjalanan'),
-                          ),
-                        ),
-                      const SizedBox(height: 10),
-                      OutlinedButton.icon(
-                        onPressed: () => ref
-                            .read(activeTripControllerProvider.notifier)
-                            .toggleLowBatteryMode(),
-                        icon: Icon(
-                          session.lowBatteryMode
-                              ? Icons.battery_saver
-                              : Icons.battery_5_bar_outlined,
-                        ),
-                        label: Text(
-                          session.lowBatteryMode
-                              ? 'Matikan hemat baterai'
-                              : 'Aktifkan hemat baterai',
-                        ),
-                      ),
-                    ],
+                if (session.lowBatteryMode)
+                  const TkPill(
+                    label: 'Hemat baterai',
+                    icon: Icons.battery_saver_rounded,
+                    tone: TkPillTone.success,
+                    dense: true,
                   ),
+              ],
+            ),
+            const SizedBox(height: 12),
+            TkCard(
+              padding: const EdgeInsets.fromLTRB(16, 18, 16, 16),
+              child: TripRailTimeline(
+                stations: <RailStation>[
+                  for (
+                    var index = 0;
+                    index < session.trip.stationIds.length;
+                    index += 1
+                  )
+                    (
+                      name: _resolveStationName(
+                        session.trip.stationIds[index],
+                        stations,
+                      ),
+                      transferInstruction: _transferInstructionAt(
+                        session.trip,
+                        index,
+                      ),
+                    ),
+                ],
+                currentIndex: session.currentStationIndex,
+                hopFraction: isArrived ? 0 : hopFraction,
+                reduceMotion: reduceMotion,
+              ),
+            ),
+            if (session.trip.isDemo && !isArrived) ...<Widget>[
+              const SizedBox(height: 12),
+              SizedBox(
+                width: double.infinity,
+                child: FilledButton.tonalIcon(
+                  onPressed: () => ref
+                      .read(activeTripControllerProvider.notifier)
+                      .advanceStop(),
+                  icon: const Icon(Icons.skip_next_rounded),
+                  label: const Text('Simulasikan stasiun berikutnya'),
                 ),
               ),
+            ],
+            const SizedBox(height: 12),
+            TkRowGroup(
+              children: <Widget>[
+                TkRow(
+                  icon: session.lowBatteryMode
+                      ? Icons.battery_saver_rounded
+                      : Icons.battery_5_bar_outlined,
+                  title: 'Hemat baterai',
+                  subtitle: session.lowBatteryMode
+                      ? 'Aktif. Matikan untuk pelacakan lebih sering.'
+                      : 'Kurangi animasi dan pembaruan saat baterai tipis.',
+                  onTap: () => ref
+                      .read(activeTripControllerProvider.notifier)
+                      .toggleLowBatteryMode(),
+                  trailing: ExcludeSemantics(
+                    child: Switch(
+                      value: session.lowBatteryMode,
+                      onChanged: (_) => ref
+                          .read(activeTripControllerProvider.notifier)
+                          .toggleLowBatteryMode(),
+                    ),
+                  ),
+                ),
+              ],
             ),
           ],
         ),
       ),
-    );
-  }
-
-  Future<void> _confirmCancel(BuildContext context, WidgetRef ref) async {
-    final shouldCancel = await showModalBottomSheet<bool>(
-      context: context,
-      showDragHandle: true,
-      builder: (context) => SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(20, 8, 20, 20),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
+      bottomNavigationBar: DecoratedBox(
+        decoration: BoxDecoration(
+          color: tk.bg,
+          border: Border(top: BorderSide(color: tk.border)),
+        ),
+        child: SafeArea(
+          minimum: const EdgeInsets.fromLTRB(16, 12, 16, 12),
+          child: Row(
             children: <Widget>[
-              Text(
-                'Akhiri perjalanan?',
-                style: Theme.of(context).textTheme.titleLarge,
-              ),
-              const SizedBox(height: 8),
-              const Text(
-                'Notifikasi stasiun dan layanan latar belakang akan dihentikan.',
-              ),
-              const SizedBox(height: 20),
-              SizedBox(
-                width: double.infinity,
-                child: FilledButton(
-                  onPressed: () => Navigator.pop(context, true),
-                  child: const Text('Akhiri perjalanan'),
+              TextButton(
+                onPressed: () => _confirmCancel(context, ref),
+                style: TextButton.styleFrom(
+                  foregroundColor: tk.danger,
+                  minimumSize: const Size(96, 56),
                 ),
+                child: const Text('Batalkan'),
               ),
-              SizedBox(
-                width: double.infinity,
-                child: TextButton(
-                  onPressed: () => Navigator.pop(context, false),
-                  child: const Text('Lanjutkan perjalanan'),
+              const SizedBox(width: 8),
+              Expanded(
+                child: SizedBox(
+                  height: 56,
+                  child: isArrived || isApproachingDestination
+                      ? FilledButton.icon(
+                          onPressed: () => _confirmFinish(context, ref),
+                          icon: const Icon(Icons.flag_outlined),
+                          label: FittedBox(
+                            fit: BoxFit.scaleDown,
+                            child: Text(
+                              isArrived
+                                  ? 'Selesaikan perjalanan'
+                                  : 'Aku sudah turun',
+                            ),
+                          ),
+                        )
+                      : FilledButton.tonalIcon(
+                          onPressed: () => _confirmFinish(context, ref),
+                          icon: const Icon(Icons.flag_outlined),
+                          label: const FittedBox(
+                            fit: BoxFit.scaleDown,
+                            child: Text('Aku sudah turun'),
+                          ),
+                        ),
                 ),
               ),
             ],
@@ -440,7 +519,20 @@ class ActiveTripPage extends ConsumerWidget {
         ),
       ),
     );
-    if ((shouldCancel ?? false) && context.mounted) {
+  }
+
+  Future<void> _confirmCancel(BuildContext context, WidgetRef ref) async {
+    final shouldCancel = await _showConfirmSheet(
+      context,
+      title: 'Batalkan perjalanan?',
+      message:
+          'Perjalanan ini tidak dicatat di riwayat. Notifikasi stasiun dan '
+          'layanan latar belakang akan dihentikan.',
+      confirmLabel: 'Ya, batalkan',
+      keepLabel: 'Lanjutkan perjalanan',
+      destructive: true,
+    );
+    if (shouldCancel && context.mounted) {
       await ref.read(activeTripControllerProvider.notifier).cancel();
       if (context.mounted) {
         context.go('/');
@@ -448,8 +540,86 @@ class ActiveTripPage extends ConsumerWidget {
     }
   }
 
+  Future<void> _confirmFinish(BuildContext context, WidgetRef ref) async {
+    final shouldFinish = await _showConfirmSheet(
+      context,
+      title: 'Sudah turun di tujuan?',
+      message:
+          'Perjalanan ditutup dan dicatat di riwayat. Notifikasi stasiun '
+          'dihentikan.',
+      confirmLabel: 'Ya, aku sudah turun',
+      keepLabel: 'Belum, lanjutkan',
+    );
+    if (shouldFinish && context.mounted) {
+      // Navigation to the recap is the app shell's job (see
+      // `RideDetectionWatcher`), so completing is all this has to do.
+      await ref.read(activeTripControllerProvider.notifier).complete();
+    }
+  }
+
+  Future<bool> _showConfirmSheet(
+    BuildContext context, {
+    required String title,
+    required String message,
+    required String confirmLabel,
+    required String keepLabel,
+    bool destructive = false,
+  }) async {
+    final tk = context.tk;
+    final result = await showModalBottomSheet<bool>(
+      context: context,
+      showDragHandle: true,
+      builder: (sheetContext) => SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(20, 8, 20, 20),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: <Widget>[
+              Text(title, style: Theme.of(sheetContext).textTheme.titleLarge),
+              const SizedBox(height: 8),
+              Text(
+                message,
+                style: Theme.of(
+                  sheetContext,
+                ).textTheme.bodyMedium?.copyWith(color: tk.textMuted),
+              ),
+              const SizedBox(height: 20),
+              SizedBox(
+                width: double.infinity,
+                height: 52,
+                child: FilledButton(
+                  style: destructive
+                      ? FilledButton.styleFrom(
+                          backgroundColor: tk.danger,
+                          foregroundColor: Theme.of(
+                            sheetContext,
+                          ).colorScheme.onError,
+                        )
+                      : null,
+                  onPressed: () => Navigator.pop(sheetContext, true),
+                  child: Text(confirmLabel),
+                ),
+              ),
+              const SizedBox(height: 4),
+              SizedBox(
+                width: double.infinity,
+                height: 52,
+                child: TextButton(
+                  onPressed: () => Navigator.pop(sheetContext, false),
+                  child: Text(keepLabel),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+    return result ?? false;
+  }
+
   /// Non-null exactly when [index] is one of this trip's real transfer
-  /// stations — used to give every transit stop its own marker in "Urutan
+  /// stations, used to give every transit stop its own marker in "Urutan
   /// stasiun" instead of only the single upcoming one shown in the header.
   String? _transferInstructionAt(TransitTrip trip, int index) {
     for (final boundary in trip.transferBoundaries) {
@@ -468,10 +638,12 @@ class ActiveTripPage extends ConsumerWidget {
 /// rebuilds the subscription after 90s of silence, and a route catch-up that
 /// re-syncs the trip from wherever the rider really is once fixes return).
 /// This just lets a rider who can see the app is behind skip the wait
-/// instead of sitting there wondering — it feeds the same pipeline and can
+/// instead of sitting there wondering: it feeds the same pipeline and can
 /// never move the trip somewhere automatic tracking wouldn't have.
 class _LocationHealthRow extends ConsumerStatefulWidget {
-  const _LocationHealthRow();
+  const _LocationHealthRow({required this.palette});
+
+  final _HeroPalette palette;
 
   @override
   ConsumerState<_LocationHealthRow> createState() => _LocationHealthRowState();
@@ -492,14 +664,15 @@ class _LocationHealthRowState extends ConsumerState<_LocationHealthRow> {
 
   @override
   Widget build(BuildContext context) {
+    final palette = widget.palette;
     final status = ref.watch(tripLocationStatusProvider);
     final fix = ref.watch(latestNativeGpsFixProvider);
     final degraded = status == 'signal_lost' || status == 'permission_missing';
     final label = switch (status) {
       'signal_lost' =>
-        'Sinyal GPS hilang — perjalanan tetap jalan dan menyusul otomatis',
+        'Sinyal GPS hilang. Perjalanan tetap jalan dan menyusul otomatis',
       'permission_missing' =>
-        'Izin lokasi dicabut — aktifkan lagi di pengaturan',
+        'Izin lokasi dicabut, aktifkan lagi di pengaturan',
       'waiting_for_location' => 'Mencari sinyal GPS…',
       'starting' => 'Menyiapkan pelacakan…',
       _ =>
@@ -507,41 +680,55 @@ class _LocationHealthRowState extends ConsumerState<_LocationHealthRow> {
             ? 'Melacak lokasi otomatis'
             : 'Lokasi terbaru ${DateFormat.Hms('id_ID').format(fix.at)}',
     };
-    return Row(
-      children: <Widget>[
-        Icon(
-          degraded ? Icons.gps_off_rounded : Icons.gps_fixed_rounded,
-          size: 16,
-          color: degraded ? AppColors.coral : AppColors.textSecondaryDark,
-        ),
-        const SizedBox(width: 8),
-        Expanded(
-          child: Text(
-            label,
-            style: Theme.of(context).textTheme.bodySmall?.copyWith(
-              color: degraded ? AppColors.coral : AppColors.textSecondaryDark,
+    final textTheme = Theme.of(context).textTheme;
+    return Container(
+      padding: degraded
+          ? const EdgeInsets.fromLTRB(12, 4, 4, 4)
+          : const EdgeInsets.fromLTRB(0, 0, 0, 0),
+      decoration: degraded
+          ? BoxDecoration(
+              color: palette.foreground.withValues(alpha: 0.14),
+              borderRadius: BorderRadius.circular(TkRadius.control),
+            )
+          : null,
+      child: Row(
+        children: <Widget>[
+          Icon(
+            degraded ? Icons.gps_off_rounded : Icons.gps_fixed_rounded,
+            size: 18,
+            color: degraded ? palette.foreground : palette.muted,
+          ),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              label,
+              style: textTheme.bodySmall?.copyWith(
+                color: degraded ? palette.foreground : palette.muted,
+                fontWeight: degraded ? FontWeight.w700 : FontWeight.w500,
+              ),
             ),
           ),
-        ),
-        const SizedBox(width: 8),
-        TextButton.icon(
-          onPressed: _refreshing ? null : _refresh,
-          style: TextButton.styleFrom(
-            foregroundColor: AppColors.surfaceLight,
-            visualDensity: VisualDensity.compact,
+          const SizedBox(width: 4),
+          IconButton(
+            tooltip: _refreshing ? 'Memperbarui lokasi' : 'Perbarui lokasi',
+            onPressed: _refreshing ? null : _refresh,
+            style: IconButton.styleFrom(
+              foregroundColor: palette.foreground,
+              disabledForegroundColor: palette.muted,
+              minimumSize: const Size(48, 48),
+            ),
+            icon: _refreshing
+                ? SizedBox.square(
+                    dimension: 18,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2,
+                      color: palette.foreground,
+                    ),
+                  )
+                : const Icon(Icons.my_location_rounded, size: 22),
           ),
-          icon: _refreshing
-              ? const SizedBox.square(
-                  dimension: 14,
-                  child: CircularProgressIndicator(strokeWidth: 2),
-                )
-              : const Icon(Icons.my_location_rounded, size: 16),
-          label: Text(
-            _refreshing ? 'Memperbarui…' : 'Perbarui lokasi',
-            style: const TextStyle(fontSize: 12),
-          ),
-        ),
-      ],
+        ],
+      ),
     );
   }
 }
@@ -550,9 +737,10 @@ class _LocationHealthRowState extends ConsumerState<_LocationHealthRow> {
 /// alongside the jarak tempuh / kecepatan carried on the session itself,
 /// which only change when a new hop or GPS fix arrives.
 class _TripStatsRow extends ConsumerStatefulWidget {
-  const _TripStatsRow({required this.session});
+  const _TripStatsRow({required this.session, required this.palette});
 
   final ActiveTripSession session;
+  final _HeroPalette palette;
 
   @override
   ConsumerState<_TripStatsRow> createState() => _TripStatsRowState();
@@ -578,6 +766,7 @@ class _TripStatsRowState extends ConsumerState<_TripStatsRow> {
   @override
   Widget build(BuildContext context) {
     final session = widget.session;
+    final palette = widget.palette;
     final elapsed = DateTime.now().difference(session.startedAt);
     return Row(
       children: <Widget>[
@@ -586,6 +775,7 @@ class _TripStatsRowState extends ConsumerState<_TripStatsRow> {
             icon: Icons.timer_outlined,
             label: 'Waktu perjalanan',
             value: formatDuration(elapsed),
+            palette: palette,
           ),
         ),
         const SizedBox(width: 12),
@@ -594,6 +784,7 @@ class _TripStatsRowState extends ConsumerState<_TripStatsRow> {
             icon: Icons.route_outlined,
             label: 'Jarak tempuh',
             value: formatDistanceMeters(session.distanceMeters),
+            palette: palette,
           ),
         ),
         const SizedBox(width: 12),
@@ -602,6 +793,7 @@ class _TripStatsRowState extends ConsumerState<_TripStatsRow> {
             icon: Icons.speed_outlined,
             label: 'Kecepatan',
             value: formatSpeedKmh(session.currentSpeedKmh),
+            palette: palette,
           ),
         ),
       ],
@@ -614,43 +806,50 @@ class _TripStatChip extends StatelessWidget {
     required this.icon,
     required this.label,
     required this.value,
+    required this.palette,
   });
 
   final IconData icon;
   final String label;
   final String value;
+  final _HeroPalette palette;
 
   @override
   Widget build(BuildContext context) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: <Widget>[
-        Row(
-          children: <Widget>[
-            Icon(icon, size: 14, color: AppColors.textSecondaryDark),
-            const SizedBox(width: 4),
-            Flexible(
-              child: Text(
-                label,
-                overflow: TextOverflow.ellipsis,
-                maxLines: 1,
-                style: const TextStyle(
-                  color: AppColors.textSecondaryDark,
-                  fontSize: 12,
+    return Semantics(
+      label: '$label: $value',
+      excludeSemantics: true,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: <Widget>[
+          Row(
+            children: <Widget>[
+              Icon(icon, size: 14, color: palette.muted),
+              const SizedBox(width: 4),
+              Flexible(
+                child: Text(
+                  label,
+                  overflow: TextOverflow.ellipsis,
+                  maxLines: 1,
+                  style: TextStyle(color: palette.muted, fontSize: 12),
                 ),
               ),
-            ),
-          ],
-        ),
-        const SizedBox(height: 2),
-        Text(
-          value,
-          style: const TextStyle(
-            color: AppColors.surfaceLight,
-            fontWeight: FontWeight.w700,
+            ],
           ),
-        ),
-      ],
+          const SizedBox(height: 2),
+          Text(
+            value,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(
+              color: palette.foreground,
+              fontWeight: FontWeight.w700,
+              fontSize: 16,
+              fontFeatures: AppTheme.timeFeatures,
+            ),
+          ),
+        ],
+      ),
     );
   }
 }
@@ -662,6 +861,8 @@ class _MissedDestinationView extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final tk = context.tk;
+    final textTheme = Theme.of(context).textTheme;
     final stations = ref.watch(stationListProvider).value ?? const <Station>[];
     final destinationName = _resolveStationName(
       session.trip.destinationStationId,
@@ -670,247 +871,100 @@ class _MissedDestinationView extends ConsumerWidget {
     return Scaffold(
       appBar: AppBar(title: const Text('Perjalanan aktif')),
       body: SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.all(20),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: <Widget>[
-              const Icon(
-                Icons.warning_amber_rounded,
-                color: AppColors.warning,
-                size: 40,
-              ),
-              const SizedBox(height: 12),
-              Text(
-                'Sepertinya kamu melewati $destinationName',
-                style: Theme.of(context).textTheme.headlineSmall,
-              ),
-              const SizedBox(height: 8),
-              const Text(
-                'Aplikasi tidak dapat memastikan posisimu setelah terlewat. '
-                'Pilih stasiun tempatmu sekarang di halaman jadwal untuk '
-                'mencari rute kembali.',
-              ),
-              const Spacer(),
-              SizedBox(
-                width: double.infinity,
-                child: FilledButton.icon(
-                  onPressed: () async {
-                    ref
-                        .read(tripSearchControllerProvider.notifier)
-                        .setDestination(session.trip.destinationStationId);
-                    await ref
-                        .read(activeTripControllerProvider.notifier)
-                        .cancel();
-                    if (context.mounted) {
-                      context.go('/schedule/search');
-                    }
-                  },
-                  icon: const Icon(Icons.route_outlined),
-                  label: Text('Cari rute kembali ke $destinationName'),
-                ),
-              ),
-              const SizedBox(height: 10),
-              SizedBox(
-                width: double.infinity,
-                child: OutlinedButton(
-                  onPressed: () async {
-                    await ref
-                        .read(activeTripControllerProvider.notifier)
-                        .cancel();
-                    if (context.mounted) {
-                      context.go('/');
-                    }
-                  },
-                  child: const Text('Akhiri perjalanan'),
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class TripCompletePage extends ConsumerWidget {
-  const TripCompletePage({super.key});
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final session = ref.watch(activeTripControllerProvider);
-    final finalDestinationQuery = session?.finalDestinationQuery;
-    final stations = ref.watch(stationListProvider).value ?? const <Station>[];
-    final destinationStation = session == null
-        ? null
-        : stations
-              .where((s) => s.id == session.trip.destinationStationId)
-              .firstOrNull;
-
-    return Scaffold(
-      body: SafeArea(
-        child: Center(
-          child: SingleChildScrollView(
-            padding: const EdgeInsets.all(28),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: <Widget>[
-                const CircleAvatar(
-                  radius: 44,
-                  backgroundColor: AppColors.softBlue,
-                  child: Icon(
-                    Icons.flag_rounded,
-                    size: 44,
-                    color: AppColors.navy,
-                  ),
-                ),
-                const SizedBox(height: 24),
-                Text(
-                  session == null
-                      ? 'Perjalanan selesai'
-                      : 'Selamat, kamu tiba di '
-                            '${_resolveStationName(session.trip.destinationStationId, stations)}!',
-                  textAlign: TextAlign.center,
-                  style: Theme.of(context).textTheme.headlineLarge,
-                ),
-                const SizedBox(height: 10),
-                // The trip closes itself on arrival now, so this screen is
-                // the confirmation of something that already happened —
-                // not a place that still mentions which backend stored it.
-                Text(
-                  session == null
-                      ? 'Perjalanan sudah ditutup.'
-                      : 'Perjalanan otomatis diselesaikan setibanya kamu di tujuan.',
-                  textAlign: TextAlign.center,
-                ),
-                if (session != null) ...<Widget>[
-                  const SizedBox(height: 20),
-                  _TripSummaryStats(session: session),
-                ],
-                if (finalDestinationQuery != null &&
-                    destinationStation != null) ...<Widget>[
-                  const SizedBox(height: 16),
-                  SizedBox(
-                    width: double.infinity,
-                    child: OutlinedButton.icon(
-                      onPressed: () => unawaited(
-                        launchMapDirectionsToQuery(
-                          destinationStation.latitude,
-                          destinationStation.longitude,
-                          finalDestinationQuery,
-                        ),
-                      ),
-                      icon: const Icon(Icons.map_outlined),
-                      label: Text(
-                        'Buka di Google Maps ke $finalDestinationQuery',
-                      ),
+        child: Column(
+          children: <Widget>[
+            Expanded(
+              child: ListView(
+                padding: const EdgeInsets.fromLTRB(20, 16, 20, 16),
+                children: <Widget>[
+                  Container(
+                    width: 56,
+                    height: 56,
+                    alignment: Alignment.center,
+                    decoration: BoxDecoration(
+                      color: tk.warningSoft,
+                      borderRadius: BorderRadius.circular(TkRadius.control),
+                    ),
+                    child: Icon(
+                      Icons.warning_amber_rounded,
+                      color: tk.warning,
+                      size: 32,
                     ),
                   ),
-                ],
-                const SizedBox(height: 20),
-                const SizedBox(height: 24),
-                SizedBox(
-                  width: double.infinity,
-                  child: FilledButton(
-                    onPressed: () {
-                      ref
-                          .read(activeTripControllerProvider.notifier)
-                          .dismissCompleted();
-                      context.go('/');
-                    },
-                    child: const Text('Kembali ke beranda'),
+                  const SizedBox(height: 16),
+                  Text(
+                    'Sepertinya kamu melewati $destinationName',
+                    style: textTheme.headlineMedium,
                   ),
+                  const SizedBox(height: 10),
+                  Text(
+                    'Aplikasi tidak dapat memastikan posisimu setelah terlewat. '
+                    'Pilih stasiun tempatmu sekarang di halaman jadwal untuk '
+                    'mencari rute kembali.',
+                    style: textTheme.bodyLarge?.copyWith(color: tk.textMuted),
+                  ),
+                ],
+              ),
+            ),
+            DecoratedBox(
+              decoration: BoxDecoration(
+                color: tk.bg,
+                border: Border(top: BorderSide(color: tk.border)),
+              ),
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(20, 12, 20, 12),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: <Widget>[
+                    SizedBox(
+                      width: double.infinity,
+                      height: 56,
+                      child: FilledButton.icon(
+                        onPressed: () async {
+                          ref
+                              .read(tripSearchControllerProvider.notifier)
+                              .setDestination(
+                                session.trip.destinationStationId,
+                              );
+                          await ref
+                              .read(activeTripControllerProvider.notifier)
+                              .cancel();
+                          if (context.mounted) {
+                            context.go('/schedule/search');
+                          }
+                        },
+                        icon: const Icon(Icons.route_outlined),
+                        label: Text(
+                          'Cari rute kembali ke $destinationName',
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                          textAlign: TextAlign.center,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 10),
+                    SizedBox(
+                      width: double.infinity,
+                      height: 52,
+                      child: OutlinedButton(
+                        onPressed: () async {
+                          await ref
+                              .read(activeTripControllerProvider.notifier)
+                              .cancel();
+                          if (context.mounted) {
+                            context.go('/');
+                          }
+                        },
+                        child: const Text('Akhiri perjalanan'),
+                      ),
+                    ),
+                  ],
                 ),
-              ],
+              ),
             ),
-          ),
+          ],
         ),
       ),
-    );
-  }
-}
-
-/// Waktu tempuh / jarak / rata-rata kecepatan for the just-finished trip —
-/// `session` is still populated with its final [ActiveTripSession.distanceMeters]
-/// and `updatedAt` (stamped at arrival, by `ActiveTripController.complete()`)
-/// at this point, since `dismissCompleted()` hasn't been called yet.
-class _TripSummaryStats extends StatelessWidget {
-  const _TripSummaryStats({required this.session});
-
-  final ActiveTripSession session;
-
-  @override
-  Widget build(BuildContext context) {
-    final duration = session.updatedAt.difference(session.startedAt);
-    final distanceMeters = session.distanceMeters;
-    final averageSpeedKmh = duration.inSeconds > 0
-        ? (distanceMeters / 1000) / (duration.inSeconds / 3600)
-        : null;
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
-      decoration: BoxDecoration(
-        color: Theme.of(context).colorScheme.surfaceContainerHighest,
-        borderRadius: BorderRadius.circular(16),
-      ),
-      child: Row(
-        children: <Widget>[
-          Expanded(
-            child: _SummaryStatItem(
-              icon: Icons.timer_outlined,
-              label: 'Waktu tempuh',
-              value: formatDuration(duration),
-            ),
-          ),
-          Expanded(
-            child: _SummaryStatItem(
-              icon: Icons.route_outlined,
-              label: 'Jarak',
-              value: formatDistanceMeters(distanceMeters),
-            ),
-          ),
-          Expanded(
-            child: _SummaryStatItem(
-              icon: Icons.speed_outlined,
-              label: 'Rata-rata',
-              value: formatSpeedKmh(averageSpeedKmh),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _SummaryStatItem extends StatelessWidget {
-  const _SummaryStatItem({
-    required this.icon,
-    required this.label,
-    required this.value,
-  });
-
-  final IconData icon;
-  final String label;
-  final String value;
-
-  @override
-  Widget build(BuildContext context) {
-    return Column(
-      children: <Widget>[
-        Icon(icon, size: 20, color: Theme.of(context).colorScheme.primary),
-        const SizedBox(height: 6),
-        Text(
-          value,
-          style: Theme.of(
-            context,
-          ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700),
-        ),
-        const SizedBox(height: 2),
-        Text(
-          label,
-          textAlign: TextAlign.center,
-          style: Theme.of(context).textTheme.bodySmall,
-        ),
-      ],
     );
   }
 }

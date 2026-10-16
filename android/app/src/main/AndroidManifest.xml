@@ -25,6 +25,12 @@
          setMode()/setSpeakerphoneOn() calls don't get silently denied. -->
     <uses-permission android:name="android.permission.MODIFY_AUDIO_SETTINGS" />
 
+    <!-- Normal permission. AlertAudioPlayer asks MediaPlayer for a partial
+         wake lock so a trip announcement (voice line + bell, up to about a
+         minute) is not cut off when the screen is off and the CPU would
+         otherwise sleep. -->
+    <uses-permission android:name="android.permission.WAKE_LOCK" />
+
     <application
         android:label="@string/app_name"
         android:name="${applicationName}"

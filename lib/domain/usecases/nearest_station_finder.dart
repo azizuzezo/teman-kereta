@@ -1,25 +1,34 @@
 import '../../core/utils/geo.dart';
 import '../entities/transit_models.dart';
+import 'travel_estimate.dart';
 
 class StationDistance {
   const StationDistance({
     required this.station,
     required this.distanceMeters,
     required this.walkingMinutes,
+    this.rideMinutes = 1,
   });
 
   final Station station;
   final double distanceMeters;
   final int walkingMinutes;
+
+  /// Perkiraan naik kendaraan (ojek/motor) dalam kota. See [TravelSpeeds].
+  final int rideMinutes;
+
+  TravelEstimate get estimate => TravelEstimate(
+    distanceMeters: distanceMeters,
+    walkMinutes: walkingMinutes,
+    rideMinutes: rideMinutes,
+  );
 }
 
 /// Ranks stations by straight-line (haversine) distance from a position.
-/// Walking time is a rough estimate from an average pace — real routed
-/// walking directions would need a routing engine this app doesn't have.
+/// Walk and vehicle times come from [estimateTravel]: rough estimates, since
+/// real routed directions would need a routing engine this app doesn't have.
 class NearestStationFinder {
-  const NearestStationFinder({this.averageWalkingMetersPerMinute = 83.3});
-
-  final double averageWalkingMetersPerMinute;
+  const NearestStationFinder();
 
   List<StationDistance> rank(
     List<Station> stations,
@@ -42,11 +51,12 @@ class NearestStationFinder {
       station.latitude,
       station.longitude,
     );
-    final minutes = (meters / averageWalkingMetersPerMinute).ceil();
+    final estimate = estimateTravel(meters);
     return StationDistance(
       station: station,
       distanceMeters: meters,
-      walkingMinutes: minutes < 1 ? 1 : minutes,
+      walkingMinutes: estimate.walkMinutes,
+      rideMinutes: estimate.rideMinutes,
     );
   }
 }

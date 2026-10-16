@@ -1,6 +1,7 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:teman_kereta/domain/entities/transit_models.dart';
 import 'package:teman_kereta/domain/usecases/nearest_station_finder.dart';
+import 'package:teman_kereta/domain/usecases/travel_estimate.dart';
 
 void main() {
   const finder = NearestStationFinder();
@@ -60,5 +61,16 @@ void main() {
     final ranked = finder.rank(const <Station>[sudirman], -6.2028, 106.8230);
     // ~0 meters away.
     expect(ranked.single.walkingMinutes, 1);
+  });
+
+  test('walk and vehicle minutes come from the shared travel estimate', () {
+    // About 3 km north-east of Sudirman.
+    final ranked = finder.rank(const <Station>[sudirman], -6.1800, 106.8450);
+    final entry = ranked.single;
+    final expected = estimateTravel(entry.distanceMeters);
+    expect(entry.walkingMinutes, expected.walkMinutes);
+    expect(entry.rideMinutes, expected.rideMinutes);
+    expect(entry.rideMinutes, lessThan(entry.walkingMinutes));
+    expect(entry.estimate.isReliable, isTrue);
   });
 }

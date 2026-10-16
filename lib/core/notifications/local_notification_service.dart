@@ -6,8 +6,10 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../database/app_database.dart';
 import '../database/database_provider.dart';
+import '../platform/native_trip_service.dart';
 import '../utils/geo.dart';
 import 'alarm_service.dart';
+import 'alert_audio_plan.dart';
 import 'tts_service.dart';
 
 class LocalNotificationService {
@@ -16,25 +18,41 @@ class LocalNotificationService {
     this.onShown,
     this._tts,
     this._alarm,
-  }) : _plugin = plugin ?? FlutterLocalNotificationsPlugin();
+    NativeTripService? native,
+  }) : _plugin = plugin ?? FlutterLocalNotificationsPlugin(),
+       _native = native ?? const NativeTripService();
 
   final FlutterLocalNotificationsPlugin _plugin;
+
+  /// Plays the recorded voice line and the bell on Android (see
+  /// [_showAndLog]): the system cannot tell the app when a notification
+  /// sound ends, nor send it to a headset only.
+  final NativeTripService _native;
+
+  /// True where the native `AlertAudioPlayer` exists. Everywhere else the
+  /// notification's own sound plays and the bell is a timer (see
+  /// [_showAndLog]).
+  bool get _usesNativeAudio =>
+      !kIsWeb && defaultTargetPlatform == TargetPlatform.android;
 
   /// Optional — when supplied, alerts that carry a spoken announcement also
   /// call [TtsService.speak] alongside `_plugin.show`, gated on the same
   /// `sound` flag as the notification itself (no separate voice toggle).
   final TtsService? _tts;
 
-  /// Optional — when supplied, plays `assets/alarm.mp3` after the spoken
-  /// notification sound finishes, for alerts that pass `alarmDelay` (see
-  /// [_showAndLog]).
+  /// Optional — plays `assets/alarm.mp3` after the spoken notification
+  /// sound finishes, for alerts that pass `alarmDelay` (see [_showAndLog]).
+  /// Non-Android only: on Android the native player does this with a real
+  /// completion callback.
   final AlarmService? _alarm;
 
   /// Length of `remaining_station_1.wav` — the pre-recorded "1 stasiun lagi
-  /// menuju ..." voice line played as that alert's notification sound (see
-  /// `android/app/src/main/res/raw` and `ios/Runner/Sounds`). There is no
-  /// platform callback for "notification sound finished playing", so the
-  /// alarm cue is simply delayed by the clip's known length instead.
+  /// menuju ..." voice line (see `android/app/src/main/res/raw` and
+  /// `ios/Runner/Sounds`). iOS plays it as the notification's own sound and
+  /// has no callback for "notification sound finished playing", so there the
+  /// alarm cue is still delayed by the clip's known length. (Android no
+  /// longer relies on this: that delay started at `notify()`, before the
+  /// system had begun the sound, so the bell cut into the voice's last words.)
   static const _remainingStationOneVoiceDuration = Duration(
     milliseconds: 6920,
   );
@@ -94,7 +112,27 @@ class LocalNotificationService {
         unawaited(_alarm?.stop());
       },
     );
+    await _deleteRetiredChannels();
     _initialized = true;
+  }
+
+  /// Drops the old per-alert channels whose own sound was the voice line;
+  /// see [retiredAlertChannelIds]. Harmless when a channel does not exist.
+  Future<void> _deleteRetiredChannels() async {
+    final android = _plugin
+        .resolvePlatformSpecificImplementation<
+          AndroidFlutterLocalNotificationsPlugin
+        >();
+    if (android == null) {
+      return;
+    }
+    for (final id in retiredAlertChannelIds) {
+      try {
+        await android.deleteNotificationChannel(channelId: id);
+      } on Object {
+        // Cosmetic cleanup only: never let it block the alert.
+      }
+    }
   }
 
   Future<bool> requestPermission() async {
@@ -137,13 +175,9 @@ class LocalNotificationService {
     final spokenText = remainingStops == 0
         ? 'Hampir sampai tujuan, $destination.'
         : '$remainingStops stasiun lagi menuju $destination.';
-    final customSound = remainingStops == 0
-        ? 'arrive_station'
-        : (remainingStops >= 1 && remainingStops <= 3)
-            ? 'remaining_station_$remainingStops'
-            : null;
+    final customSound = stopAlertVoice(remainingStops);
     final channelName = switch (customSound) {
-      'arrive_station' => 'Tiba di tujuan',
+      arrivalVoice => 'Tiba di tujuan',
       String() => '$remainingStops stasiun sebelum tujuan',
       null => 'Peringatan perjalanan',
     };
@@ -152,7 +186,7 @@ class LocalNotificationService {
       id: 4100 + remainingStops,
       title: '$prefix$title',
       body: body,
-      channelId: customSound == null ? 'trip_alerts' : 'trip_alert_$customSound',
+      channelId: alertChannelId(customSound),
       channelName: channelName,
       channelDescription: 'Peringatan stasiun tujuan dan transit',
       payload: '/active-trip',
@@ -160,7 +194,7 @@ class LocalNotificationService {
       sound: sound,
       customSoundResource: customSound,
       spokenText: spokenText,
-      alarmDelay: remainingStops == 1
+      alarmDelay: bellFollowsVoice(remainingStops)
           ? _remainingStationOneVoiceDuration
           : null,
       log: log,
@@ -179,9 +213,7 @@ class LocalNotificationService {
     bool sound = true,
     bool log = true,
   }) async {
-    final customSound = (remainingStops >= 1 && remainingStops <= 3)
-        ? 'remaining_transit_$remainingStops'
-        : null;
+    final customSound = transferApproachingVoice(remainingStops);
     final channelName = customSound == null
         ? 'Peringatan perjalanan'
         : '$remainingStops stasiun sebelum transit';
@@ -190,7 +222,7 @@ class LocalNotificationService {
       id: 4150 + remainingStops,
       title: '$remainingStops stasiun lagi menuju transit',
       body: 'Bersiap transit di $stationName.',
-      channelId: customSound == null ? 'trip_alerts' : 'trip_alert_$customSound',
+      channelId: alertChannelId(customSound),
       channelName: channelName,
       channelDescription: 'Peringatan stasiun tujuan dan transit',
       payload: '/active-trip',
@@ -199,7 +231,7 @@ class LocalNotificationService {
       customSoundResource: customSound,
       spokenText:
           '$remainingStops stasiun lagi menuju transit di $stationName.',
-      alarmDelay: remainingStops == 1
+      alarmDelay: bellFollowsVoice(remainingStops)
           ? _remainingTransitOneVoiceDuration
           : null,
       log: log,
@@ -226,13 +258,13 @@ class LocalNotificationService {
       body:
           instruction ??
           'Turun di $stationName dan lanjutkan ke kereta berikutnya.',
-      channelId: 'trip_alert_transit_reminder',
+      channelId: alertChannelId(transferReminderVoice),
       channelName: 'Tiba di stasiun transit',
       channelDescription: 'Peringatan stasiun tujuan dan transit',
       payload: '/active-trip',
       vibrate: vibrate,
       sound: sound,
-      customSoundResource: 'transit_reminder',
+      customSoundResource: transferReminderVoice,
       spokenText: 'Saatnya transit di $stationName.',
       log: log,
     );
@@ -261,13 +293,13 @@ class LocalNotificationService {
       title: 'Selamat, kamu tiba di $destination',
       body: '${formatDuration(duration)} • ${formatDistanceMeters(distanceMeters)}'
           ' • rata-rata ${formatSpeedKmh(averageSpeedKmh)}',
-      channelId: 'trip_alert_arrive_station',
+      channelId: alertChannelId(arrivalVoice),
       channelName: 'Tiba di tujuan',
       channelDescription: 'Peringatan stasiun tujuan dan transit',
       payload: '/trip-complete',
       vibrate: vibrate,
       sound: sound,
-      customSoundResource: 'arrive_station',
+      customSoundResource: arrivalVoice,
       spokenText: 'Selamat, kamu sudah tiba di $destination.',
       log: log,
     );
@@ -310,7 +342,7 @@ class LocalNotificationService {
       id: 4300,
       title: '${prefix}Sepertinya kamu melewati $destination',
       body: 'Buka aplikasi untuk mencari rute kembali ke $destination.',
-      channelId: 'trip_alert_terlewat',
+      channelId: alertChannelId(missedDestinationVoice),
       channelName: 'Tujuan terlewat',
       channelDescription: 'Peringatan stasiun tujuan dan transit',
       payload: '/active-trip',
@@ -318,7 +350,7 @@ class LocalNotificationService {
       priority: Priority.max,
       vibrate: vibrate,
       sound: sound,
-      customSoundResource: 'terlewat',
+      customSoundResource: missedDestinationVoice,
       log: log,
     );
   }
@@ -390,6 +422,20 @@ class LocalNotificationService {
     bool log = true,
   }) async {
     await initialize();
+    // Android: the voice line (then the bell, when [alarmDelay] marks one)
+    // is played by the native player, not by the notification channel. It
+    // starts the bell from the voice's real completion, and sends both to
+    // the headset only when one is connected. Started before `show` so a
+    // notification failure can never silence the announcement.
+    final nativeAudio = sound && customSoundResource != null && _usesNativeAudio;
+    if (nativeAudio) {
+      unawaited(
+        _native.playAlertAudio(
+          voice: customSoundResource,
+          bell: alarmDelay != null,
+        ),
+      );
+    }
     await _plugin.show(
       id: id,
       title: title,
@@ -410,10 +456,10 @@ class LocalNotificationService {
           importance: importance,
           priority: priority,
           enableVibration: vibrate,
-          playSound: sound,
-          sound: (sound && customSoundResource != null)
-              ? RawResourceAndroidNotificationSound(customSoundResource)
-              : null,
+          // Silent when the native player speaks this alert (its channel is
+          // silent too, see [alertChannelId]); a channel's own sound could
+          // neither be sequenced with the bell nor sent to a headset only.
+          playSound: sound && customSoundResource == null,
           // A quick way to silence the alarm cue without unlocking into the
           // app — tapping it fires the same
           // `onDidReceiveNotificationResponse` callback as tapping the
@@ -437,10 +483,14 @@ class LocalNotificationService {
       ),
       payload: payload,
     );
-    if (sound && spokenText != null) {
+    // Alerts with a bundled recording speak through it; the system TTS is
+    // only a fallback when there is none.
+    if (sound && spokenText != null && customSoundResource == null) {
       unawaited(_tts?.speak(spokenText));
     }
-    if (sound && alarmDelay != null) {
+    // iOS: the recording is the notification's own sound and cannot report
+    // when it ends, so the bell is delayed by the clip's known length.
+    if (sound && alarmDelay != null && !nativeAudio) {
       unawaited(Future<void>.delayed(alarmDelay, () => _alarm?.play()));
     }
     if (log) {

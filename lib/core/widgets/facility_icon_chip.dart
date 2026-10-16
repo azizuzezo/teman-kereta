@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import '../../app/theme/app_theme.dart';
+
 /// A single station facility (e.g. "Toilet", "Musala", "Wi-Fi"), shown as a
 /// compact icon badge instead of a text chip — the facility name is still
 /// available via [Tooltip] (long-press on touch, hover on desktop) and to
@@ -11,20 +13,22 @@ class FacilityIconChip extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final tk = context.tk;
     return Tooltip(
       message: label,
-      child: Container(
-        width: 36,
-        height: 36,
-        alignment: Alignment.center,
-        decoration: BoxDecoration(
-          color: Theme.of(context).colorScheme.surfaceContainerHighest,
-          shape: BoxShape.circle,
-        ),
-        child: Icon(
-          facilityIcon(label),
-          size: 18,
-          color: Theme.of(context).colorScheme.onSurfaceVariant,
+      child: Semantics(
+        label: label,
+        child: Container(
+          width: 36,
+          height: 36,
+          alignment: Alignment.center,
+          decoration: BoxDecoration(
+            color: tk.surfaceAlt,
+            borderRadius: BorderRadius.circular(11),
+          ),
+          child: ExcludeSemantics(
+            child: Icon(facilityIcon(label), size: 18, color: tk.textMuted),
+          ),
         ),
       ),
     );

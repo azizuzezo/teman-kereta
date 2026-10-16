@@ -28,7 +28,10 @@ class FollowController extends Notifier<void> {
   }
 
   /// Returns an error message on failure, or null on success.
-  Future<String?> toggleFollow(String targetUserId, bool currentlyFollowing) async {
+  Future<String?> toggleFollow(
+    String targetUserId,
+    bool currentlyFollowing,
+  ) async {
     final userId = Supabase.instance.client.auth.currentUser?.id;
     if (userId == null) return 'Masuk untuk mengikuti pengguna lain.';
     if (userId == targetUserId) return null;
@@ -55,6 +58,9 @@ final followControllerProvider = NotifierProvider<FollowController, void>(
   FollowController.new,
 );
 
-final isFollowingProvider = FutureProvider.family<bool, String>((ref, targetUserId) {
+final isFollowingProvider = FutureProvider.family<bool, String>((
+  ref,
+  targetUserId,
+) {
   return ref.read(followControllerProvider.notifier).isFollowing(targetUserId);
 });

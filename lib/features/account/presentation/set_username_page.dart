@@ -2,6 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../../app/theme/app_theme.dart';
+import '../../../core/widgets/tk_components.dart';
+import '../../../core/widgets/tk_logo.dart';
 import 'account_controller.dart';
 
 final _usernamePattern = RegExp(r'^[a-z0-9_]{3,10}$');
@@ -36,7 +39,9 @@ class _SetUsernamePageState extends ConsumerState<SetUsernamePage> {
   }
 
   Future<void> _submit() async {
-    if (!(_formKey.currentState?.validate() ?? false)) return;
+    if (!(_formKey.currentState?.validate() ?? false)) {
+      return;
+    }
     setState(() {
       _isSubmitting = true;
       _error = null;
@@ -58,26 +63,51 @@ class _SetUsernamePageState extends ConsumerState<SetUsernamePage> {
 
   @override
   Widget build(BuildContext context) {
+    final tk = context.tk;
+    final textTheme = Theme.of(context).textTheme;
     return PopScope(
       canPop: false,
       child: Scaffold(
-        appBar: AppBar(
-          title: const Text('Atur username'),
-          automaticallyImplyLeading: false,
-        ),
         body: SafeArea(
-          child: Padding(
-            padding: const EdgeInsets.all(24),
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.fromLTRB(24, 32, 24, 24),
             child: Form(
               key: _formKey,
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
-                mainAxisAlignment: MainAxisAlignment.center,
                 children: <Widget>[
+                  const TkLogo(size: 56, showLabel: false),
+                  const SizedBox(height: 24),
+                  Semantics(
+                    header: true,
+                    child: Text(
+                      'Pilih username',
+                      style: textTheme.headlineLarge,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
                   Text(
-                    'Satu langkah lagi! Pilih username unik untuk akunmu. '
-                    'Username tidak bisa diubah lagi setelah disimpan.',
-                    style: Theme.of(context).textTheme.bodyMedium,
+                    'Satu langkah lagi. Username ini dilihat orang lain di '
+                    'forum dan daftar pengikut.',
+                    style: textTheme.bodyLarge?.copyWith(color: tk.textMuted),
+                  ),
+                  const SizedBox(height: 16),
+                  TkCard(
+                    tone: TkCardTone.warning,
+                    padding: const EdgeInsets.all(14),
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: <Widget>[
+                        Icon(Icons.lock_outline_rounded, color: tk.warning),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: Text(
+                            'Username tidak bisa diubah lagi setelah disimpan.',
+                            style: textTheme.bodyMedium,
+                          ),
+                        ),
+                      ],
+                    ),
                   ),
                   const SizedBox(height: 24),
                   TextFormField(
@@ -92,7 +122,9 @@ class _SetUsernamePageState extends ConsumerState<SetUsernamePage> {
                     ),
                     validator: (value) {
                       final trimmed = value?.trim().toLowerCase() ?? '';
-                      if (trimmed.isEmpty) return 'Username tidak boleh kosong.';
+                      if (trimmed.isEmpty) {
+                        return 'Username tidak boleh kosong.';
+                      }
                       if (!_usernamePattern.hasMatch(trimmed)) {
                         return 'Gunakan 3-10 huruf kecil, angka, atau garis bawah.';
                       }
@@ -101,9 +133,12 @@ class _SetUsernamePageState extends ConsumerState<SetUsernamePage> {
                   ),
                   if (_error != null) ...<Widget>[
                     const SizedBox(height: 12),
-                    Text(
-                      _error!,
-                      style: TextStyle(color: Theme.of(context).colorScheme.error),
+                    Semantics(
+                      liveRegion: true,
+                      child: Text(
+                        _error!,
+                        style: textTheme.bodyMedium?.copyWith(color: tk.danger),
+                      ),
                     ),
                   ],
                   const SizedBox(height: 20),

@@ -27,7 +27,12 @@ const _deadReckoningStaleAfter = Duration(seconds: 90);
 const _fallbackRefreshInterval = Duration(seconds: 10);
 
 class _GpsFix {
-  const _GpsFix(this.point, this.at, {this.speedMetersPerSecond, this.bearingDegrees});
+  const _GpsFix(
+    this.point,
+    this.at, {
+    this.speedMetersPerSecond,
+    this.bearingDegrees,
+  });
   final LatLng point;
   final DateTime at;
   final double? speedMetersPerSecond;
@@ -113,7 +118,9 @@ class LiveTripPositionController extends Notifier<LatLng?> {
       // project onto, just show the last confirmed station itself.
       final byId = {for (final s in stations) s.id: s};
       final current = currentId != null ? byId[currentId] : null;
-      return current == null ? null : LatLng(current.latitude, current.longitude);
+      return current == null
+          ? null
+          : LatLng(current.latitude, current.longitude);
     }
     final byId = {for (final s in stations) s.id: s};
     final current = byId[currentId];
@@ -142,11 +149,7 @@ class LiveTripPositionController extends Notifier<LatLng?> {
           fix.bearingDegrees!,
           extrapolatedMeters,
         );
-        return _projectOntoSegment(
-          LatLng(projected.$1, projected.$2),
-          a,
-          b,
-        );
+        return _projectOntoSegment(LatLng(projected.$1, projected.$2), a, b);
       }
     }
 

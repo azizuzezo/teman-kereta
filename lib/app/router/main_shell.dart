@@ -6,6 +6,7 @@ import '../../data/providers/demo_data.dart';
 import '../../data/providers/provider_registry.dart';
 import '../../domain/entities/transit_models.dart';
 import '../../features/active_trip/presentation/active_trip_controller.dart';
+import '../theme/app_theme.dart';
 
 class MainShell extends ConsumerWidget {
   const MainShell({required this.navigationShell, super.key});
@@ -25,7 +26,7 @@ class MainShell extends ConsumerWidget {
         children: <Widget>[
           if (activeTrip != null)
             Material(
-              color: Theme.of(context).colorScheme.primaryContainer,
+              color: context.tk.primary,
               child: InkWell(
                 onTap: () => context.push('/active-trip'),
                 child: Semantics(
@@ -35,34 +36,42 @@ class MainShell extends ConsumerWidget {
                     padding: const EdgeInsets.fromLTRB(16, 10, 8, 10),
                     child: Row(
                       children: <Widget>[
-                        const Icon(Icons.train_rounded),
-                        const SizedBox(width: 10),
+                        Icon(Icons.train_rounded, color: context.tk.onPrimary),
+                        const SizedBox(width: 12),
                         Expanded(
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: <Widget>[
                               Text(
                                 '${activeTrip.remainingStops} stasiun lagi',
-                                style: Theme.of(
-                                  context,
-                                ).textTheme.labelLarge,
+                                style: Theme.of(context).textTheme.labelLarge
+                                    ?.copyWith(color: context.tk.onPrimary),
                               ),
                               Text(
                                 'Tujuan ${_stationName(stations, activeTrip.trip.destinationStationId)}',
                                 maxLines: 1,
                                 overflow: TextOverflow.ellipsis,
-                                style: Theme.of(context).textTheme.bodySmall,
+                                style: Theme.of(context).textTheme.bodySmall
+                                    ?.copyWith(
+                                      color: context.tk.onPrimary.withValues(
+                                        alpha: 0.85,
+                                      ),
+                                    ),
                               ),
                             ],
                           ),
                         ),
-                        const Icon(Icons.chevron_right_rounded),
+                        Icon(
+                          Icons.chevron_right_rounded,
+                          color: context.tk.onPrimary,
+                        ),
                       ],
                     ),
                   ),
                 ),
               ),
             ),
+          Divider(height: 1, color: context.tk.border),
           NavigationBar(
             selectedIndex: navigationShell.currentIndex,
             onDestinationSelected: (index) {

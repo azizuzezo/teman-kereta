@@ -1,14 +1,25 @@
-import 'dart:typed_data';
+import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import 'package:image_picker/image_picker.dart';
 
+import '../../../app/theme/app_theme.dart';
+import '../../../core/widgets/empty_state.dart';
+import '../../../core/widgets/tk_components.dart';
 import 'forum_controller.dart';
+import 'forum_session.dart';
+import 'widgets/forum_line_chip.dart';
 import 'widgets/mentions.dart';
 
-const _maxBodyLength = 2000;
+const forumMaxBodyLength = 2000;
 
+/// Full-screen compose view: Batal and Kirim in the top bar, the author's
+/// avatar beside a large multiline field, an optional photo, a line tag, and
+/// a toolbar with the character counter. Leaving with text or a photo asks
+/// before discarding.
 class ForumPostComposerPage extends ConsumerStatefulWidget {
   const ForumPostComposerPage({super.key});
 
@@ -25,10 +36,25 @@ class _ForumPostComposerPageState extends ConsumerState<ForumPostComposerPage> {
   String? _error;
 
   @override
+  void initState() {
+    super.initState();
+    _bodyController.addListener(_onTextChanged);
+  }
+
+  @override
   void dispose() {
-    _bodyController.dispose();
+    _bodyController
+      ..removeListener(_onTextChanged)
+      ..dispose();
     super.dispose();
   }
+
+  void _onTextChanged() => setState(() {});
+
+  bool get _dirty =>
+      _bodyController.text.trim().isNotEmpty || _imageBytes != null;
+
+  bool get _canSend => !_submitting && _bodyController.text.trim().isNotEmpty;
 
   Future<void> _pickImage() async {
     final picked = await ImagePicker().pickImage(
@@ -42,12 +68,22 @@ class _ForumPostComposerPageState extends ConsumerState<ForumPostComposerPage> {
     setState(() => _imageBytes = bytes);
   }
 
+  void _insertMentionTrigger() {
+    final text = _bodyController.text;
+    final selection = _bodyController.selection;
+    final at = selection.isValid ? selection.baseOffset : text.length;
+    final needsSpace = at > 0 && !RegExp(r'\s').hasMatch(text[at - 1]);
+    final insert = needsSpace ? ' @' : '@';
+    if (text.length + insert.length > forumMaxBodyLength) return;
+    _bodyController.value = TextEditingValue(
+      text: text.replaceRange(at, at, insert),
+      selection: TextSelection.collapsed(offset: at + insert.length),
+    );
+  }
+
   Future<void> _submit() async {
     final body = _bodyController.text.trim();
-    if (body.isEmpty) {
-      setState(() => _error = 'Tulis sesuatu dulu sebelum posting.');
-      return;
-    }
+    if (body.isEmpty) return;
     setState(() {
       _submitting = true;
       _error = null;
@@ -66,118 +102,293 @@ class _ForumPostComposerPageState extends ConsumerState<ForumPostComposerPage> {
     Navigator.of(context).pop();
   }
 
-  @override
-  Widget build(BuildContext context) {
-    final remaining = _maxBodyLength - _bodyController.text.length;
-    final lineOptions = ref.watch(forumLineOptionsProvider);
-
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('Postingan baru'),
+  Future<void> _confirmDiscard() async {
+    final discard = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Buang postingan?'),
+        content: const Text('Tulisan yang belum terkirim akan hilang.'),
         actions: <Widget>[
-          Padding(
-            padding: const EdgeInsets.only(right: 8),
-            child: Center(
-              child: FilledButton(
-                onPressed: _submitting ? null : _submit,
-                child: _submitting
-                    ? const SizedBox(
-                        width: 16,
-                        height: 16,
-                        child: CircularProgressIndicator(strokeWidth: 2),
-                      )
-                    : const Text('Posting'),
-              ),
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(false),
+            child: const Text('Lanjut menulis'),
+          ),
+          FilledButton(
+            style: FilledButton.styleFrom(
+              backgroundColor: dialogContext.tk.danger,
+              foregroundColor: dialogContext.tk.onAccent,
             ),
+            onPressed: () => Navigator.of(dialogContext).pop(true),
+            child: const Text('Buang'),
           ),
         ],
       ),
-      body: SafeArea(
-        child: ListView(
-          padding: const EdgeInsets.all(16),
-          children: <Widget>[
-            if (_error != null) ...<Widget>[
-              Text(
-                _error!,
-                style: TextStyle(color: Theme.of(context).colorScheme.error),
-              ),
-              const SizedBox(height: 8),
-            ],
-            TextField(
-              controller: _bodyController,
-              maxLength: _maxBodyLength,
-              maxLines: 8,
-              minLines: 4,
-              autofocus: true,
-              onChanged: (_) => setState(() {}),
-              decoration: InputDecoration(
-                hintText:
-                    'Apa yang terjadi di perjalananmu hari ini? '
-                    'Ketik @ untuk menandai pengguna lain.',
-                counterText: '$remaining karakter tersisa',
+    );
+    // A direct pop is not blocked by PopScope.
+    if (discard == true && mounted) Navigator.of(context).pop();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final tk = context.tk;
+    final textTheme = Theme.of(context).textTheme;
+    final signedIn = currentForumUserId() != null;
+    final me = ref.watch(myForumProfileProvider).asData?.value;
+    final lines = ref.watch(forumLineOptionsProvider).asData?.value;
+    final length = _bodyController.text.length;
+    final remaining = forumMaxBodyLength - length;
+    final name = me == null
+        ? 'Kamu'
+        : (me.displayName?.trim().isNotEmpty ?? false)
+        ? me.displayName!
+        : (me.username ?? 'Kamu');
+
+    return PopScope(
+      canPop: !_dirty || _submitting,
+      onPopInvokedWithResult: (didPop, _) {
+        if (!didPop) unawaited(_confirmDiscard());
+      },
+      child: Scaffold(
+        appBar: AppBar(
+          automaticallyImplyLeading: false,
+          leadingWidth: 96,
+          leading: Align(
+            alignment: Alignment.centerLeft,
+            child: Padding(
+              padding: const EdgeInsets.only(left: 8),
+              child: TextButton(
+                onPressed: _submitting
+                    ? null
+                    : () => unawaited(Navigator.of(context).maybePop()),
+                child: const Text('Batal'),
               ),
             ),
-            MentionSuggestions(controller: _bodyController),
-            const SizedBox(height: 12),
-            if (_imageBytes != null)
-              Stack(
-                children: <Widget>[
-                  ClipRRect(
-                    borderRadius: BorderRadius.circular(10),
-                    child: Image.memory(
-                      _imageBytes!,
-                      width: double.infinity,
-                      height: 200,
-                      fit: BoxFit.cover,
-                    ),
+          ),
+          title: Text('Postingan baru', style: textTheme.titleMedium),
+          centerTitle: true,
+          actions: <Widget>[
+            Padding(
+              padding: const EdgeInsets.only(right: 12),
+              child: Center(
+                child: FilledButton(
+                  style: FilledButton.styleFrom(
+                    minimumSize: const Size(72, 44),
+                    padding: const EdgeInsets.symmetric(horizontal: 20),
                   ),
-                  Positioned(
-                    right: 4,
-                    top: 4,
-                    child: IconButton.filled(
-                      onPressed: () => setState(() => _imageBytes = null),
-                      icon: const Icon(Icons.close_rounded),
-                    ),
-                  ),
-                ],
-              )
-            else
-              OutlinedButton.icon(
-                onPressed: _pickImage,
-                icon: const Icon(Icons.image_outlined),
-                label: const Text('Tambah foto'),
+                  onPressed: signedIn && _canSend ? _submit : null,
+                  child: _submitting
+                      ? SizedBox(
+                          width: 18,
+                          height: 18,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            color: tk.onPrimary,
+                          ),
+                        )
+                      : const Text('Kirim'),
+                ),
               ),
-            const SizedBox(height: 16),
-            lineOptions.when(
-              loading: () => const SizedBox.shrink(),
-              error: (error, stack) => const SizedBox.shrink(),
-              data: (lines) {
-                if (lines.isEmpty) return const SizedBox.shrink();
-                return DropdownButtonFormField<String?>(
-                  initialValue: _lineId,
-                  isExpanded: true,
-                  decoration: const InputDecoration(
-                    labelText: 'Tandai lintas (opsional)',
-                    prefixIcon: Icon(Icons.route_outlined),
-                  ),
-                  items: <DropdownMenuItem<String?>>[
-                    const DropdownMenuItem<String?>(
-                      value: null,
-                      child: Text('Tidak ditandai'),
-                    ),
-                    for (final line in lines)
-                      DropdownMenuItem<String?>(
-                        value: line.id,
-                        child: Text(line.name, overflow: TextOverflow.ellipsis),
-                      ),
-                  ],
-                  onChanged: (value) => setState(() => _lineId = value),
-                );
-              },
             ),
           ],
         ),
+        body: SafeArea(
+          child: !signedIn
+              ? AppEmptyState(
+                  icon: Icons.lock_outline_rounded,
+                  title: 'Masuk untuk menulis',
+                  message: 'Postingan terhubung ke akunmu.',
+                  action: FilledButton(
+                    onPressed: () => context.push('/account/login'),
+                    child: const Text('Masuk'),
+                  ),
+                )
+              : Column(
+                  children: <Widget>[
+                    Divider(height: 1, color: tk.border),
+                    Expanded(
+                      child: SingleChildScrollView(
+                        keyboardDismissBehavior:
+                            ScrollViewKeyboardDismissBehavior.onDrag,
+                        padding: const EdgeInsets.fromLTRB(16, 14, 16, 16),
+                        child: Row(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: <Widget>[
+                            TkAvatar(
+                              name: name,
+                              imageUrl: me?.avatarUrl,
+                              size: 40,
+                            ),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: <Widget>[
+                                  Padding(
+                                    padding: const EdgeInsets.only(top: 2),
+                                    child: Text(
+                                      name,
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                      style: textTheme.titleSmall,
+                                    ),
+                                  ),
+                                  const SizedBox(height: 6),
+                                  TextField(
+                                    controller: _bodyController,
+                                    autofocus: true,
+                                    minLines: 6,
+                                    maxLines: null,
+                                    keyboardType: TextInputType.multiline,
+                                    textCapitalization:
+                                        TextCapitalization.sentences,
+                                    inputFormatters: <TextInputFormatter>[
+                                      LengthLimitingTextInputFormatter(
+                                        forumMaxBodyLength,
+                                      ),
+                                    ],
+                                    style: textTheme.bodyLarge,
+                                    decoration: InputDecoration.collapsed(
+                                      hintText: 'Apa yang terjadi di jalurmu?',
+                                      hintStyle: textTheme.bodyLarge?.copyWith(
+                                        color: tk.textMuted,
+                                      ),
+                                    ),
+                                  ),
+                                  if (_imageBytes != null)
+                                    Padding(
+                                      padding: const EdgeInsets.only(top: 12),
+                                      child: _ImagePreview(
+                                        bytes: _imageBytes!,
+                                        onRemove: () =>
+                                            setState(() => _imageBytes = null),
+                                      ),
+                                    ),
+                                  if (_error != null)
+                                    Padding(
+                                      padding: const EdgeInsets.only(top: 12),
+                                      child: Container(
+                                        width: double.infinity,
+                                        padding: const EdgeInsets.all(12),
+                                        decoration: BoxDecoration(
+                                          color: tk.dangerSoft,
+                                          borderRadius: BorderRadius.circular(
+                                            TkRadius.control,
+                                          ),
+                                        ),
+                                        child: Text(
+                                          _error!,
+                                          style: textTheme.bodyMedium?.copyWith(
+                                            color: tk.danger,
+                                          ),
+                                        ),
+                                      ),
+                                    ),
+                                ],
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                    MentionSuggestions(controller: _bodyController),
+                    if (lines != null && lines.isNotEmpty)
+                      SizedBox(
+                        height: 52,
+                        child: ListView.separated(
+                          scrollDirection: Axis.horizontal,
+                          padding: const EdgeInsets.symmetric(horizontal: 12),
+                          itemCount: lines.length,
+                          separatorBuilder: (_, _) => const SizedBox(width: 4),
+                          itemBuilder: (context, index) {
+                            final line = lines[index];
+                            final selected = _lineId == line.id;
+                            return ForumLineChip(
+                              label: line.code,
+                              semanticLabel: 'Tandai jalur ${line.name}',
+                              color: line.resolvedColor,
+                              selected: selected,
+                              onTap: () => setState(
+                                () => _lineId = selected ? null : line.id,
+                              ),
+                            );
+                          },
+                        ),
+                      ),
+                    Divider(height: 1, color: tk.border),
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 4),
+                      child: Row(
+                        children: <Widget>[
+                          IconButton(
+                            tooltip: 'Tambah foto',
+                            icon: const Icon(Icons.image_outlined),
+                            onPressed: _submitting ? null : _pickImage,
+                          ),
+                          IconButton(
+                            tooltip: 'Tandai pengguna',
+                            icon: const Icon(Icons.alternate_email_rounded),
+                            onPressed: _submitting
+                                ? null
+                                : _insertMentionTrigger,
+                          ),
+                          const Spacer(),
+                          Padding(
+                            padding: const EdgeInsets.only(right: 12),
+                            child: Text(
+                              '$length / $forumMaxBodyLength',
+                              style: textTheme.labelMedium?.copyWith(
+                                color: remaining <= 100
+                                    ? tk.danger
+                                    : tk.textMuted,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+        ),
       ),
+    );
+  }
+}
+
+class _ImagePreview extends StatelessWidget {
+  const _ImagePreview({required this.bytes, required this.onRemove});
+
+  final Uint8List bytes;
+  final VoidCallback onRemove;
+
+  @override
+  Widget build(BuildContext context) {
+    final tk = context.tk;
+    return Stack(
+      children: <Widget>[
+        ClipRRect(
+          borderRadius: BorderRadius.circular(TkRadius.control),
+          child: Image.memory(
+            bytes,
+            width: double.infinity,
+            height: 220,
+            fit: BoxFit.cover,
+            semanticLabel: 'Foto yang akan diposting',
+          ),
+        ),
+        Positioned(
+          right: 4,
+          top: 4,
+          child: IconButton.filled(
+            tooltip: 'Hapus foto',
+            style: IconButton.styleFrom(
+              backgroundColor: tk.surface,
+              foregroundColor: tk.text,
+            ),
+            onPressed: onRemove,
+            icon: const Icon(Icons.close_rounded),
+          ),
+        ),
+      ],
     );
   }
 }

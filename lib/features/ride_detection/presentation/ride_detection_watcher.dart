@@ -103,7 +103,9 @@ class _RideDetectionWatcherState extends ConsumerState<RideDetectionWatcher>
       }
     });
     ref.listen(
-      settingsControllerProvider.select((settings) => settings.rideDetectionEnabled),
+      settingsControllerProvider.select(
+        (settings) => settings.rideDetectionEnabled,
+      ),
       (previous, enabled) => _reschedule(enabled: _shouldPoll()),
     );
     ref.listen(activeTripControllerProvider, (previous, next) {
@@ -126,7 +128,8 @@ class _RideDetectionWatcherState extends ConsumerState<RideDetectionWatcher>
       if (previous?.assessment?.exitedAt == assessment.exitedAt) {
         return;
       }
-      final stationName = ref
+      final stationName =
+          ref
               .read(stationListProvider)
               .value
               ?.where((station) => station.id == assessment.stationId)
@@ -138,10 +141,12 @@ class _RideDetectionWatcherState extends ConsumerState<RideDetectionWatcher>
               ?.name ??
           assessment.stationId;
       unawaited(
-        ref.read(localNotificationServiceProvider).showRideDetectedAlert(
-          stationName: stationName,
-          isStrongMatch: assessment.level == RideDetectionLevel.strong,
-        ),
+        ref
+            .read(localNotificationServiceProvider)
+            .showRideDetectedAlert(
+              stationName: stationName,
+              isStrongMatch: assessment.level == RideDetectionLevel.strong,
+            ),
       );
       GoRouter.of(context).push('/ride-detection');
     });

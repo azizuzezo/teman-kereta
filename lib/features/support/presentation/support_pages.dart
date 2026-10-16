@@ -1,48 +1,137 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
-import '../../../core/database/app_database.dart';
-import '../../../core/database/database_provider.dart';
-import '../../../core/widgets/auth_guard.dart';
+import '../../../app/theme/app_theme.dart';
+import '../../../core/widgets/tk_components.dart';
+import '../support_links.dart';
+import 'support_widgets.dart';
 
+export 'report_page.dart' show ReportPage;
+
+/// Bantuan: answers for problems that actually happen in this app, then a
+/// direct path to "Laporkan masalah".
 class HelpPage extends StatelessWidget {
   const HelpPage({super.key});
 
   @override
   Widget build(BuildContext context) {
+    final tk = context.tk;
+    final textTheme = Theme.of(context).textTheme;
     return Scaffold(
       appBar: AppBar(title: const Text('Bantuan')),
-      body: ListView(
-        padding: const EdgeInsets.fromLTRB(16, 8, 16, 28),
+      body: SupportPageBody(
         children: <Widget>[
-          Text('Pertanyaan umum', style: Theme.of(context).textTheme.headlineMedium),
-          const SizedBox(height: 12),
-          const _Faq(
-            question: 'Apakah jadwal ini real-time?',
-            answer:
-                'Jadwal dihitung berdasarkan jadwal operasional resmi dan estimasi perjalanan. Setiap informasi diberi indikator kesegaran data.',
+          const SupportParagraph(
+            'Jawaban untuk masalah yang paling sering muncul. '
+            'Kalau belum ketemu, kirim laporan: log dari HP-mu ikut terkirim supaya penyebabnya lebih cepat ketemu.',
+            muted: true,
           ),
-          const _Faq(
-            question: 'Kapan lokasi latar belakang digunakan?',
+          const SupportSectionLabel('Peringatan dan notifikasi'),
+          const SupportFaqTile(
+            question: 'Peringatan stasiun tujuan tidak muncul saat layar mati',
             answer:
-                'Hanya setelah kamu memilih Mulai perjalanan. Layanan berhenti saat perjalanan diselesaikan atau dibatalkan.',
+                'Ada tiga hal yang perlu aktif. Pertama, izin lokasi "Selalu izinkan". '
+                'Kedua, izin notifikasi. Ketiga, Teman Kereta dibebaskan dari hemat baterai. '
+                'Semuanya ada di Profil, Pengaturan lokasi, lengkap dengan tombol pintasnya. '
+                'Pada HP Xiaomi, Oppo, Realme, dan Vivo, buka juga pengaturan khusus merek yang muncul di halaman itu '
+                'dan izinkan aplikasi berjalan di latar belakang.',
           ),
-          const _Faq(
-            question: 'Apakah saya harus membuat akun?',
+          const SupportFaqTile(
+            question: 'Suara pengumuman tidak terdengar',
             answer:
-                'Ya, masuk atau membuat akun diperlukan untuk menggunakan aplikasi ini — preferensi dan riwayatmu tersimpan pada akunmu.',
+                'Buka Profil, Tes suara peringatan, lalu ketuk salah satu nada. Kalau tes itu juga diam, '
+                'cek volume media, pastikan suara notifikasi di Profil, Pengaturan notifikasi tidak dimatikan, '
+                'dan mode jangan ganggu tidak aktif. Suara bicara memakai mesin teks-ke-ucapan bawaan HP, '
+                'jadi paket suara Bahasa Indonesia perlu terpasang di pengaturan Android.',
           ),
-          const _Faq(
-            question: 'Mengapa peta berbentuk skema?',
+          const SupportFaqTile(
+            question: 'Kapan lokasi dipakai di latar belakang?',
             answer:
-                'Skema jalur dirancang agar ringan, mudah dibaca, dan berfungsi dengan cepat tanpa membutuhkan koneksi data tinggi.',
+                'Hanya setelah kamu memilih Mulai perjalanan. Layanan berhenti saat perjalanan selesai atau dibatalkan, '
+                'dan notifikasi perjalanan aktif tampil selama layanan berjalan.',
           ),
-          const SizedBox(height: 20),
-          FilledButton.icon(
-            onPressed: () => context.push('/report'),
-            icon: const Icon(Icons.bug_report_outlined),
-            label: const Text('Buat laporan lokal'),
+          const SupportFaqTile(
+            question: 'Apa itu Deteksi otomatis naik KRL?',
+            answer:
+                'Pilihan di Profil yang mengenali kamu sedang naik kereta dan menawarkan memulai perjalanan. '
+                'Kalau aktif, posisimu dikirim sesekali selama perjalanan supaya penumpang lain bisa melihat posisi kereta. '
+                'Posisi itu digabung dengan laporan penumpang lain dan tidak pernah ditampilkan sebagai posisimu. '
+                'Pilihan ini mati secara bawaan.',
+          ),
+          const SupportSectionLabel('Jadwal dan peta'),
+          const SupportFaqTile(
+            question: 'Jadwal berbeda dengan kenyataan di stasiun',
+            answer:
+                'Jadwal berasal dari data jadwal KRL Jabodetabek yang disimpan di server Teman Kereta, '
+                'bukan siaran langsung dari KAI Commuter. Perubahan mendadak, gangguan, atau jadwal baru bisa belum masuk. '
+                'Kalau ada yang salah, kirim laporan dengan jenis "Jadwal salah" dan sebutkan stasiun, jam, serta lintasnya.',
+          ),
+          const SupportFaqTile(
+            question: 'Dari mana posisi kereta di peta?',
+            answer:
+                'Perkiraan dari jadwal, ditambah posisi penumpang lain yang mengaktifkan Deteksi otomatis naik KRL. '
+                'Itu bukan data langsung dari operator, jadi bisa meleset beberapa menit.',
+          ),
+          const SupportSectionLabel('Akun dan forum'),
+          const SupportFaqTile(
+            question: 'Cara mengikuti pengguna lain',
+            answer:
+                'Buka Profil, Cari pengguna, lalu ketuk Ikuti di profilnya. Tombol Ikuti juga ada di postingan forum. '
+                'Di Forum, tab Mengikuti hanya menampilkan postingan dari orang yang kamu ikuti.',
+          ),
+          const SupportFaqTile(
+            question: 'Melaporkan postingan atau memblokir pengguna',
+            answer:
+                'Ketuk Opsi postingan di pojok kartu, lalu pilih Laporkan atau Blokir pengguna. '
+                'Daftar orang yang kamu blokir ada di Profil, Pengguna yang diblokir, dan bisa dibuka lagi dari sana.',
+          ),
+          const SupportFaqTile(
+            question: 'Lupa kata sandi',
+            answer:
+                'Di halaman masuk, ketuk Lupa kata sandi lalu isi email akunmu. Kami mengirim link untuk membuat kata sandi baru. Cek juga folder Spam.',
+          ),
+          const SupportFaqTile(
+            question: 'Menghapus akun',
+            answer:
+                'Buka Profil, bagian Akun, lalu Hapus akun. Akun dan data yang tersimpan padanya ikut terhapus. '
+                'Kalau tidak bisa membuka aplikasi, pakai halaman penghapusan akun di situs web kami.',
+          ),
+          const SizedBox(height: 16),
+          TkCard(
+            tone: TkCardTone.soft,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: <Widget>[
+                Text('Masalahmu belum terjawab?', style: textTheme.titleMedium),
+                const SizedBox(height: 6),
+                Text(
+                  'Kirim laporan dari aplikasi. Log dan info perangkat ikut terkirim, jadi kamu tidak perlu menjelaskan setelan HP satu per satu.',
+                  style: textTheme.bodyMedium?.copyWith(color: tk.textMuted),
+                ),
+                const SizedBox(height: 14),
+                SizedBox(
+                  width: double.infinity,
+                  child: FilledButton.icon(
+                    onPressed: () => context.push('/report'),
+                    icon: const Icon(Icons.flag_outlined),
+                    label: const Text('Laporkan masalah'),
+                  ),
+                ),
+                const SizedBox(height: 8),
+                SizedBox(
+                  width: double.infinity,
+                  child: OutlinedButton.icon(
+                    onPressed: () => openExternal(
+                      context,
+                      SupportLinks.mailto,
+                      fallbackLabel: SupportLinks.supportEmail,
+                    ),
+                    icon: const Icon(Icons.mail_outline_rounded),
+                    label: const Text(SupportLinks.supportEmail),
+                  ),
+                ),
+              ],
+            ),
           ),
         ],
       ),
@@ -50,6 +139,7 @@ class HelpPage extends StatelessWidget {
   }
 }
 
+/// Privasi: a short readable summary. The full policy lives on the website.
 class PrivacyPage extends StatelessWidget {
   const PrivacyPage({super.key});
 
@@ -57,298 +147,114 @@ class PrivacyPage extends StatelessWidget {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(title: const Text('Privasi')),
-      body: ListView(
-        padding: const EdgeInsets.fromLTRB(20, 8, 20, 32),
+      body: SupportPageBody(
         children: <Widget>[
-          const Icon(Icons.shield_outlined, size: 54),
-          const SizedBox(height: 18),
-          Text(
-            'Privasi dan Keamanan Data',
-            style: Theme.of(context).textTheme.headlineMedium,
+          const SupportParagraph(
+            'Ringkasan data apa yang kami proses, untuk apa, dan pilihanmu. '
+            'Yang berlaku mengikat adalah kebijakan lengkap di situs web.',
+            muted: true,
           ),
-          const SizedBox(height: 12),
-          const Text(
-            'Teman Kereta mengutamakan privasi pengguna. Halaman ini menjelaskan data apa saja yang diproses, mengapa, di mana disimpan, dan hak-hak kamu sebagai pengguna.',
-          ),
-          const SizedBox(height: 28),
-
-          _SectionHeading('Data yang dikumpulkan dan alasannya'),
-          const _PrivacyItem(
-            icon: Icons.location_on_outlined,
-            title: 'Lokasi',
-            description:
-                'Dipakai untuk mencari stasiun terdekat dan memandu perjalanan aktifmu secara real-time. Saat deteksi otomatis naik KRL aktif, lokasimu juga dipakai untuk mengenali kapan kamu berangkat dari stasiun. Selama perjalanan aktif berlangsung, posisimu dikirim sesekali agar penumpang lain bisa melihat posisi kereta yang sama — lihat bagian "Berbagi posisi saat naik KRL" di bawah.',
-          ),
-          const _PrivacyItem(
-            icon: Icons.notifications_none_rounded,
-            title: 'Notifikasi',
-            description:
-                'Dikirim dari perangkatmu sendiri untuk mengingatkan stasiun dan transit, ditambah pemberitahuan dari kami soal gangguan layanan KRL.',
-          ),
-          const _PrivacyItem(
-            icon: Icons.schedule_outlined,
-            title: 'Jadwal dan data stasiun',
-            description:
-                'Berasal dari data jadwal terverifikasi yang diperbarui berkala, sama untuk semua pengguna.',
-          ),
-          const _PrivacyItem(
-            icon: Icons.account_circle_outlined,
-            title: 'Akun dan profil',
-            description:
-                'Untuk masuk, kami menyimpan email, nama, dan username yang kamu pilih. Preferensi seperti stasiun rumah/kantor dan rute favorit tersimpan pada akunmu.',
-          ),
-          const _PrivacyItem(
-            icon: Icons.forum_outlined,
-            title: 'Forum dan fitur sosial',
-            description:
-                'Postingan, komentar, dan siapa yang kamu ikuti bersifat terlihat oleh pengguna lain — perlakukan seperti media sosial pada umumnya.',
-          ),
-          const _PrivacyItem(
-            icon: Icons.flag_outlined,
-            title: 'Laporan pengguna',
-            description:
-                'Laporan yang kamu tulis (mis. kepadatan, AC mati) tersimpan di perangkat ini dan belum dikirim ke mana pun — belum ada yang bisa melihatnya selain kamu sendiri.',
-          ),
-          const _PrivacyItem(
-            icon: Icons.history_outlined,
-            title: 'Riwayat perjalanan dan preferensi',
-            description:
-                'Tersimpan di perangkatmu sendiri, tidak dibagikan ke pengguna lain.',
-          ),
-          const _PrivacyItem(
-            icon: Icons.bug_report_outlined,
-            title: 'Laporan kerusakan aplikasi (crash)',
-            description:
-                'Fiturnya ada tapi tidak aktif secara default. Jika suatu saat diaktifkan, halaman ini akan diperbarui terlebih dahulu untuk menjelaskannya.',
-          ),
-          const _PrivacyItem(
-            icon: Icons.block_flipped,
-            title: 'Analitik dan iklan',
-            description:
-                'Kami tidak memasang pelacak analitik atau iklan pihak ketiga mana pun di aplikasi ini.',
-          ),
-
-          const SizedBox(height: 12),
-          _SectionHeading('Berbagi posisi saat naik KRL'),
-          const Padding(
-            padding: EdgeInsets.only(bottom: 18),
-            child: Text(
-              'Saat "Deteksi otomatis naik KRL" aktif dan kamu sedang dalam perjalanan, posisi GPS-mu dikirim sesekali agar pengguna lain di kereta yang sama bisa melihat posisi keretanya. Laporan ini disimpan sementara, dihapus otomatis paling lama 10 menit, dan digabung dengan laporan penumpang lain menjadi satu posisi rata-rata per kereta sebelum ditampilkan — tidak pernah ditampilkan sebagai posisi milikmu sendiri.',
-            ),
-          ),
-
-          _SectionHeading('Penghapusan data'),
-          const Padding(
-            padding: EdgeInsets.only(bottom: 18),
-            child: Text(
-              'Untuk menghapus akunmu beserta data yang tersimpan padanya, hubungi kami lewat kontak di bawah. Data yang hanya tersimpan di perangkat (laporan lokal) juga ikut terhapus jika kamu mencopot pemasangan aplikasi.',
-            ),
-          ),
-
-          _SectionHeading('Hak kamu'),
-          const Padding(
-            padding: EdgeInsets.only(bottom: 18),
-            child: Text(
-              'Kamu dapat mencabut izin lokasi, izin aktivitas fisik, dan izin notifikasi kapan pun lewat Pengaturan Android — aplikasi tetap bisa dipakai dengan fitur yang menyesuaikan (lihat Bantuan).',
-            ),
-          ),
-
-          _SectionHeading('Kontak pengelola aplikasi'),
-          const Padding(
-            padding: EdgeInsets.only(bottom: 4),
-            child: Text('privasi@temankereta.id'),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _SectionHeading extends StatelessWidget {
-  const _SectionHeading(this.text);
-
-  final String text;
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 10),
-      child: Text(
-        text,
-        style: Theme.of(
-          context,
-        ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700),
-      ),
-    );
-  }
-}
-
-class ReportPage extends ConsumerStatefulWidget {
-  const ReportPage({super.key});
-
-  @override
-  ConsumerState<ReportPage> createState() => _ReportPageState();
-}
-
-class _ReportPageState extends ConsumerState<ReportPage> {
-  final _controller = TextEditingController();
-  var _category = 'Masalah jadwal';
-
-  @override
-  void dispose() {
-    _controller.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(title: const Text('Laporan lokal')),
-      body: ListView(
-        padding: const EdgeInsets.fromLTRB(16, 8, 16, 28),
-        children: <Widget>[
-          Card(
-            color: Theme.of(context).colorScheme.primaryContainer,
-            child: const Padding(
-              padding: EdgeInsets.all(16),
-              child: Text(
-                'Laporan disimpan hanya di perangkat ini. Belum ada endpoint server untuk mengirimnya keluar.',
+          const SupportSectionLabel('Yang kami proses'),
+          const SupportInfoGroup(
+            children: <Widget>[
+              SupportInfoBlock(
+                icon: Icons.location_on_outlined,
+                title: 'Lokasi',
+                body:
+                    'Dipakai untuk mencari stasiun terdekat dan memandu perjalanan aktif, termasuk saat layar mati. '
+                    'Posisimu hanya dikirim ke server kalau Deteksi otomatis naik KRL aktif, dan itu mati secara bawaan.',
               ),
-            ),
-          ),
-          const SizedBox(height: 18),
-          DropdownButtonFormField<String>(
-            initialValue: _category,
-            decoration: const InputDecoration(labelText: 'Kategori'),
-            items: const <DropdownMenuItem<String>>[
-              DropdownMenuItem(
-                value: 'Masalah jadwal',
-                child: Text('Masalah jadwal'),
+              SupportInfoBlock(
+                icon: Icons.account_circle_outlined,
+                title: 'Akun dan profil',
+                body:
+                    'Email, nama tampilan, dan username. Stasiun rumah, kantor, dan rute favorit tersimpan di akunmu. '
+                    'Kata sandi disimpan terenkripsi oleh penyedia autentikasi dan tidak bisa kami baca.',
               ),
-              DropdownMenuItem(
-                value: 'Detail stasiun',
-                child: Text('Detail stasiun'),
+              SupportInfoBlock(
+                icon: Icons.forum_outlined,
+                title: 'Forum dan fitur sosial',
+                body:
+                    'Postingan, komentar, foto, dan siapa yang kamu ikuti terlihat oleh pengguna lain. '
+                    'Laporan dan blokirmu hanya terlihat olehmu dan moderator.',
               ),
-              DropdownMenuItem(
-                value: 'Aksesibilitas',
-                child: Text('Aksesibilitas'),
+              SupportInfoBlock(
+                icon: Icons.notifications_none_rounded,
+                title: 'Token notifikasi',
+                body:
+                    'Pengenal perangkat untuk mengirim pemberitahuan gangguan layanan dan balasan forum.',
               ),
-              DropdownMenuItem(
-                value: 'Masalah aplikasi',
-                child: Text('Masalah aplikasi'),
+              SupportInfoBlock(
+                icon: Icons.flag_outlined,
+                title: 'Laporan masalah',
+                body:
+                    'Berisi pesanmu, info perangkat dan aplikasi, serta log aplikasi kalau kamu membiarkannya aktif. '
+                    'Kata sandi, token, email, dan nomor telepon di log disamarkan. Email-mu ikut hanya jika kamu mencentangnya. '
+                    'Laporan disimpan di server kami dan diteruskan ke support@temankereta.web.id lewat Cloudflare Email Service.',
               ),
             ],
-            onChanged: (value) {
-              if (value != null) {
-                setState(() => _category = value);
-              }
-            },
           ),
-          const SizedBox(height: 14),
-          TextField(
-            controller: _controller,
-            minLines: 5,
-            maxLines: 10,
-            maxLength: 1000,
-            decoration: const InputDecoration(
-              labelText: 'Ceritakan masalah',
-              alignLabelWithHint: true,
-              hintText: 'Contoh: urutan stasiun pada salah satu rute tidak sesuai…',
+          const SupportSectionLabel('Yang tetap di perangkatmu'),
+          const SupportInfoGroup(
+            children: <Widget>[
+              SupportInfoBlock(
+                icon: Icons.history_outlined,
+                title: 'Riwayat perjalanan dan pengaturan',
+                body:
+                    'Tersimpan di HP-mu saja dan tidak dibagikan. Mencopot aplikasi menghapusnya.',
+              ),
+              SupportInfoBlock(
+                icon: Icons.description_outlined,
+                title: 'Log aplikasi',
+                body:
+                    'Catatan teknis singkat disimpan di HP-mu (sekitar 512 KB, yang lama ditimpa) dan hanya keluar kalau kamu mengirim laporan.',
+              ),
+            ],
+          ),
+          const SupportSectionLabel('Yang tidak kami lakukan'),
+          const SupportInfoGroup(
+            children: <Widget>[
+              SupportInfoBlock(
+                icon: Icons.block_flipped,
+                title: 'Tanpa iklan dan pelacak analitik',
+                body:
+                    'Tidak ada SDK iklan atau analitik pihak ketiga, dan lokasimu tidak dijual. '
+                    'Pelaporan crash otomatis tidak aktif; kalau suatu saat dinyalakan, halaman ini diperbarui lebih dulu.',
+              ),
+            ],
+          ),
+          const SupportSectionLabel('Hapus akun'),
+          const SupportParagraph(
+            'Buka Profil, bagian Akun, lalu ketuk Hapus akun. Akun dan data yang tersimpan padanya ikut terhapus. '
+            'Kalau tidak bisa membuka aplikasi, minta penghapusan lewat halaman penghapusan akun di situs web atau email ke '
+            '${SupportLinks.supportEmail}.',
+            muted: true,
+          ),
+          const SizedBox(height: 8),
+          const SupportSectionLabel('Pilihanmu'),
+          const SupportParagraph(
+            'Izin lokasi, aktivitas fisik, dan notifikasi bisa dicabut kapan saja di pengaturan Android. '
+            'Fitur yang tidak butuh izin itu tetap jalan.',
+            muted: true,
+          ),
+          const SizedBox(height: 20),
+          SizedBox(
+            width: double.infinity,
+            child: FilledButton.icon(
+              onPressed: () =>
+                  openExternal(context, Uri.parse(SupportLinks.privacyPolicy)),
+              icon: const Icon(Icons.open_in_new_rounded),
+              label: const Text('Baca kebijakan lengkap'),
             ),
           ),
-          const SizedBox(height: 12),
-          FilledButton.icon(
-            onPressed: () {
-              checkAuthOrPrompt(
-                context,
-                featureName: 'Kirim Laporan',
-                onAllowed: () async {
-                  final description = _controller.text.trim();
-                  if (description.length < 10) {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(
-                        content: Text('Tambahkan sedikitnya 10 karakter.'),
-                      ),
-                    );
-                    return;
-                  }
-                  FocusScope.of(context).unfocus();
-                  await ref.read(appDatabaseProvider).saveUserReport(
-                    UserReportsCompanion.insert(
-                      category: _category,
-                      description: description,
-                      createdAt: DateTime.now(),
-                    ),
-                  );
-                  if (!context.mounted) {
-                    return;
-                  }
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(
-                      content: Text('Laporan "$_category" disimpan di perangkat.'),
-                    ),
-                  );
-                  _controller.clear();
-                },
-              );
-            },
-            icon: const Icon(Icons.save_outlined),
-            label: const Text('Simpan laporan lokal'),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _Faq extends StatelessWidget {
-  const _Faq({required this.question, required this.answer});
-
-  final String question;
-  final String answer;
-
-  @override
-  Widget build(BuildContext context) {
-    return Card(
-      margin: const EdgeInsets.only(bottom: 10),
-      child: ExpansionTile(
-        title: Text(question),
-        childrenPadding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
-        expandedCrossAxisAlignment: CrossAxisAlignment.start,
-        children: <Widget>[Text(answer)],
-      ),
-    );
-  }
-}
-
-class _PrivacyItem extends StatelessWidget {
-  const _PrivacyItem({
-    required this.icon,
-    required this.title,
-    required this.description,
-  });
-
-  final IconData icon;
-  final String title;
-  final String description;
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 18),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: <Widget>[
-          Icon(icon),
-          const SizedBox(width: 14),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: <Widget>[
-                Text(title, style: const TextStyle(fontWeight: FontWeight.w700)),
-                const SizedBox(height: 4),
-                Text(description),
-              ],
+          const SizedBox(height: 8),
+          SizedBox(
+            width: double.infinity,
+            child: OutlinedButton.icon(
+              onPressed: () =>
+                  openExternal(context, Uri.parse(SupportLinks.deleteAccount)),
+              icon: const Icon(Icons.delete_outline_rounded),
+              label: const Text('Halaman hapus akun'),
             ),
           ),
         ],

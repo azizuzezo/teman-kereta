@@ -1,12 +1,14 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../app/theme/tk_colors.dart';
 import '../../../core/preferences/preferences_store.dart';
 
 class AppSettings {
   const AppSettings({
     required this.onboardingComplete,
     required this.themeMode,
+    this.palette = TkPaletteId.navyKrl,
     required this.reduceMotion,
     required this.homeStationId,
     required this.workStationId,
@@ -21,6 +23,7 @@ class AppSettings {
 
   final bool onboardingComplete;
   final ThemeMode themeMode;
+  final TkPaletteId palette;
   final bool reduceMotion;
   final String? homeStationId;
   final String? workStationId;
@@ -35,6 +38,7 @@ class AppSettings {
   AppSettings copyWith({
     bool? onboardingComplete,
     ThemeMode? themeMode,
+    TkPaletteId? palette,
     bool? reduceMotion,
     Object? homeStationId = _unset,
     Object? workStationId = _unset,
@@ -49,6 +53,7 @@ class AppSettings {
     return AppSettings(
       onboardingComplete: onboardingComplete ?? this.onboardingComplete,
       themeMode: themeMode ?? this.themeMode,
+      palette: palette ?? this.palette,
       reduceMotion: reduceMotion ?? this.reduceMotion,
       homeStationId: identical(homeStationId, _unset)
           ? this.homeStationId
@@ -83,6 +88,7 @@ class SettingsController extends Notifier<AppSettings> {
     return AppSettings(
       onboardingComplete: snapshot.onboardingComplete,
       themeMode: snapshot.themeMode,
+      palette: snapshot.palette,
       reduceMotion: snapshot.reduceMotion,
       homeStationId: snapshot.homeStationId,
       workStationId: snapshot.workStationId,
@@ -114,6 +120,11 @@ class SettingsController extends Notifier<AppSettings> {
   Future<void> setThemeMode(ThemeMode value) async {
     state = state.copyWith(themeMode: value);
     await _store.setThemeMode(value);
+  }
+
+  Future<void> setPalette(TkPaletteId value) async {
+    state = state.copyWith(palette: value);
+    await _store.setPalette(value);
   }
 
   Future<void> setHomeStation(String? stationId) async {

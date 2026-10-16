@@ -2,19 +2,21 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:geolocator/geolocator.dart';
 
+import '../../../app/theme/app_theme.dart';
 import '../../../core/platform/native_trip_service.dart';
-
-final _permissionStatusProvider =
-    FutureProvider.autoDispose<Map<String, Object?>>((ref) {
-      return ref.watch(nativeTripServiceProvider).getPermissionStatus();
-    });
+import '../../../core/widgets/tk_components.dart';
+import '../../ride_detection/presentation/ride_detection_controller.dart';
+import 'permission_status.dart';
+import 'settings_controller.dart';
+import 'widgets/settings_rows.dart';
 
 class LocationSettingsPage extends ConsumerWidget {
   const LocationSettingsPage({super.key});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final status = ref.watch(_permissionStatusProvider);
+    final status = ref.watch(devicePermissionStatusProvider);
+    final settings = ref.watch(settingsControllerProvider);
 
     return Scaffold(
       appBar: AppBar(title: const Text('Pengaturan lokasi')),
@@ -22,94 +24,187 @@ class LocationSettingsPage extends ConsumerWidget {
         child: ListView(
           padding: const EdgeInsets.fromLTRB(16, 8, 16, 28),
           children: <Widget>[
-            Text(
-              'Lokasi digunakan secara bertahap',
-              style: Theme.of(context).textTheme.headlineSmall,
-            ),
-            const SizedBox(height: 8),
-            const Text(
+            const SettingsIntro(
               'TK hanya membaca lokasi saat kamu membuka stasiun terdekat, '
-              'mengaktifkan deteksi otomatis naik KRL, atau memulai perjalanan aktif. '
-              'Tidak ada pelacakan lokasi berkelanjutan di luar itu.',
+              'mengaktifkan deteksi otomatis naik KRL, atau memulai perjalanan '
+              'aktif. Tidak ada pelacakan lokasi berkelanjutan di luar itu.',
             ),
-            const SizedBox(height: 20),
+            const TkSectionLabel('Izin'),
             status.when(
-              loading: () => const LinearProgressIndicator(),
-              error: (error, stack) => const Text(
-                'Status izin tidak dapat dibaca. Buka pengaturan aplikasi untuk memeriksa langsung.',
-              ),
-              data: (value) => Card(
-                child: Column(
-                  children: <Widget>[
-                    _StatusTile(
-                      icon: Icons.my_location_rounded,
-                      label: 'Lokasi saat digunakan',
-                      granted: (value['foregroundLocation'] as bool?) ?? false,
-                    ),
-                    const Divider(height: 1),
-                    _StatusTile(
-                      icon: Icons.location_history_rounded,
-                      label: 'Lokasi latar belakang',
-                      granted: (value['backgroundLocation'] as bool?) ?? false,
-                    ),
-                    const Divider(height: 1),
-                    _StatusTile(
-                      icon: Icons.directions_walk_rounded,
-                      label: 'Pengenalan aktivitas (deteksi naik KRL)',
-                      granted: (value['activityRecognition'] as bool?) ?? false,
-                    ),
-                    const Divider(height: 1),
-                    _StatusTile(
-                      icon: Icons.battery_charging_full_rounded,
-                      label: 'Bebas dari optimisasi baterai',
-                      granted:
-                          (value['batteryOptimizationIgnored'] as bool?) ??
-                          false,
-                    ),
-                  ],
+              loading: () => const _PermissionSkeleton(),
+              error: (error, stack) => TkCard(
+                tone: TkCardTone.warning,
+                child: Text(
+                  'Status izin tidak dapat dibaca. Buka pengaturan aplikasi '
+                  'untuk memeriksa langsung.',
+                  style: Theme.of(context).textTheme.bodyMedium,
                 ),
               ),
+              data: (value) => TkRowGroup(
+                children: <Widget>[
+                  TkRow(
+                    icon: Icons.my_location_rounded,
+                    title: 'Lokasi saat digunakan',
+                    trailing: PermissionPill(
+                      granted: value['foregroundLocation'] == true,
+                    ),
+                  ),
+                  TkRow(
+                    icon: Icons.location_history_rounded,
+                    title: 'Lokasi latar belakang',
+                    trailing: PermissionPill(
+                      granted: value['backgroundLocation'] == true,
+                    ),
+                  ),
+                  TkRow(
+                    icon: Icons.directions_walk_rounded,
+                    title: 'Pengenalan aktivitas',
+                    subtitle: 'Dipakai untuk mendeteksi naik KRL',
+                    trailing: PermissionPill(
+                      granted: value['activityRecognition'] == true,
+                    ),
+                  ),
+                  TkRow(
+                    icon: Icons.battery_charging_full_rounded,
+                    title: 'Bebas optimisasi baterai',
+                    trailing: PermissionPill(
+                      granted: value['batteryOptimizationIgnored'] == true,
+                    ),
+                  ),
+                ],
+              ),
             ),
-            const SizedBox(height: 20),
+            const SizedBox(height: 12),
             FilledButton.icon(
-              onPressed: () => Geolocator.openLocationSettings(),
+              onPressed: Geolocator.openLocationSettings,
               icon: const Icon(Icons.settings_outlined),
               label: const Text('Buka pengaturan lokasi perangkat'),
             ),
             const SizedBox(height: 10),
             OutlinedButton.icon(
-              onPressed: () => Geolocator.openAppSettings(),
+              onPressed: Geolocator.openAppSettings,
               icon: const Icon(Icons.app_settings_alt_outlined),
               label: const Text('Buka pengaturan izin aplikasi'),
             ),
-            const SizedBox(height: 10),
+            const SizedBox(height: 4),
             TextButton.icon(
-              onPressed: () => ref.invalidate(_permissionStatusProvider),
+              onPressed: () => ref.invalidate(devicePermissionStatusProvider),
               icon: const Icon(Icons.refresh_rounded),
               label: const Text('Segarkan status'),
             ),
-            const SizedBox(height: 28),
-            Text(
-              'Keandalan pelacakan latar belakang',
-              style: Theme.of(context).textTheme.headlineSmall,
+            const SizedBox(height: 16),
+            const TkSectionLabel('Deteksi otomatis'),
+            TkRowGroup(
+              children: <Widget>[
+                SettingsSwitchRow(
+                  icon: Icons.train_rounded,
+                  title: 'Deteksi otomatis naik KRL',
+                  subtitle:
+                      'Meminta izin sensor gerak dan memakai GPS untuk '
+                      'mendeteksi saat kamu meninggalkan stasiun rumah atau '
+                      'kantor sambil bergerak. Tetap meminta konfirmasi '
+                      'sebelum memulai panduan perjalanan.',
+                  value: settings.rideDetectionEnabled,
+                  onChanged: (value) =>
+                      _toggleRideDetection(context, ref, value),
+                ),
+              ],
             ),
             const SizedBox(height: 8),
-            const Text(
-              'Sebagian HP (Xiaomi, Oppo, Vivo, dan lainnya) punya pengaturan '
-              'baterai sendiri di luar Android, yang bisa menghentikan '
-              'pelacakan perjalanan aktif di tengah jalan meskipun izin '
-              'lokasi sudah diberikan. Aktifkan dua hal di bawah ini supaya '
-              'notifikasi stasiun tidak berhenti tiba-tiba.',
+            TkCard(
+              tone: TkCardTone.soft,
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: <Widget>[
+                  Icon(
+                    Icons.info_outline_rounded,
+                    size: 20,
+                    color: context.tk.primary,
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Text(
+                      'Saat perjalanan aktif berjalan, posisi GPS-mu juga '
+                      'dikirim berkala ke server untuk membantu menampilkan '
+                      'posisi kereta ke pengguna lain. Rinciannya ada di '
+                      'Kebijakan privasi.',
+                      style: Theme.of(context).textTheme.bodySmall,
+                    ),
+                  ),
+                ],
+              ),
             ),
-            const SizedBox(height: 16),
+            const SizedBox(height: 20),
+            const TkSectionLabel('Keandalan di latar belakang'),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(4, 0, 4, 12),
+              child: Text(
+                'Sebagian HP (Xiaomi, Oppo, Vivo, dan lainnya) punya '
+                'pengaturan baterai sendiri di luar Android, yang bisa '
+                'menghentikan pelacakan perjalanan aktif di tengah jalan '
+                'meskipun izin lokasi sudah diberikan. Aktifkan dua hal di '
+                'bawah ini supaya notifikasi stasiun tidak berhenti tiba-tiba.',
+                style: Theme.of(
+                  context,
+                ).textTheme.bodyMedium?.copyWith(color: context.tk.textMuted),
+              ),
+            ),
             status.maybeWhen(
               data: (value) => _BatteryOptimizationActions(
                 ignored: (value['batteryOptimizationIgnored'] as bool?) ?? true,
                 manufacturer: (value['manufacturer'] as String?) ?? '',
-                onRefresh: () => ref.invalidate(_permissionStatusProvider),
+                onRefresh: () => ref.invalidate(devicePermissionStatusProvider),
               ),
               orElse: () => const SizedBox.shrink(),
             ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Future<void> _toggleRideDetection(
+    BuildContext context,
+    WidgetRef ref,
+    bool value,
+  ) async {
+    final detection = ref.read(rideDetectionControllerProvider.notifier);
+    if (value) {
+      final started = await detection.enable();
+      ref.invalidate(devicePermissionStatusProvider);
+      if (context.mounted && !started) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text(
+              'Izin pengenalan aktivitas ditolak. Deteksi otomatis tetap '
+              'nonaktif.',
+            ),
+          ),
+        );
+      }
+    } else {
+      await detection.disable();
+    }
+  }
+}
+
+class _PermissionSkeleton extends StatelessWidget {
+  const _PermissionSkeleton();
+
+  @override
+  Widget build(BuildContext context) {
+    return Semantics(
+      label: 'Memuat status izin',
+      child: const TkCard(
+        child: Column(
+          children: <Widget>[
+            TkSkeleton(height: 36),
+            SizedBox(height: 14),
+            TkSkeleton(height: 36),
+            SizedBox(height: 14),
+            TkSkeleton(height: 36),
+            SizedBox(height: 14),
+            TkSkeleton(height: 36),
           ],
         ),
       ),
@@ -141,7 +236,7 @@ class _BatteryOptimizationActions extends ConsumerWidget {
       manufacturer.toLowerCase(),
     );
     return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
+      crossAxisAlignment: CrossAxisAlignment.stretch,
       children: <Widget>[
         FilledButton.icon(
           onPressed: ignored
@@ -182,30 +277,5 @@ class _BatteryOptimizationActions extends ConsumerWidget {
     if (manufacturer.isEmpty) return manufacturer;
     return manufacturer[0].toUpperCase() +
         manufacturer.substring(1).toLowerCase();
-  }
-}
-
-class _StatusTile extends StatelessWidget {
-  const _StatusTile({
-    required this.icon,
-    required this.label,
-    required this.granted,
-  });
-
-  final IconData icon;
-  final String label;
-  final bool granted;
-
-  @override
-  Widget build(BuildContext context) {
-    return ListTile(
-      leading: Icon(icon),
-      title: Text(label),
-      trailing: Icon(
-        granted ? Icons.check_circle_rounded : Icons.cancel_outlined,
-        color: granted ? Colors.green : Theme.of(context).colorScheme.error,
-        semanticLabel: granted ? 'Diizinkan' : 'Belum diizinkan',
-      ),
-    );
   }
 }

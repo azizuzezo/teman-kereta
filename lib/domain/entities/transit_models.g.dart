@@ -72,6 +72,7 @@ Map<String, dynamic> _$DepartureToJson(_Departure instance) =>
 const _$DataFreshnessEnumMap = {
   DataFreshness.realtime: 'realtime',
   DataFreshness.nearRealtime: 'nearRealtime',
+  DataFreshness.scheduled: 'scheduled',
   DataFreshness.estimated: 'estimated',
   DataFreshness.unavailable: 'unavailable',
 };

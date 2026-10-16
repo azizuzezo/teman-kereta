@@ -6,6 +6,8 @@ import 'package:go_router/go_router.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../../../app/config/app_environment.dart';
+import '../../../../app/theme/app_theme.dart';
+import '../../../../core/widgets/tk_components.dart';
 
 /// Matches an `@username` mention inside post/comment text.
 ///
@@ -55,7 +57,8 @@ Future<List<MentionCandidate>> searchMentionCandidates(String query) async {
     final rows = await request.limit(8);
     return <MentionCandidate>[
       for (final row in rows as List<dynamic>)
-        if ((row as Map<String, dynamic>)['username'] case final String username)
+        if ((row as Map<String, dynamic>)['username']
+            case final String username)
           MentionCandidate(
             id: row['id'] as String,
             username: username,
@@ -94,10 +97,13 @@ Future<String?> resolveMentionedUserId(String username) async {
 /// styled but simply does nothing on tap — better than silently rendering
 /// it as plain text, which would make the author think it never registered.
 class MentionText extends StatefulWidget {
-  const MentionText(this.text, {this.style, super.key});
+  const MentionText(this.text, {this.style, this.maxLines, super.key});
 
   final String text;
   final TextStyle? style;
+
+  /// Clamps the text with an ellipsis (feed density); null shows everything.
+  final int? maxLines;
 
   @override
   State<MentionText> createState() => _MentionTextState();
@@ -141,34 +147,63 @@ class _MentionTextState extends State<MentionText> {
 
     final baseStyle = widget.style ?? Theme.of(context).textTheme.bodyMedium;
     final mentionStyle = baseStyle?.copyWith(
-      color: Theme.of(context).colorScheme.primary,
+      color: context.tk.primary,
       fontWeight: FontWeight.w700,
     );
 
     final spans = <InlineSpan>[];
-    var index = 0;
-    for (final match in mentionPattern.allMatches(widget.text)) {
-      if (match.start > index) {
-        spans.add(TextSpan(text: widget.text.substring(index, match.start)));
+    for (final segment in splitMentions(widget.text)) {
+      final username = segment.username;
+      if (username == null) {
+        spans.add(TextSpan(text: segment.text));
+        continue;
       }
-      final username = match.group(1)!;
       final holder = TapGestureRecognizerHolder(() => _openMention(username));
       _recognizers.add(holder);
       spans.add(
         TextSpan(
-          text: '@$username',
+          text: segment.text,
           style: mentionStyle,
           recognizer: holder.recognizer,
         ),
       );
-      index = match.end;
-    }
-    if (index < widget.text.length) {
-      spans.add(TextSpan(text: widget.text.substring(index)));
     }
 
-    return Text.rich(TextSpan(style: baseStyle, children: spans));
+    return Text.rich(
+      TextSpan(style: baseStyle, children: spans),
+      maxLines: widget.maxLines,
+      overflow: widget.maxLines == null
+          ? TextOverflow.clip
+          : TextOverflow.ellipsis,
+    );
   }
+}
+
+/// One run of post text: plain when [username] is null, otherwise an
+/// `@username` mention ([text] includes the `@`).
+class MentionSegment {
+  const MentionSegment(this.text, {this.username});
+
+  final String text;
+  final String? username;
+}
+
+/// Splits [text] into plain runs and mentions using [mentionPattern]. The
+/// concatenated [MentionSegment.text] values always equal [text].
+List<MentionSegment> splitMentions(String text) {
+  final segments = <MentionSegment>[];
+  var index = 0;
+  for (final match in mentionPattern.allMatches(text)) {
+    if (match.start > index) {
+      segments.add(MentionSegment(text.substring(index, match.start)));
+    }
+    segments.add(MentionSegment(match.group(0)!, username: match.group(1)));
+    index = match.end;
+  }
+  if (index < text.length) {
+    segments.add(MentionSegment(text.substring(index)));
+  }
+  return segments;
 }
 
 /// Tiny wrapper so [MentionText] can dispose the recognizers it creates —
@@ -183,7 +218,6 @@ class TapGestureRecognizerHolder {
 
   void dispose() => recognizer.dispose();
 }
-
 
 /// The `@…` the caret is currently sitting inside, if any: [start] is the
 /// offset of the `@` itself, [query] is what has been typed after it.
@@ -298,54 +332,81 @@ class _MentionSuggestionsState extends State<MentionSuggestions> {
     if (start == null || _candidates.isEmpty) {
       return const SizedBox.shrink();
     }
-    return Card(
-      margin: const EdgeInsets.only(top: 4),
-      clipBehavior: Clip.antiAlias,
-      child: ConstrainedBox(
-        constraints: const BoxConstraints(maxHeight: 216),
-        child: ListView.builder(
-          shrinkWrap: true,
-          padding: EdgeInsets.zero,
-          itemCount: _candidates.length,
-          itemBuilder: (context, index) {
-            final candidate = _candidates[index];
-            return ListTile(
-              dense: true,
-              leading: CircleAvatar(
-                radius: 16,
-                backgroundImage:
-                    candidate.avatarUrl != null && candidate.avatarUrl!.isNotEmpty
-                        ? NetworkImage(candidate.avatarUrl!)
-                        : null,
-                child: candidate.avatarUrl == null || candidate.avatarUrl!.isEmpty
-                    ? Text(
-                        candidate.username.characters.first.toUpperCase(),
-                        style: const TextStyle(fontSize: 12),
-                      )
-                    : null,
-              ),
-              title: Text('@${candidate.username}'),
-              subtitle: candidate.displayName == null ||
-                      candidate.displayName!.isEmpty
-                  ? null
-                  : Text(
-                      candidate.displayName!,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
+    final tk = context.tk;
+    final textTheme = Theme.of(context).textTheme;
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(12, 0, 12, 8),
+      child: Material(
+        color: tk.surface,
+        clipBehavior: Clip.antiAlias,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(TkRadius.control),
+          side: BorderSide(color: tk.border),
+        ),
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxHeight: 216),
+          child: ListView.builder(
+            shrinkWrap: true,
+            padding: EdgeInsets.zero,
+            itemCount: _candidates.length,
+            itemBuilder: (context, index) {
+              final candidate = _candidates[index];
+              final hasName =
+                  candidate.displayName != null &&
+                  candidate.displayName!.isNotEmpty;
+              return InkWell(
+                onTap: () {
+                  applyMentionSelection(
+                    widget.controller,
+                    start,
+                    candidate.username,
+                  );
+                  setState(() {
+                    _candidates = const <MentionCandidate>[];
+                    _tokenStart = null;
+                  });
+                },
+                child: ConstrainedBox(
+                  constraints: const BoxConstraints(minHeight: 48),
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 12,
+                      vertical: 6,
                     ),
-              onTap: () {
-                applyMentionSelection(
-                  widget.controller,
-                  start,
-                  candidate.username,
-                );
-                setState(() {
-                  _candidates = const <MentionCandidate>[];
-                  _tokenStart = null;
-                });
-              },
-            );
-          },
+                    child: Row(
+                      children: <Widget>[
+                        TkAvatar(
+                          name: candidate.displayName ?? candidate.username,
+                          imageUrl: candidate.avatarUrl,
+                          size: 32,
+                        ),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: Text.rich(
+                            TextSpan(
+                              children: <InlineSpan>[
+                                TextSpan(
+                                  text: '@${candidate.username}',
+                                  style: textTheme.titleSmall,
+                                ),
+                                if (hasName)
+                                  TextSpan(
+                                    text: '  ${candidate.displayName}',
+                                    style: textTheme.bodySmall,
+                                  ),
+                              ],
+                            ),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              );
+            },
+          ),
         ),
       ),
     );

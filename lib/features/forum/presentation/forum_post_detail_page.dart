@@ -1,17 +1,24 @@
 import 'dart:async';
 
-import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:go_router/go_router.dart';
 
-import '../../../core/utils/relative_time.dart';
+import '../../../app/theme/app_theme.dart';
 import '../../../core/widgets/empty_state.dart';
-import '../../../core/widgets/tk_logo.dart';
+import '../../../core/widgets/tk_components.dart';
 import 'forum_controller.dart';
+import 'forum_format.dart';
 import 'forum_models.dart';
+import 'forum_session.dart';
+import 'widgets/forum_byline.dart';
+import 'widgets/forum_moderation_actions.dart';
 import 'widgets/forum_post_card.dart';
+import 'widgets/forum_skeletons.dart';
 import 'widgets/mentions.dart';
+
+const _maxReplyLength = 1000;
 
 class ForumPostDetailPage extends ConsumerStatefulWidget {
   const ForumPostDetailPage({required this.postId, super.key});
@@ -24,18 +31,28 @@ class ForumPostDetailPage extends ConsumerStatefulWidget {
 }
 
 class _ForumPostDetailPageState extends ConsumerState<ForumPostDetailPage> {
-  final _commentController = TextEditingController();
+  final _replyController = TextEditingController();
   bool _submitting = false;
 
   @override
+  void initState() {
+    super.initState();
+    _replyController.addListener(_onTextChanged);
+  }
+
+  @override
   void dispose() {
-    _commentController.dispose();
+    _replyController
+      ..removeListener(_onTextChanged)
+      ..dispose();
     super.dispose();
   }
 
-  Future<void> _submitComment() async {
-    final body = _commentController.text.trim();
-    if (body.isEmpty) return;
+  void _onTextChanged() => setState(() {});
+
+  Future<void> _submitReply() async {
+    final body = _replyController.text.trim();
+    if (body.isEmpty || _submitting) return;
     setState(() => _submitting = true);
     final error = await ref
         .read(forumControllerProvider.notifier)
@@ -48,24 +65,42 @@ class _ForumPostDetailPageState extends ConsumerState<ForumPostDetailPage> {
       ).showSnackBar(SnackBar(content: Text(error)));
       return;
     }
-    _commentController.clear();
-    ref.invalidate(forumCommentsProvider(widget.postId));
+    _replyController.clear();
+    FocusScope.of(context).unfocus();
+    ref
+      ..invalidate(forumCommentsProvider(widget.postId))
+      ..invalidate(forumPostProvider(widget.postId));
+  }
+
+  Future<void> _refresh() async {
+    ref
+      ..invalidate(forumPostProvider(widget.postId))
+      ..invalidate(forumCommentsProvider(widget.postId));
+    try {
+      await ref.read(forumCommentsProvider(widget.postId).future);
+    } on Object {
+      // The list shows its own error state with a retry action.
+    }
   }
 
   @override
   Widget build(BuildContext context) {
     final post = ref.watch(forumPostProvider(widget.postId));
     final comments = ref.watch(forumCommentsProvider(widget.postId));
+    final tk = context.tk;
 
     return Scaffold(
       appBar: AppBar(title: const Text('Postingan')),
       body: SafeArea(
         child: post.when(
-          loading: () => const Center(child: CircularProgressIndicator()),
-          error: (error, stack) => const AppEmptyState(
-            icon: Icons.error_outline_rounded,
-            title: 'Gagal memuat postingan',
-            message: 'Terjadi kendala saat mengambil postingan ini.',
+          loading: () => const SingleChildScrollView(
+            physics: NeverScrollableScrollPhysics(),
+            child: ForumPostSkeleton(count: 3),
+          ),
+          error: (error, stack) => TkErrorState(
+            title: 'Postingan gagal dimuat',
+            message: 'Periksa koneksimu, lalu coba lagi.',
+            onRetry: () => ref.invalidate(forumPostProvider(widget.postId)),
           ),
           data: (post) {
             if (post == null) {
@@ -75,93 +110,31 @@ class _ForumPostDetailPageState extends ConsumerState<ForumPostDetailPage> {
                 message: 'Postingan ini mungkin sudah dihapus.',
               );
             }
+            final replies = comments.asData?.value;
             return Column(
               children: <Widget>[
                 Expanded(
-                  child: ListView(
-                    padding: const EdgeInsets.only(bottom: 12),
-                    children: <Widget>[
-                      ForumPostCard(post: post),
-                      const SizedBox(height: 8),
-                      Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: 12),
-                        child: Text(
-                          'Komentar',
-                          style: Theme.of(context).textTheme.titleMedium,
-                        ),
-                      ),
-                      const SizedBox(height: 8),
-                      Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: 12),
-                        child: comments.when(
-                          loading: () => const Padding(
-                            padding: EdgeInsets.symmetric(vertical: 20),
-                            child: Center(child: CircularProgressIndicator()),
-                          ),
-                          error: (error, stack) => const Padding(
-                            padding: EdgeInsets.symmetric(vertical: 12),
-                            child: Text('Gagal memuat komentar.'),
-                          ),
-                          data: (list) {
-                            if (list.isEmpty) {
-                              return const Padding(
-                                padding: EdgeInsets.symmetric(vertical: 12),
-                                child: Text('Belum ada komentar. Jadi yang pertama!'),
-                              );
-                            }
-                            return Column(
-                              children: <Widget>[
-                                for (final comment in list)
-                                  _CommentTile(
-                                    comment: comment,
-                                    postId: widget.postId,
-                                  ),
-                              ],
-                            );
-                          },
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                SafeArea(
-                  top: false,
-                  child: Padding(
-                    padding: const EdgeInsets.fromLTRB(12, 8, 12, 12),
-                    child: Row(
+                  child: RefreshIndicator(
+                    onRefresh: _refresh,
+                    child: ListView(
+                      physics: const AlwaysScrollableScrollPhysics(),
+                      padding: const EdgeInsets.only(bottom: 16),
                       children: <Widget>[
-                        Expanded(
-                          child: Column(
-                            mainAxisSize: MainAxisSize.min,
-                            children: <Widget>[
-                              MentionSuggestions(
-                                controller: _commentController,
-                              ),
-                              TextField(
-                                controller: _commentController,
-                                maxLength: 1000,
-                                decoration: const InputDecoration(
-                                  hintText: 'Tulis komentar… ketik @ untuk menandai',
-                                  counterText: '',
-                                ),
-                              ),
-                            ],
-                          ),
+                        ForumPostCard(
+                          post: post,
+                          threaded: true,
+                          threadLine: replies != null && replies.isNotEmpty,
                         ),
-                        const SizedBox(width: 8),
-                        _submitting
-                            ? const SizedBox(
-                                width: 24,
-                                height: 24,
-                                child: CircularProgressIndicator(strokeWidth: 2),
-                              )
-                            : IconButton(
-                                onPressed: _submitComment,
-                                icon: const Icon(Icons.send_rounded),
-                              ),
+                        ..._buildReplies(context, comments),
                       ],
                     ),
                   ),
+                ),
+                Divider(height: 1, color: tk.border),
+                _ReplyBar(
+                  controller: _replyController,
+                  submitting: _submitting,
+                  onSend: _submitReply,
                 ),
               ],
             );
@@ -170,19 +143,200 @@ class _ForumPostDetailPageState extends ConsumerState<ForumPostDetailPage> {
       ),
     );
   }
+
+  List<Widget> _buildReplies(
+    BuildContext context,
+    AsyncValue<List<ForumComment>> comments,
+  ) {
+    final tk = context.tk;
+    return comments.when(
+      loading: () => <Widget>[
+        Divider(height: 1, color: tk.border),
+        const ForumPostSkeleton(count: 2),
+      ],
+      error: (error, stack) => <Widget>[
+        Divider(height: 1, color: tk.border),
+        TkErrorState(
+          title: 'Balasan gagal dimuat',
+          message: 'Periksa koneksimu, lalu coba lagi.',
+          onRetry: () => ref.invalidate(forumCommentsProvider(widget.postId)),
+        ),
+      ],
+      data: (list) {
+        if (list.isEmpty) {
+          return <Widget>[
+            Divider(height: 1, color: tk.border),
+            const Padding(
+              padding: EdgeInsets.symmetric(vertical: 24),
+              child: AppEmptyState(
+                icon: Icons.mode_comment_outlined,
+                title: 'Belum ada balasan',
+                message: 'Jadi yang pertama membalas.',
+              ),
+            ),
+          ];
+        }
+        return <Widget>[
+          for (var i = 0; i < list.length; i++) ...<Widget>[
+            _ReplyTile(
+              key: ValueKey<String>(list[i].id),
+              comment: list[i],
+              postId: widget.postId,
+            ),
+            if (i < list.length - 1)
+              Divider(height: 1, indent: 60, color: tk.border),
+          ],
+          Divider(height: 1, color: tk.border),
+        ];
+      },
+    );
+  }
 }
 
-class _CommentTile extends ConsumerStatefulWidget {
-  const _CommentTile({required this.comment, required this.postId});
+/// Sticky reply bar: the viewer's avatar, a rounded multiline field with
+/// @-suggestions above it, a remaining-characters hint near the limit, and a
+/// send button that turns into a spinner while sending.
+class _ReplyBar extends ConsumerWidget {
+  const _ReplyBar({
+    required this.controller,
+    required this.submitting,
+    required this.onSend,
+  });
+
+  final TextEditingController controller;
+  final bool submitting;
+  final VoidCallback onSend;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final tk = context.tk;
+    final textTheme = Theme.of(context).textTheme;
+    if (currentForumUserId() == null) {
+      return Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+        child: Row(
+          children: <Widget>[
+            Expanded(
+              child: Text(
+                'Masuk untuk ikut membalas.',
+                style: textTheme.bodyMedium?.copyWith(color: tk.textMuted),
+              ),
+            ),
+            TextButton(
+              onPressed: () => context.push('/account/login'),
+              child: const Text('Masuk'),
+            ),
+          ],
+        ),
+      );
+    }
+    final me = ref.watch(myForumProfileProvider).asData?.value;
+    final name = me == null
+        ? 'Kamu'
+        : (me.displayName?.trim().isNotEmpty ?? false)
+        ? me.displayName!
+        : (me.username ?? 'Kamu');
+    final length = controller.text.length;
+    final canSend = !submitting && controller.text.trim().isNotEmpty;
+    final fieldBorder = OutlineInputBorder(
+      borderRadius: BorderRadius.circular(TkRadius.control),
+      borderSide: BorderSide.none,
+    );
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: <Widget>[
+        Padding(
+          padding: const EdgeInsets.only(top: 8),
+          child: MentionSuggestions(controller: controller),
+        ),
+        Padding(
+          padding: const EdgeInsets.fromLTRB(12, 0, 4, 8),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.end,
+            children: <Widget>[
+              Padding(
+                padding: const EdgeInsets.only(bottom: 8),
+                child: TkAvatar(name: name, imageUrl: me?.avatarUrl, size: 32),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: TextField(
+                  controller: controller,
+                  minLines: 1,
+                  maxLines: 5,
+                  keyboardType: TextInputType.multiline,
+                  textCapitalization: TextCapitalization.sentences,
+                  inputFormatters: <TextInputFormatter>[
+                    LengthLimitingTextInputFormatter(_maxReplyLength),
+                  ],
+                  decoration: InputDecoration(
+                    hintText: 'Balas postingan ini',
+                    fillColor: tk.surfaceAlt,
+                    border: fieldBorder,
+                    enabledBorder: fieldBorder,
+                    focusedBorder: fieldBorder,
+                    isDense: true,
+                    contentPadding: const EdgeInsets.symmetric(
+                      horizontal: 14,
+                      vertical: 12,
+                    ),
+                    counterText: length >= 800
+                        ? '${_maxReplyLength - length}'
+                        : null,
+                    counterStyle: textTheme.labelMedium?.copyWith(
+                      color: _maxReplyLength - length <= 100
+                          ? tk.danger
+                          : tk.textMuted,
+                    ),
+                  ),
+                ),
+              ),
+              Padding(
+                padding: const EdgeInsets.only(bottom: 0),
+                child: submitting
+                    ? const SizedBox(
+                        width: 48,
+                        height: 48,
+                        child: Center(
+                          child: SizedBox(
+                            width: 22,
+                            height: 22,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          ),
+                        ),
+                      )
+                    : IconButton(
+                        tooltip: 'Kirim balasan',
+                        onPressed: canSend ? onSend : null,
+                        icon: Icon(
+                          Icons.send_rounded,
+                          color: canSend ? tk.primary : tk.textMuted,
+                        ),
+                      ),
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+/// One reply: avatar in a 48dp column (centered under the post's avatar so
+/// the thread line lands on it), name, @username and time on one line, the
+/// text with mentions, and an overflow menu (edit/delete for your own,
+/// report/block for others').
+class _ReplyTile extends ConsumerStatefulWidget {
+  const _ReplyTile({required this.comment, required this.postId, super.key});
 
   final ForumComment comment;
   final String postId;
 
   @override
-  ConsumerState<_CommentTile> createState() => _CommentTileState();
+  ConsumerState<_ReplyTile> createState() => _ReplyTileState();
 }
 
-class _CommentTileState extends ConsumerState<_CommentTile> {
+class _ReplyTileState extends ConsumerState<_ReplyTile> {
   late final TextEditingController _editController;
   bool _isEditing = false;
   bool _isSaving = false;
@@ -212,7 +366,9 @@ class _CommentTileState extends ConsumerState<_CommentTile> {
       if (error == null) _isEditing = false;
     });
     if (error != null) {
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(error)));
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(error)));
       return;
     }
     ref.invalidate(forumCommentsProvider(widget.postId));
@@ -222,135 +378,170 @@ class _CommentTileState extends ConsumerState<_CommentTile> {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (dialogContext) => AlertDialog(
-        title: const Text('Hapus komentar?'),
-        content: const Text('Komentar yang dihapus tidak dapat dikembalikan.'),
+        title: const Text('Hapus balasan?'),
+        content: const Text('Balasan yang dihapus tidak bisa dikembalikan.'),
         actions: <Widget>[
           TextButton(
             onPressed: () => Navigator.of(dialogContext).pop(false),
             child: const Text('Batal'),
           ),
           FilledButton(
+            style: FilledButton.styleFrom(
+              backgroundColor: dialogContext.tk.danger,
+              foregroundColor: dialogContext.tk.onAccent,
+            ),
             onPressed: () => Navigator.of(dialogContext).pop(true),
             child: const Text('Hapus'),
           ),
         ],
       ),
     );
-    if (confirmed ?? false) {
-      await ref.read(forumControllerProvider.notifier).deleteComment(widget.comment.id);
-      ref.invalidate(forumCommentsProvider(widget.postId));
-    }
+    if (confirmed != true) return;
+    await ref
+        .read(forumControllerProvider.notifier)
+        .deleteComment(widget.comment.id);
+    ref
+      ..invalidate(forumCommentsProvider(widget.postId))
+      ..invalidate(forumPostProvider(widget.postId));
   }
 
   @override
   Widget build(BuildContext context) {
+    final tk = context.tk;
     final comment = widget.comment;
-    final author = comment.author;
-    final hasAvatar = author?.avatarUrl != null && author!.avatarUrl!.isNotEmpty;
-    final currentUserId = Supabase.instance.client.auth.currentUser?.id;
-    final isOwner = currentUserId != null && currentUserId == comment.userId;
+    final label = forumAuthorLabel(comment.author);
+    final isOwner = currentForumUserId() == comment.userId;
+    void openProfile() => context.push('/social/user/${comment.userId}');
 
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 8),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: <Widget>[
-          CircleAvatar(
-            radius: 16,
-            backgroundImage: hasAvatar
-                ? CachedNetworkImageProvider(author.avatarUrl!)
-                : null,
-            child: hasAvatar ? null : const TkLogo(size: 20, showLabel: false),
-          ),
-          const SizedBox(width: 10),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: <Widget>[
-                Row(
-                  children: <Widget>[
-                    Expanded(
-                      child: RichText(
-                        overflow: TextOverflow.ellipsis,
-                        text: TextSpan(
-                          style: Theme.of(context).textTheme.labelLarge,
-                          children: <InlineSpan>[
-                            TextSpan(
-                              text: author?.resolvedName ?? 'Pengguna Teman Kereta',
-                            ),
-                            TextSpan(
-                              text: '  ·  ${relativeTime(comment.createdAt)}',
-                              style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                                color: Theme.of(context).colorScheme.onSurfaceVariant,
-                              ),
-                            ),
-                          ],
-                        ),
+    final menu = PopupMenuButton<String>(
+      tooltip: 'Opsi balasan',
+      icon: Icon(Icons.more_horiz_rounded, size: 20, color: tk.textMuted),
+      onSelected: (value) {
+        switch (value) {
+          case 'edit':
+            setState(() {
+              _editController.text = comment.body;
+              _isEditing = true;
+            });
+          case 'delete':
+            unawaited(_confirmDelete());
+          case 'report':
+            unawaited(reportForumContent(context, ref, commentId: comment.id));
+          case 'block':
+            unawaited(
+              blockForumUser(
+                context,
+                ref,
+                userId: comment.userId,
+                displayName: label.name,
+              ),
+            );
+        }
+      },
+      itemBuilder: (context) => isOwner
+          ? <PopupMenuEntry<String>>[
+              forumMenuItem(
+                context,
+                value: 'edit',
+                icon: Icons.edit_outlined,
+                label: 'Edit balasan',
+              ),
+              forumMenuItem(
+                context,
+                value: 'delete',
+                icon: Icons.delete_outline_rounded,
+                label: 'Hapus balasan',
+                destructive: true,
+              ),
+            ]
+          : forumModerationMenuItems(context),
+    );
+
+    return Stack(
+      children: <Widget>[
+        Padding(
+          padding: const EdgeInsets.fromLTRB(12, 8, 16, 10),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: <Widget>[
+              Semantics(
+                button: true,
+                label: 'Buka profil ${label.name}',
+                excludeSemantics: true,
+                child: InkResponse(
+                  onTap: openProfile,
+                  radius: 24,
+                  child: SizedBox(
+                    width: 48,
+                    height: 48,
+                    child: Center(
+                      child: TkAvatar(
+                        name: label.name,
+                        imageUrl: comment.author?.avatarUrl,
+                        size: 32,
                       ),
                     ),
-                    if (isOwner && !_isEditing)
-                      PopupMenuButton<String>(
-                        iconSize: 18,
-                        padding: EdgeInsets.zero,
-                        onSelected: (value) {
-                          if (value == 'edit') {
-                            setState(() {
-                              _editController.text = comment.body;
-                              _isEditing = true;
-                            });
-                          }
-                          if (value == 'delete') unawaited(_confirmDelete());
-                        },
-                        itemBuilder: (context) => const <PopupMenuEntry<String>>[
-                          PopupMenuItem<String>(
-                            value: 'edit',
-                            child: Text('Edit komentar'),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: <Widget>[
+                    Padding(
+                      padding: const EdgeInsets.only(right: 36, top: 2),
+                      child: ForumByline(
+                        name: label.name,
+                        handle: label.handle,
+                        time: comment.createdAt,
+                        onTap: openProfile,
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    if (_isEditing) ...<Widget>[
+                      TextField(
+                        controller: _editController,
+                        maxLines: null,
+                        autofocus: true,
+                        inputFormatters: <TextInputFormatter>[
+                          LengthLimitingTextInputFormatter(_maxReplyLength),
+                        ],
+                      ),
+                      const SizedBox(height: 8),
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.end,
+                        children: <Widget>[
+                          TextButton(
+                            onPressed: _isSaving
+                                ? null
+                                : () => setState(() => _isEditing = false),
+                            child: const Text('Batal'),
                           ),
-                          PopupMenuItem<String>(
-                            value: 'delete',
-                            child: Text('Hapus komentar'),
+                          const SizedBox(width: 4),
+                          FilledButton(
+                            onPressed: _isSaving ? null : _saveEdit,
+                            child: _isSaving
+                                ? const SizedBox.square(
+                                    dimension: 16,
+                                    child: CircularProgressIndicator(
+                                      strokeWidth: 2,
+                                    ),
+                                  )
+                                : const Text('Simpan'),
                           ),
                         ],
                       ),
+                    ] else
+                      MentionText(comment.body),
                   ],
                 ),
-                const SizedBox(height: 2),
-                if (_isEditing) ...<Widget>[
-                  TextField(
-                    controller: _editController,
-                    maxLength: 1000,
-                    maxLines: null,
-                    autofocus: true,
-                    decoration: const InputDecoration(counterText: ''),
-                  ),
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.end,
-                    children: <Widget>[
-                      TextButton(
-                        onPressed: _isSaving
-                            ? null
-                            : () => setState(() => _isEditing = false),
-                        child: const Text('Batal'),
-                      ),
-                      const SizedBox(width: 4),
-                      FilledButton(
-                        onPressed: _isSaving ? null : _saveEdit,
-                        child: _isSaving
-                            ? const SizedBox.square(
-                                dimension: 14,
-                                child: CircularProgressIndicator(strokeWidth: 2),
-                              )
-                            : const Text('Simpan'),
-                      ),
-                    ],
-                  ),
-                ] else
-                  MentionText(comment.body),
-              ],
-            ),
+              ),
+            ],
           ),
-        ],
-      ),
+        ),
+        if (!_isEditing) Positioned(top: 2, right: 4, child: menu),
+      ],
     );
   }
 }

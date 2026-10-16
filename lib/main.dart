@@ -11,12 +11,21 @@ import 'app/app.dart';
 import 'app/config/app_environment.dart';
 import 'core/database/app_database.dart';
 import 'core/database/database_provider.dart';
+import 'core/diagnostics/app_log.dart';
 import 'core/notifications/local_notification_service.dart';
 import 'core/notifications/push_token_registrar.dart';
 import 'core/preferences/preferences_store.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
+
+  // Capture logs and uncaught errors for support reports. Installed first so
+  // Sentry (below) wraps these handlers instead of replacing them.
+  try {
+    await AppLog.install();
+  } on Object catch (e) {
+    debugPrint('AppLog install error: $e');
+  }
 
   try {
     AppEnvironment.validateLocalOnly();
