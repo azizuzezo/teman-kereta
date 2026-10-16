@@ -108,8 +108,9 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   // 2c. Tombol uji suara pengingat pada kartu Alarm Sisa Stasiun.
-  // Berkasnya sama persis dengan yang dipakai aplikasi (2 stasiun sebelum
-  // transit dan 2 stasiun sebelum turun).
+  // Berkasnya berisi pengumuman "1 stasiun lagi" (menuju transit / tujuan)
+  // persis rekaman aplikasi, disusul bell — sama seperti peringatan terakhir
+  // saat perjalanan asli.
   const soundButtons = Array.from(document.querySelectorAll('.tk-sound-btn'));
 
   if (soundButtons.length) {
@@ -158,47 +159,48 @@ document.addEventListener('DOMContentLoaded', () => {
   const slidesData = [
     {
       targetId: 'feature-tab-1',
-      webpSrc: 'assets/screenshots/menu%20utama.webp?v=3',
-      title: 'Semua Ringkas di Layar Utama',
+      webpSrc: 'assets/screenshots/app-beranda.webp?v=5',
+      title: 'Pantau Perjalanan Lebih Mudah',
       badge: 'Beranda'
     },
     {
       targetId: 'feature-tab-2',
-      webpSrc: 'assets/screenshots/info%20jadwal.webp?v=3',
-      title: 'Pilihan Rute dan Estimasi Tarif',
-      badge: 'Cari Perjalanan'
+      webpSrc: 'assets/screenshots/app-mulai-perjalanan.webp?v=5',
+      title: 'Mulai Perjalanan dengan Mudah',
+      badge: 'Mulai Perjalanan'
     },
     {
       targetId: 'feature-tab-3',
-      webpSrc: 'assets/screenshots/fasilitas%20stasiun.webp?v=3',
-      title: 'Detail dan Fasilitas Stasiun',
-      badge: 'Stasiun'
+      webpSrc: 'assets/screenshots/app-pengingat.webp?v=5',
+      title: 'Pengingat Sebelum Tiba',
+      badge: 'Pengingat'
     },
     {
       targetId: 'feature-tab-4',
-      webpSrc: 'assets/screenshots/forum.webp?v=3',
-      title: 'Diskusi Antarpenumpang',
-      badge: 'Forum'
-    },
-    {
-      targetId: 'feature-tab-5',
-      webpSrc: 'assets/screenshots/perjalanan%20aktif.webp?v=3',
-      title: 'Posisi KRL dan Urutan Stasiun',
+      webpSrc: 'assets/screenshots/app-urutan-stasiun.webp?v=5',
+      title: 'Urutan Stasiun Selama Perjalanan',
       badge: 'Perjalanan Aktif'
     },
     {
-      targetId: 'feature-tab-6',
-      webpSrc: 'assets/screenshots/jadwal%20keberangkatan.webp?v=3',
+      targetId: 'feature-tab-5',
+      webpSrc: 'assets/screenshots/app-jadwal.webp?v=5',
       title: 'Keberangkatan Berikutnya',
       badge: 'Jadwal'
     },
     {
-      targetId: 'feature-tab-7',
-      webpSrc: 'assets/screenshots/peta%20perjalanan.webp?v=3',
+      targetId: 'feature-tab-6',
+      webpSrc: 'assets/screenshots/app-peta.webp?v=5',
       title: 'Peta Jalur Commuter Line',
       badge: 'Peta'
+    },
+    {
+      targetId: 'feature-tab-7',
+      webpSrc: 'assets/screenshots/app-masuk.webp?v=5',
+      title: 'Masuk dengan Mudah',
+      badge: 'Akun'
     }
   ];
+
 
   const featureCards = Array.from(document.querySelectorAll('.feature-card-content'));
   const featureMockupImg = document.getElementById('showcase-mockup-img');
