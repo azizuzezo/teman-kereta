@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../app/theme/app_theme.dart';
+import '../../../core/notifications/alert_audio_plan.dart';
 import '../../../core/notifications/local_notification_service.dart';
 import '../../../core/platform/native_trip_service.dart';
 import '../../../core/widgets/tk_components.dart';
@@ -219,6 +220,21 @@ class _SoundTestPageState extends ConsumerState<SoundTestPage>
           log: false,
         ),
       ),
+      for (final minutes in intercityReminderMinutes)
+        _SoundTestEntry(
+          key: 'intercity_$minutes',
+          title: 'Antar kota: $minutes menit lagi',
+          subtitle: bellFollowsIntercityVoice(minutes)
+              ? 'Pengingat terakhir kereta antar kota, disusul bell.'
+              : 'Pengingat kereta antar kota.',
+          icon: Icons.train_rounded,
+          play: () => notifications.showIntercityEtaAlert(
+            minutes: minutes,
+            destination: 'Bandung',
+            vibrate: vibrate,
+            log: false,
+          ),
+        ),
       _SoundTestEntry(
         key: 'missed',
         title: 'Tujuan terlewat',

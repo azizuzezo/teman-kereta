@@ -9,13 +9,13 @@ import '../../../core/utils/geo.dart';
 import '../../../core/utils/map_launcher.dart';
 import '../../../core/widgets/tk_components.dart';
 import '../../../data/providers/demo_data.dart';
-import '../../../data/providers/provider_registry.dart';
 import '../../../domain/entities/active_trip.dart';
 import '../../../domain/entities/transit_models.dart';
 import '../../history/presentation/share/share_cards.dart';
 import '../../history/presentation/share/share_data.dart';
 import '../../history/presentation/share/share_preview_sheet.dart';
 import 'active_trip_controller.dart';
+import 'active_trip_stations.dart';
 
 /// Real station name for [id]: live station list first, then the bundled demo
 /// data, then the raw id so the screen never fails on an unknown station.
@@ -41,7 +41,7 @@ class TripCompletePage extends ConsumerWidget {
     final tk = context.tk;
     final theme = Theme.of(context);
     final session = ref.watch(activeTripControllerProvider);
-    final stations = ref.watch(stationListProvider).value ?? const <Station>[];
+    final stations = ref.watch(activeTripStationsProvider).value ?? const <Station>[];
     final destinationName = session == null
         ? null
         : _stationName(session.trip.destinationStationId, stations);

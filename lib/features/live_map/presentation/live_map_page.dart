@@ -15,6 +15,8 @@ import '../../../data/providers/provider_registry.dart';
 import '../../../data/providers/rail_line_shapes.dart';
 import '../../../domain/entities/transit_models.dart';
 import '../../../domain/usecases/transit_network.dart';
+import '../../intercity/presentation/intercity_map_page.dart';
+import '../../intercity/presentation/trip_mode.dart';
 import 'live_map_geometry.dart';
 import 'live_trip_position_controller.dart';
 import 'map_panels.dart';
@@ -40,6 +42,10 @@ class LiveMapPage extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    // The Antar Kota mode has its own map (a train's track and stops).
+    if (ref.watch(tripModeProvider) == TripMode.intercity) {
+      return const IntercityMapPage();
+    }
     final stations = ref.watch(stationListProvider);
     return Scaffold(
       backgroundColor: context.tk.bg,
@@ -232,7 +238,7 @@ class _MapBodyState extends ConsumerState<_MapBody> {
     _mapController.fitCamera(
       CameraFit.bounds(
         bounds: _boundsOf(network),
-        padding: const EdgeInsets.fromLTRB(32, 190, 32, 110),
+        padding: const EdgeInsets.fromLTRB(32, 246, 32, 110),
         maxZoom: 13,
       ),
     );
@@ -380,7 +386,7 @@ class _MapBodyState extends ConsumerState<_MapBody> {
     _mapController.fitCamera(
       CameraFit.bounds(
         bounds: bounds,
-        padding: const EdgeInsets.fromLTRB(40, 150, 40, 120),
+        padding: const EdgeInsets.fromLTRB(40, 206, 40, 120),
         maxZoom: 14,
       ),
     );
@@ -534,7 +540,7 @@ class _MapBodyState extends ConsumerState<_MapBody> {
             bounds: _boundsOf(_network.value),
             padding: EdgeInsets.fromLTRB(
               32,
-              _networks.length >= 2 ? 190 : 150,
+              _networks.length >= 2 ? 246 : 206,
               32,
               110,
             ),
@@ -608,6 +614,13 @@ class _MapBodyState extends ConsumerState<_MapBody> {
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: <Widget>[
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
+                  child: TripModeToggle(
+                    selected: ref.watch(tripModeProvider),
+                    onSelected: ref.read(tripModeProvider.notifier).select,
+                  ),
+                ),
                 Padding(
                   padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
                   child: MapSearchField(onTap: _openSearch),

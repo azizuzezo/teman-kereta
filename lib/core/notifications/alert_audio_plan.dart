@@ -38,6 +38,25 @@ String? transferApproachingVoice(int remainingStops) {
 /// station before a stop or transfer.
 bool bellFollowsVoice(int remainingStops) => remainingStops == 1;
 
+/// Minutes before arrival at which an intercity ride is announced, largest
+/// first. Intercity stops are tens of minutes apart, so "3, 2, 1 stations
+/// before" says nothing there; time does.
+const intercityReminderMinutes = <int>[30, 15, 10];
+
+/// Recorded voice line for "[minutes] menit lagi" (`res/raw`), or null when
+/// there is no clip for that number and the text-to-speech reads it instead.
+String? intercityEtaVoice(int minutes) => switch (minutes) {
+  30 => 'eta_minutes_30',
+  15 => 'eta_minutes_15',
+  10 => 'eta_minutes_10',
+  _ => null,
+};
+
+/// The bell follows the last reminder only: the one that means "get ready to
+/// leave the seat".
+bool bellFollowsIntercityVoice(int minutes) =>
+    minutes == intercityReminderMinutes.last;
+
 /// Channel id for an alert whose voice line is [voice].
 ///
 /// The recorded voice is played by the app itself (so it can be sequenced

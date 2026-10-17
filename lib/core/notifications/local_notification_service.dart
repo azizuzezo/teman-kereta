@@ -201,6 +201,36 @@ class LocalNotificationService {
     );
   }
 
+  /// "[minutes] menit lagi" for an intercity ride (30 / 15 / 10 before
+  /// arriving). The last one is followed by the bell.
+  Future<void> showIntercityEtaAlert({
+    required int minutes,
+    required String destination,
+    bool vibrate = true,
+    bool sound = true,
+    bool log = true,
+  }) async {
+    final customSound = intercityEtaVoice(minutes);
+    await _showAndLog(
+      type: 'intercity_eta_alert',
+      id: 4200 + minutes,
+      title: '$minutes menit lagi',
+      body: 'Bersiap turun di $destination.',
+      channelId: alertChannelId(customSound),
+      channelName: 'Pengingat kereta antar kota',
+      channelDescription: 'Pengingat 30, 15 dan 10 menit sebelum tiba',
+      payload: '/active-trip',
+      vibrate: vibrate,
+      sound: sound,
+      customSoundResource: customSound,
+      spokenText: '$minutes menit lagi menuju $destination.',
+      alarmDelay: bellFollowsIntercityVoice(minutes)
+          ? const Duration(seconds: 4)
+          : null,
+      log: log,
+    );
+  }
+
   /// Repeating countdown fired at each of 3/2/1 stops before a transfer
   /// boundary — mirrors [showStopAlert]'s destination countdown, using a
   /// distinct id range (`4150 + remainingStops`) so each remaining-stop

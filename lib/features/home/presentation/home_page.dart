@@ -17,6 +17,8 @@ import '../../../domain/entities/transit_models.dart';
 import '../../account/presentation/account_controller.dart';
 import '../../active_trip/presentation/active_trip_controller.dart';
 import '../../favorites/presentation/favorite_route_controller.dart';
+import '../../intercity/presentation/trip_mode.dart';
+import '../../intercity/presentation/widgets/intercity_trip_card.dart';
 import '../../ride_detection/presentation/ride_detection_controller.dart';
 import '../../schedule/presentation/trip_search_controller.dart';
 import '../../settings/presentation/settings_controller.dart';
@@ -218,6 +220,7 @@ class _HomePageState extends ConsumerState<HomePage>
         ref.watch(vehiclePositionsProvider).asData?.value ??
         const <VehiclePosition>[];
     final favorite = ref.watch(favoriteRouteControllerProvider);
+    final tripMode = ref.watch(tripModeProvider);
 
     // Keeps the Android home-screen widgets showing the same data the app
     // just loaded, without the widgets themselves ever touching the network.
@@ -370,11 +373,21 @@ class _HomePageState extends ConsumerState<HomePage>
                         'Mulai perjalanan',
                         trailing: AntiBablasHint(),
                       ),
-                      QuickTripCard(
-                        nearestStationId: choice.nearest?.station.id,
-                        nearestStationName: choice.nearest?.station.name,
-                        stations: stations,
+                      TripModeToggle(
+                        selected: tripMode,
+                        onSelected: ref
+                            .read(tripModeProvider.notifier)
+                            .select,
                       ),
+                      const SizedBox(height: 10),
+                      if (tripMode == TripMode.intercity)
+                        const IntercityTripCard()
+                      else
+                        QuickTripCard(
+                          nearestStationId: choice.nearest?.station.id,
+                          nearestStationName: choice.nearest?.station.name,
+                          stations: stations,
+                        ),
                     ],
                     const SizedBox(height: 16),
                     const DeviceStatusTiles(),

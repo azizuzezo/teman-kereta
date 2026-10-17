@@ -10,12 +10,15 @@ import '../../../core/utils/geo.dart';
 import '../../../core/widgets/empty_state.dart';
 import '../../../core/widgets/tk_components.dart';
 import '../../../data/providers/demo_data.dart';
-import '../../../data/providers/provider_registry.dart';
 import '../../../domain/entities/active_trip.dart';
 import '../../../domain/entities/transit_models.dart';
+import '../../intercity/domain/intercity_trip.dart';
+import '../../intercity/presentation/intercity_ride_controller.dart';
+import '../../intercity/presentation/widgets/intercity_ride_card.dart';
 import '../../live_map/presentation/native_gps_fix.dart';
 import '../../schedule/presentation/trip_search_controller.dart';
 import 'active_trip_controller.dart';
+import 'active_trip_stations.dart';
 import 'trip_battery_warning.dart';
 import 'trip_progress_math.dart';
 import 'trip_rail_timeline.dart';
@@ -86,8 +89,9 @@ class ActiveTripPage extends ConsumerWidget {
     final tk = context.tk;
     final textTheme = Theme.of(context).textTheme;
     final session = ref.watch(activeTripControllerProvider);
-    final stations = ref.watch(stationListProvider).value ?? const <Station>[];
+    final stations = ref.watch(activeTripStationsProvider).value ?? const <Station>[];
     final gpsFix = ref.watch(latestNativeGpsFixProvider);
+    final intercityRide = ref.watch(intercityRideControllerProvider);
     // A plain `ref.listen` would miss this: `start()` already flips the flag
     // to true before this page ever mounts (it's set mid-`start()`, and
     // navigation here only happens once `start()` has returned), so there's
@@ -160,7 +164,13 @@ class ActiveTripPage extends ConsumerWidget {
       remainingMeters: remainingMeters,
       now: DateTime.now(),
     );
-    final displayEta = liveEtaValue ?? session.trip.arrivalAt;
+    // An intercity ride has no timetable and stations tens of minutes apart:
+    // its estimate comes from the track and the train's real speed instead.
+    final isIntercity = isIntercityTrip(session.trip);
+    final intercityEta = isIntercity ? intercityRide.eta : null;
+    final displayEta = intercityEta != null
+        ? DateTime.now().add(intercityEta.eta)
+        : (liveEtaValue ?? session.trip.arrivalAt);
     final reduceMotion =
         MediaQuery.disableAnimationsOf(context) || session.lowBatteryMode;
     final currentName = _resolveStationName(session.currentStationId, stations);
@@ -199,6 +209,10 @@ class ActiveTripPage extends ConsumerWidget {
         : 'Stasiun berikutnya';
     final hero = _HeroPalette.of(tk);
     final remaining = session.remainingStops;
+    final bigValue = isIntercity
+        ? (intercityEta != null ? formatIntercityEta(intercityEta.eta) : '…')
+        : '$remaining';
+    final bigUnit = isIntercity ? 'lagi' : 'stasiun lagi';
 
     return Scaffold(
       appBar: AppBar(title: const Text('Perjalanan aktif')),
@@ -269,17 +283,16 @@ class ActiveTripPage extends ConsumerWidget {
                       children: <Widget>[
                         Expanded(
                           child: Semantics(
-                            label:
-                                '$remaining stasiun lagi menuju $destinationName',
+                            label: '$bigValue $bigUnit menuju $destinationName',
                             excludeSemantics: true,
                             child: Row(
                               crossAxisAlignment: CrossAxisAlignment.end,
                               children: <Widget>[
                                 Text(
-                                  '$remaining',
+                                  bigValue,
                                   style: textTheme.displayLarge?.copyWith(
                                     color: hero.foreground,
-                                    fontSize: 64,
+                                    fontSize: isIntercity ? 44 : 64,
                                     height: 1,
                                     fontFeatures: AppTheme.timeFeatures,
                                   ),
@@ -293,7 +306,7 @@ class ActiveTripPage extends ConsumerWidget {
                                           CrossAxisAlignment.start,
                                       children: <Widget>[
                                         Text(
-                                          'stasiun lagi',
+                                          bigUnit,
                                           style: textTheme.titleMedium
                                               ?.copyWith(
                                                 color: hero.foreground,
@@ -325,7 +338,9 @@ class ActiveTripPage extends ConsumerWidget {
                       children: <Widget>[
                         Expanded(
                           child: Text(
-                            liveEtaValue != null
+                            isIntercity
+                                ? 'Estimasi tiba • perkiraan'
+                                : liveEtaValue != null
                                 ? 'Estimasi tiba • live'
                                 : 'Estimasi tiba • jadwal',
                             style: textTheme.bodyMedium?.copyWith(
@@ -385,6 +400,10 @@ class ActiveTripPage extends ConsumerWidget {
                 ],
               ),
             ),
+            if (isIntercity) ...<Widget>[
+              const SizedBox(height: 16),
+              const IntercityRideCard(),
+            ],
             const SizedBox(height: 24),
             Row(
               children: <Widget>[
@@ -863,7 +882,7 @@ class _MissedDestinationView extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final tk = context.tk;
     final textTheme = Theme.of(context).textTheme;
-    final stations = ref.watch(stationListProvider).value ?? const <Station>[];
+    final stations = ref.watch(activeTripStationsProvider).value ?? const <Station>[];
     final destinationName = _resolveStationName(
       session.trip.destinationStationId,
       stations,

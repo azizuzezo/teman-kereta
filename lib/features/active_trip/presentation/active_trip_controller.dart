@@ -16,8 +16,11 @@ import '../../../data/providers/demo_data.dart';
 import '../../../data/providers/provider_registry.dart';
 import '../../../domain/entities/active_trip.dart';
 import '../../../domain/entities/transit_models.dart';
+import '../../intercity/data/intercity_repository.dart';
+import '../../intercity/domain/intercity_trip.dart';
 import '../../live_map/presentation/native_gps_fix.dart';
 import '../../settings/presentation/settings_controller.dart';
+import 'active_trip_stations.dart';
 import 'trip_battery_warning.dart';
 import 'trip_signal_gap.dart';
 
@@ -82,6 +85,25 @@ class ActiveTripController extends Notifier<ActiveTripSession?> {
     }
   }
 
+  /// The stations a trip's native tracker and screens resolve ids against:
+  /// the KRL list, plus the intercity stations for an intercity ride. Falls
+  /// back to the cached KRL list offline, like every other station lookup.
+  Future<List<Station>> _stationsFor(ActiveTripSession? session) async {
+    final base = await ref.read(stationListProvider.future);
+    if (session == null || !isIntercityTrip(session.trip)) return base;
+    final catalog = await ref.read(intercityCatalogProvider.future);
+    return mergeIntercityStations(base, catalog);
+  }
+
+  /// Stop-count alerts ("3 stasiun lagi") are a KRL idea. An intercity ride
+  /// has stops tens of minutes apart and is announced by time instead (see
+  /// `IntercityRideController`), so the station-count alerts are switched off
+  /// for it, on this side and, through the value sent to native, there too.
+  int _stopAlertThresholdFor(ActiveTripSession? session, AppSettings settings) =>
+      session != null && isIntercityTrip(session.trip)
+      ? 0
+      : settings.stopAlertThreshold;
+
   bool _isTrackedState(ActiveTripState state) => switch (state) {
     ActiveTripState.onBoard ||
     ActiveTripState.approachingTransfer ||
@@ -105,7 +127,7 @@ class ActiveTripController extends Notifier<ActiveTripSession?> {
       ref
           .read(nativeTripServiceProvider)
           .updateSettings(
-            stopAlertThreshold: next.stopAlertThreshold,
+            stopAlertThreshold: _stopAlertThresholdFor(current, next),
             vibrationEnabled: next.vibrationEnabled,
             soundEnabled: next.soundEnabled,
           ),
@@ -342,7 +364,7 @@ class ActiveTripController extends Notifier<ActiveTripSession?> {
       // mirroring the destination countdown below.
       final stopsToTransfer = boundary.index - nextIndex;
       if (stopsToTransfer > 0 &&
-          stopsToTransfer <= settings.stopAlertThreshold) {
+          stopsToTransfer <= _stopAlertThresholdFor(current, settings)) {
         unawaited(
           ref
               .read(localNotificationServiceProvider)
@@ -357,7 +379,7 @@ class ActiveTripController extends Notifier<ActiveTripSession?> {
               ),
         );
       }
-    } else if (remaining <= settings.stopAlertThreshold) {
+    } else if (remaining <= _stopAlertThresholdFor(current, settings)) {
       unawaited(
         ref
             .read(localNotificationServiceProvider)
@@ -386,7 +408,7 @@ class ActiveTripController extends Notifier<ActiveTripSession?> {
       // `stationListProvider`, not the raw `stationProvider` — this falls
       // back to the locally cached station list (PRD §19) when there's no
       // signal, instead of always needing a live Supabase round trip.
-      stations = await ref.read(stationListProvider.future);
+      stations = await _stationsFor(state);
     } on Object {
       // A station-lookup failure must never block the manual "Lanjut"
       // fallback from advancing — just skip the distance/speed estimate.
@@ -596,7 +618,7 @@ class ActiveTripController extends Notifier<ActiveTripSession?> {
       // GPS tracking and stop notifications never started at all, silently.
       // `stationListProvider` falls back to the locally cached station list
       // (PRD §19) so a bad-signal start still gets native tracking running.
-      final stations = await ref.read(stationListProvider.future);
+      final stations = await _stationsFor(session);
       if (!ref.mounted) return;
       final settings = ref.read(settingsControllerProvider);
       final native = ref.read(nativeTripServiceProvider);
@@ -604,7 +626,7 @@ class ActiveTripController extends Notifier<ActiveTripSession?> {
         final warnings = await native.start(
           session,
           stations: stations,
-          stopAlertThreshold: settings.stopAlertThreshold,
+          stopAlertThreshold: _stopAlertThresholdFor(session, settings),
           vibrationEnabled: settings.vibrationEnabled,
           soundEnabled: settings.soundEnabled,
         );
@@ -616,7 +638,7 @@ class ActiveTripController extends Notifier<ActiveTripSession?> {
         await native.update(
           session,
           stations: stations,
-          stopAlertThreshold: settings.stopAlertThreshold,
+          stopAlertThreshold: _stopAlertThresholdFor(session, settings),
           vibrationEnabled: settings.vibrationEnabled,
           soundEnabled: settings.soundEnabled,
         );
@@ -631,6 +653,12 @@ class ActiveTripController extends Notifier<ActiveTripSession?> {
   // the trip-history record this feeds (`_logHistory` above) would otherwise
   // permanently persist a raw code instead of a real station name.
   String _stationName(String stationId) {
+    final session = state;
+    if (session != null && isIntercityTrip(session.trip)) {
+      final catalog = ref.read(intercityCatalogProvider).value;
+      final name = catalog?.stations[stationId]?.name;
+      if (name != null) return name;
+    }
     final fromLive = ref
         .read(stationListProvider)
         .value

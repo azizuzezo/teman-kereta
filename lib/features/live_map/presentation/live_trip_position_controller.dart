@@ -8,6 +8,7 @@ import '../../../data/providers/provider_registry.dart';
 import '../../../domain/entities/active_trip.dart';
 import '../../../domain/entities/transit_models.dart';
 import '../../active_trip/presentation/active_trip_controller.dart';
+import '../../active_trip/presentation/active_trip_stations.dart';
 import 'native_gps_fix.dart';
 
 /// GPS fixes older than this are treated stale enough to switch from
@@ -63,7 +64,7 @@ class LiveTripPositionController extends Notifier<LatLng?> {
   @override
   LatLng? build() {
     final session = ref.watch(activeTripControllerProvider);
-    final stationsAsync = ref.watch(stationListProvider);
+    final stationsAsync = ref.watch(activeTripStationsProvider);
     final nativeFix = ref.watch(latestNativeGpsFixProvider);
     ref.onDispose(() {
       _fallbackTimer?.cancel();
@@ -93,7 +94,7 @@ class LiveTripPositionController extends Notifier<LatLng?> {
       if (current == null || !_isOnBoardPhase(current.state)) {
         return;
       }
-      state = _computePosition(current, ref.read(stationListProvider).value);
+      state = _computePosition(current, ref.read(activeTripStationsProvider).value);
     });
 
     return _computePosition(session, stationsAsync.value);

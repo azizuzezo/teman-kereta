@@ -6,6 +6,9 @@ import '../../data/providers/demo_data.dart';
 import '../../data/providers/provider_registry.dart';
 import '../../domain/entities/transit_models.dart';
 import '../../features/active_trip/presentation/active_trip_controller.dart';
+import '../../features/intercity/domain/intercity_trip.dart';
+import '../../features/intercity/presentation/intercity_ride_controller.dart';
+import '../../features/intercity/presentation/widgets/intercity_ride_card.dart';
 import '../theme/app_theme.dart';
 
 class MainShell extends ConsumerWidget {
@@ -16,6 +19,10 @@ class MainShell extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final activeTrip = ref.watch(activeTripControllerProvider);
+    // Keeps the intercity estimate and its 30 / 15 / 10 minute reminders
+    // running whichever tab is open. Only the trip id is watched, so the shell
+    // does not rebuild on every GPS fix.
+    ref.watch(intercityRideControllerProvider.select((ride) => ride.tripId));
     final stations =
         ref.watch(stationListProvider).asData?.value ?? const <Station>[];
 
@@ -42,11 +49,27 @@ class MainShell extends ConsumerWidget {
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: <Widget>[
-                              Text(
-                                '${activeTrip.remainingStops} stasiun lagi',
-                                style: Theme.of(context).textTheme.labelLarge
-                                    ?.copyWith(color: context.tk.onPrimary),
-                              ),
+                              if (isIntercityTrip(activeTrip.trip))
+                                Consumer(
+                                  builder: (context, ref, _) {
+                                    final eta = ref
+                                        .watch(intercityRideControllerProvider)
+                                        .eta;
+                                    return Text(
+                                      eta == null
+                                          ? 'Kereta antar kota'
+                                          : '${formatIntercityEta(eta.eta)} lagi',
+                                      style: Theme.of(context).textTheme.labelLarge
+                                          ?.copyWith(color: context.tk.onPrimary),
+                                    );
+                                  },
+                                )
+                              else
+                                Text(
+                                  '${activeTrip.remainingStops} stasiun lagi',
+                                  style: Theme.of(context).textTheme.labelLarge
+                                      ?.copyWith(color: context.tk.onPrimary),
+                                ),
                               Text(
                                 'Tujuan ${_stationName(stations, activeTrip.trip.destinationStationId)}',
                                 maxLines: 1,

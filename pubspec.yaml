@@ -67,6 +67,7 @@ flutter:
   assets:
     - assets/branding/
     - assets/alarm.mp3
+    - assets/intercity/
   fonts:
     - family: PlusJakartaSans
       fonts:
