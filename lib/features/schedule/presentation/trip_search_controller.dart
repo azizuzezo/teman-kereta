@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../data/providers/provider_registry.dart';
 import '../../../domain/entities/transit_models.dart';
 import '../../../domain/usecases/route_ranker.dart';
+import '../../../domain/usecases/transit_network.dart';
 import '../../stations/presentation/nearest_station_controller.dart';
 
 class TripSearchState {
@@ -75,6 +76,10 @@ class TripSearchController extends Notifier<TripSearchState> {
   /// auto-fill below never overwrites their choice again.
   bool _originManuallySet = false;
 
+  /// Same for the destination: an explicit pick is never moved by the
+  /// nearest-station auto-fill.
+  bool _destinationManuallySet = false;
+
   @override
   TripSearchState build() {
     // Auto-fills "Dari" with the rider's nearest station as soon as it
@@ -84,10 +89,7 @@ class TripSearchController extends Notifier<TripSearchState> {
       if (_originManuallySet) return;
       final nearest = next.asData?.value.firstOrNull;
       if (nearest != null) {
-        state = state.copyWith(
-          originStationId: nearest.station.id,
-          clearError: true,
-        );
+        state = _withOrigin(nearest.station.id);
       }
     });
     return TripSearchState(
@@ -98,12 +100,55 @@ class TripSearchController extends Notifier<TripSearchState> {
   }
 
   void setDestination(String value) {
+    _destinationManuallySet = true;
     state = state.copyWith(destinationStationId: value, clearError: true);
   }
 
+  /// Every station stays pickable on either side: the rider chooses freely and
+  /// a pair across the two networks simply has no trip ([search] says so).
   void setOrigin(String value) {
     _originManuallySet = true;
     state = state.copyWith(originStationId: value, clearError: true);
+  }
+
+  /// [state] with the auto-detected nearest station as origin. Only for the
+  /// untouched default form: when it lands on a different rail network than
+  /// the default destination (Jabodetabek vs Yogyakarta), the destination
+  /// follows to that network so the first search is already a real trip.
+  TripSearchState _withOrigin(String originId) {
+    var destinationId = state.destinationStationId;
+    final stations = ref.read(stationListProvider).asData?.value;
+    if (stations != null) {
+      final origin = stations.where((s) => s.id == originId).firstOrNull;
+      final destination = stations
+          .where((s) => s.id == destinationId)
+          .firstOrNull;
+      if (!_destinationManuallySet &&
+          origin != null &&
+          (destination == null || !sameNetwork(origin, destination))) {
+        destinationId =
+            defaultDestinationFor(origin, stations)?.id ?? destinationId;
+      }
+    }
+    return state.copyWith(
+      originStationId: originId,
+      destinationStationId: destinationId,
+      clearError: true,
+    );
+  }
+
+  bool _crossesNetworks() {
+    final stations = ref.read(stationListProvider).asData?.value;
+    if (stations == null) return false;
+    final origin = stations
+        .where((s) => s.id == state.originStationId)
+        .firstOrNull;
+    final destination = stations
+        .where((s) => s.id == state.destinationStationId)
+        .firstOrNull;
+    return origin != null &&
+        destination != null &&
+        !sameNetwork(origin, destination);
   }
 
   /// Picks a specific departure time of day. A time that already passed
@@ -138,6 +183,7 @@ class TripSearchController extends Notifier<TripSearchState> {
 
   void swapStations() {
     _originManuallySet = true;
+    _destinationManuallySet = true;
     state = state.copyWith(
       originStationId: state.destinationStationId,
       destinationStationId: state.originStationId,
@@ -150,6 +196,10 @@ class TripSearchController extends Notifier<TripSearchState> {
       state = state.copyWith(
         errorMessage: 'Stasiun awal dan tujuan harus berbeda.',
       );
+      return;
+    }
+    if (_crossesNetworks()) {
+      state = state.copyWith(errorMessage: crossNetworkMessage);
       return;
     }
 

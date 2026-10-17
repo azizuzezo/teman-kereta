@@ -1,0 +1,2 @@
+feed_publisher_name,feed_publisher_url,feed_lang,feed_version
+Teman Kereta (dari PDF KAI Commuter),https://www.kci.id/,id,jadwal-2026-06-02

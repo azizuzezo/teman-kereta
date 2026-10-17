@@ -14,6 +14,7 @@ import '../../../core/widgets/tk_components.dart';
 import '../../../data/providers/provider_registry.dart';
 import '../../../data/providers/rail_line_shapes.dart';
 import '../../../domain/entities/transit_models.dart';
+import '../../../domain/usecases/transit_network.dart';
 import 'live_map_geometry.dart';
 import 'live_trip_position_controller.dart';
 import 'map_panels.dart';
@@ -126,6 +127,10 @@ class _MapBodyState extends ConsumerState<_MapBody> {
   final MapController _mapController = MapController();
   final ValueNotifier<MapSelection?> _selection = ValueNotifier(null);
   final ValueNotifier<String?> _lineFilter = ValueNotifier(null);
+
+  /// Which rail network the map is showing highlighted. Jabodetabek and
+  /// Yogyakarta are ~440 km apart, so each tab frames its own network.
+  late final ValueNotifier<TransitNetwork> _network;
   final ValueNotifier<LatLng?> _myLocation = ValueNotifier(null);
   final ValueNotifier<bool> _locating = ValueNotifier(false);
   final TileHealthTracker _tileHealth = TileHealthTracker();
@@ -136,6 +141,12 @@ class _MapBodyState extends ConsumerState<_MapBody> {
   late List<LineTrack> _tracks;
   late Map<String, Station> _stationsByCode;
   late LatLngBounds _stationBounds;
+
+  /// Networks that actually have stations, in tab order. Fewer than two means
+  /// there is nothing to switch between and the tabs stay hidden.
+  late List<TransitNetwork> _networks;
+  late Map<TransitNetwork, List<MapStationPoint>> _pointsByNetwork;
+  late Map<TransitNetwork, LatLngBounds> _boundsByNetwork;
 
   // Memoised so unrelated rebuilds hand flutter_map the very same layer
   // widgets (see class comment).
@@ -150,6 +161,11 @@ class _MapBodyState extends ConsumerState<_MapBody> {
   void initState() {
     super.initState();
     _derive();
+    _network = ValueNotifier<TransitNetwork>(
+      _networks.contains(TransitNetwork.jabodetabek)
+          ? TransitNetwork.jabodetabek
+          : _networks.first,
+    );
   }
 
   @override
@@ -173,12 +189,60 @@ class _MapBodyState extends ConsumerState<_MapBody> {
     _stationBounds = LatLngBounds.fromPoints(<LatLng>[
       for (final p in _points) p.point,
     ]);
+    _pointsByNetwork = <TransitNetwork, List<MapStationPoint>>{
+      for (final network in TransitNetwork.values)
+        network: <MapStationPoint>[
+          for (final p in _points)
+            if (networkOfStation(p.station) == network) p,
+        ],
+    }..removeWhere((_, points) => points.isEmpty);
+    _networks = <TransitNetwork>[
+      for (final network in TransitNetwork.values)
+        if (_pointsByNetwork.containsKey(network)) network,
+    ];
+    _boundsByNetwork = <TransitNetwork, LatLngBounds>{
+      for (final entry in _pointsByNetwork.entries)
+        entry.key: LatLngBounds.fromPoints(<LatLng>[
+          for (final p in entry.value) p.point,
+        ]),
+    };
+  }
+
+  /// The stations drawn and tappable for [network]; the whole list when the
+  /// map has no network split (a single network, or a provider without lines).
+  List<MapStationPoint> _pointsOf(TransitNetwork network) =>
+      _pointsByNetwork[network] ?? _points;
+
+  LatLngBounds _boundsOf(TransitNetwork network) =>
+      _boundsByNetwork[network] ?? _stationBounds;
+
+  List<String> _lineIdsOf(TransitNetwork network) {
+    if (_networks.length < 2) return _lineIds;
+    return <String>[
+      for (final id in _lineIds)
+        if (networkOfLineCode(id) == network) id,
+    ];
+  }
+
+  void _selectNetwork(TransitNetwork network) {
+    if (_network.value == network) return;
+    _network.value = network;
+    _lineFilter.value = null;
+    _selection.value = null;
+    _mapController.fitCamera(
+      CameraFit.bounds(
+        bounds: _boundsOf(network),
+        padding: const EdgeInsets.fromLTRB(32, 190, 32, 110),
+        maxZoom: 13,
+      ),
+    );
   }
 
   @override
   void dispose() {
     _selection.dispose();
     _lineFilter.dispose();
+    _network.dispose();
     _myLocation.dispose();
     _locating.dispose();
     _tileHealth.dispose();
@@ -218,9 +282,14 @@ class _MapBodyState extends ConsumerState<_MapBody> {
     );
   }
 
-  Widget _buildTrackLayer(String? filter, TkColors tk) {
+  Widget _buildTrackLayer(
+    String? filter,
+    TransitNetwork network,
+    TkColors tk,
+  ) {
     final key = Object.hash(
       filter,
+      network,
       tk.isDark,
       identityHashCode(_colors),
       _tracks.length,
@@ -252,8 +321,12 @@ class _MapBodyState extends ConsumerState<_MapBody> {
 
     final dimmed = <Polyline<Object>>[];
     final normal = <Polyline<Object>>[];
+    final split = _networks.length >= 2;
     for (final track in _tracks) {
-      if (filter == null) {
+      if (split && networkOfLineCode(track.lineId) != network) {
+        // The other network: still on the map, but visibly in the background.
+        dimmed.add(line(track, dim: true, bold: false));
+      } else if (filter == null) {
         normal.add(line(track, dim: false, bold: false));
       } else if (track.lineId == filter) {
         normal.add(line(track, dim: false, bold: true));
@@ -279,7 +352,7 @@ class _MapBodyState extends ConsumerState<_MapBody> {
     _selection.value = hitTestMapPoints(
       camera: _mapController.camera,
       tap: tap,
-      stations: _points,
+      stations: _pointsOf(_network.value),
       vehicles: vehicles,
       lineFilter: _lineFilter.value,
     );
@@ -303,7 +376,7 @@ class _MapBodyState extends ConsumerState<_MapBody> {
         : _tracks.where((t) => t.lineId == lineId).firstOrNull;
     final bounds = track != null && track.points.isNotEmpty
         ? LatLngBounds.fromPoints(track.points)
-        : _stationBounds;
+        : _boundsOf(_network.value);
     _mapController.fitCamera(
       CameraFit.bounds(
         bounds: bounds,
@@ -321,6 +394,10 @@ class _MapBodyState extends ConsumerState<_MapBody> {
     );
     if (picked == null || !mounted) {
       return;
+    }
+    // A station from the other network: switch tab first so it is drawn.
+    if (_networks.length >= 2) {
+      _selectNetwork(networkOfStation(picked));
     }
     final camera = _mapController.camera;
     _mapController.move(
@@ -451,10 +528,16 @@ class _MapBodyState extends ConsumerState<_MapBody> {
     final colors = _lineColorsFor(dbColors, tk.isDark);
 
     final tiles = _buildTileLayer();
-    final initialFit = _points.length >= 2
+    final startPoints = _pointsOf(_network.value);
+    final initialFit = startPoints.length >= 2
         ? CameraFit.bounds(
-            bounds: _stationBounds,
-            padding: const EdgeInsets.fromLTRB(32, 150, 32, 110),
+            bounds: _boundsOf(_network.value),
+            padding: EdgeInsets.fromLTRB(
+              32,
+              _networks.length >= 2 ? 190 : 150,
+              32,
+              110,
+            ),
             maxZoom: 13,
           )
         : null;
@@ -472,7 +555,7 @@ class _MapBodyState extends ConsumerState<_MapBody> {
           child: FlutterMap(
             mapController: _mapController,
             options: MapOptions(
-              initialCenter: _points.first.point,
+              initialCenter: startPoints.first.point,
               initialZoom: 12,
               initialCameraFit: initialFit,
               minZoom: 9,
@@ -494,17 +577,24 @@ class _MapBodyState extends ConsumerState<_MapBody> {
                 )
               else
                 tiles,
-              ValueListenableBuilder<String?>(
-                valueListenable: _lineFilter,
-                builder: (context, filter, _) => _buildTrackLayer(filter, tk),
+              ListenableBuilder(
+                listenable: Listenable.merge(<Listenable>[
+                  _lineFilter,
+                  _network,
+                ]),
+                builder: (context, _) =>
+                    _buildTrackLayer(_lineFilter.value, _network.value, tk),
               ),
-              _PointsHost(
-                points: _points,
-                lineColors: colors,
-                lineFilter: _lineFilter,
-                selection: _selection,
-                myLocation: _myLocation,
-                colors: tk,
+              ValueListenableBuilder<TransitNetwork>(
+                valueListenable: _network,
+                builder: (context, network, _) => _PointsHost(
+                  points: _pointsOf(network),
+                  lineColors: colors,
+                  lineFilter: _lineFilter,
+                  selection: _selection,
+                  myLocation: _myLocation,
+                  colors: tk,
+                ),
               ),
             ],
           ),
@@ -522,13 +612,25 @@ class _MapBodyState extends ConsumerState<_MapBody> {
                   padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
                   child: MapSearchField(onTap: _openSearch),
                 ),
+                if (_networks.length >= 2)
+                  ValueListenableBuilder<TransitNetwork>(
+                    valueListenable: _network,
+                    builder: (context, network, _) => MapNetworkTabs(
+                      networks: _networks,
+                      selected: network,
+                      onSelected: _selectNetwork,
+                    ),
+                  ),
                 if (_lineIds.isNotEmpty)
-                  ValueListenableBuilder<String?>(
-                    valueListenable: _lineFilter,
-                    builder: (context, filter, _) => MapLineChips(
-                      lineIds: _lineIds,
+                  ListenableBuilder(
+                    listenable: Listenable.merge(<Listenable>[
+                      _lineFilter,
+                      _network,
+                    ]),
+                    builder: (context, _) => MapLineChips(
+                      lineIds: _lineIdsOf(_network.value),
                       lineColors: colors,
-                      selected: filter,
+                      selected: _lineFilter.value,
                       onSelected: _selectLine,
                     ),
                   ),

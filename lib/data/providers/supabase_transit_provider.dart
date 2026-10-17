@@ -5,6 +5,7 @@ import '../../domain/entities/transit_models.dart';
 import '../../domain/providers/transit_providers.dart';
 import '../../domain/usecases/line_transfer_router.dart';
 import '../../domain/usecases/transfer_platform_guidance.dart';
+import '../../domain/usecases/transit_network.dart';
 import 'station_coordinate_corrections.dart';
 
 /// How far to move [time] back by whole weeks so that its date lands inside
@@ -386,6 +387,19 @@ class SupabaseTransitProvider
     final originName = origin?.name ?? query.originStationId;
     final destinationName = destination?.name ?? query.destinationStationId;
 
+    if (origin != null && destination != null) {
+      // Jabodetabek and Yogyakarta are separate rail networks. Never join them
+      // into one journey, not even through the estimated-route fallback below.
+      if (!sameNetwork(origin, destination)) {
+        return const <TransitTrip>[];
+      }
+      // Yogyakarta has a complete published timetable (every station time of
+      // every trip), so answer from it directly instead of the estimator.
+      if (networkOfStation(origin) == TransitNetwork.jogja) {
+        return _searchJogjaTrips(query, originName, destinationName);
+      }
+    }
+
     final directRows = await _client.rpc<List<dynamic>>(
       'search_direct_trips',
       params: <String, Object?>{
@@ -543,6 +557,76 @@ class SupabaseTransitProvider
     return trips;
   }
 
+  /// Direct Yogyakarta–Palur trips from the real timetable. The imported
+  /// service dates sit in an old window (see [_serviceWindow]), so — exactly
+  /// like the departure board — the query is moved back by whole weeks onto the
+  /// same weekday inside that window and the results are moved forward again.
+  /// When nothing is left today it looks at tomorrow. Returns an empty list
+  /// rather than an invented trip when the timetable has none.
+  Future<List<TransitTrip>> _searchJogjaTrips(
+    TripSearchQuery query,
+    String originName,
+    String destinationName,
+  ) async {
+    final window = await _serviceWindow();
+    for (var dayOffset = 0; dayOffset < 2; dayOffset += 1) {
+      final at = query.departureAt;
+      final from = dayOffset == 0
+          ? at
+          : DateTime(at.year, at.month, at.day + dayOffset);
+      var shift = Duration.zero;
+      if (window != null) {
+        shift = weekdayAlignedShift(from, window.start, window.end) ?? shift;
+      }
+      final rows = await _client.rpc<List<dynamic>>(
+        'search_direct_trips',
+        params: <String, Object?>{
+          'p_origin_code': query.originStationId,
+          'p_destination_code': query.destinationStationId,
+          'p_from': from.subtract(shift).toUtc().toIso8601String(),
+          'p_limit': 5,
+        },
+      );
+      if (rows.isEmpty) continue;
+      return Future.wait(
+        rows.cast<Map<String, dynamic>>().map(
+          (row) => _directTripFromRow(
+            _shiftedRow(row, shift),
+            query,
+            originName,
+            destinationName,
+            shiftTag: shift == Duration.zero
+                ? null
+                : DateTime.parse(
+                    _shiftedRow(row, shift)['origin_departure'] as String,
+                  ).millisecondsSinceEpoch,
+          ),
+        ),
+      );
+    }
+    return const <TransitTrip>[];
+  }
+
+  /// [row] from `search_direct_trips` with its timestamps and service date
+  /// moved forward by [shift] (whole weeks).
+  Map<String, dynamic> _shiftedRow(Map<String, dynamic> row, Duration shift) {
+    if (shift == Duration.zero) return row;
+    String moved(Object? value) =>
+        DateTime.parse(value! as String).add(shift).toUtc().toIso8601String();
+    final serviceDate = DateTime.tryParse(row['service_date'] as String? ?? '');
+    return <String, dynamic>{
+      ...row,
+      'origin_departure': moved(row['origin_departure']),
+      'destination_arrival': moved(row['destination_arrival']),
+      if (serviceDate != null)
+        'service_date': DateTime.utc(
+          serviceDate.year,
+          serviceDate.month,
+          serviceDate.day,
+        ).add(shift).toIso8601String().substring(0, 10),
+    };
+  }
+
   /// Real per-leg station sequences for [originId] -> [destinationId], used
   /// only when the trip-schedule tables have no row for this pair (see
   /// `searchTrips`'s empty-`trips` branch). See [routeBetweenStations] for
@@ -582,9 +666,13 @@ class SupabaseTransitProvider
     Map<String, dynamic> row,
     TripSearchQuery query,
     String originName,
-    String destinationName,
-  ) async {
+    String destinationName, {
+    int? shiftTag,
+  }) async {
     final tripId = row['trip_id'] as String;
+    // A trip re-dated by whole weeks keeps one database id for every date, so
+    // the result id carries the shifted time to stay unique in a result list.
+    final resultId = shiftTag == null ? tripId : '$tripId@$shiftTag';
     final stationCodes = await _tripStopCodes(
       tripId,
       row['origin_sequence'] as int,
@@ -598,14 +686,14 @@ class SupabaseTransitProvider
     ).toLocal();
 
     return TransitTrip(
-      id: tripId,
+      id: resultId,
       originStationId: query.originStationId,
       destinationStationId: query.destinationStationId,
       departureAt: departure,
       arrivalAt: arrival,
       legs: <TripLeg>[
         TripLeg(
-          id: '$tripId-rail',
+          id: '$resultId-rail',
           mode: TransportMode.commuterRail,
           originName: originName,
           destinationName: destinationName,

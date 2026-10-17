@@ -9,6 +9,7 @@ import '../../../core/widgets/data_badges.dart';
 import '../../../core/widgets/tk_components.dart';
 import '../../../data/providers/provider_registry.dart';
 import '../../../domain/entities/transit_models.dart';
+import '../../../domain/usecases/transit_network.dart';
 import 'live_map_geometry.dart';
 import 'map_points_layer.dart';
 
@@ -58,6 +59,75 @@ class MapSearchField extends StatelessWidget {
               ),
             ),
           ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Two-way switch between the rail networks on the map (Jabodetabek /
+/// Yogyakarta). The selected one is what the map shows highlighted.
+class MapNetworkTabs extends StatelessWidget {
+  const MapNetworkTabs({
+    required this.networks,
+    required this.selected,
+    required this.onSelected,
+    super.key,
+  });
+
+  final List<TransitNetwork> networks;
+  final TransitNetwork selected;
+  final ValueChanged<TransitNetwork> onSelected;
+
+  @override
+  Widget build(BuildContext context) {
+    final tk = context.tk;
+    final textTheme = Theme.of(context).textTheme;
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+      child: Container(
+        padding: const EdgeInsets.all(4),
+        decoration: BoxDecoration(
+          color: tk.surface,
+          borderRadius: BorderRadius.circular(TkRadius.control + 4),
+          border: Border.all(color: tk.border),
+        ),
+        child: Row(
+          children: <Widget>[
+            for (final network in networks)
+              Expanded(
+                child: Semantics(
+                  button: true,
+                  selected: network == selected,
+                  label: 'Peta ${networkLabel(network)}',
+                  excludeSemantics: true,
+                  child: Material(
+                    color: network == selected
+                        ? tk.primary
+                        : Colors.transparent,
+                    borderRadius: BorderRadius.circular(TkRadius.control),
+                    child: InkWell(
+                      borderRadius: BorderRadius.circular(TkRadius.control),
+                      onTap: () => onSelected(network),
+                      child: ConstrainedBox(
+                        constraints: const BoxConstraints(minHeight: 40),
+                        child: Center(
+                          child: Text(
+                            networkLabel(network),
+                            style: textTheme.labelLarge?.copyWith(
+                              color: network == selected
+                                  ? tk.onPrimary
+                                  : tk.textMuted,
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+          ],
         ),
       ),
     );

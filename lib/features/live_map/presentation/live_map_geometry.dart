@@ -27,6 +27,7 @@ const Map<String, String> _lineShortNames = <String, String>{
   'PRIOK': 'Tanjung Priok',
   'BEKASI': 'Bekasi',
   'SERPONG': 'Serpong',
+  'YKPL': 'Yogyakarta',
 };
 
 /// Short label for a line chip, e.g. `Bogor`. Unknown codes are humanised

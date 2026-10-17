@@ -324,4 +324,75 @@ void main() {
     expect(tester.takeException(), isNull);
     expect(find.byType(MapPointsLayer), findsOneWidget);
   });
+
+  group('network tabs', () {
+    const jogja = <Station>[
+      Station(
+        id: 'YK',
+        code: 'YK',
+        name: 'Yogyakarta',
+        latitude: -7.7892,
+        longitude: 110.3635,
+        lineIds: <String>['YKPL'],
+      ),
+      Station(
+        id: 'PL',
+        code: 'PL',
+        name: 'Palur',
+        latitude: -7.5682,
+        longitude: 110.8753,
+        lineIds: <String>['YKPL'],
+      ),
+    ];
+
+    testWidgets('are hidden while only one network has stations', (tester) async {
+      await tester.pumpWidget(_app(tiles: _FakeTileProvider()));
+      await tester.pumpAndSettle();
+      expect(find.text('Jabodetabek'), findsNothing);
+      expect(find.text('Yogyakarta'), findsNothing);
+    });
+
+    testWidgets('start on Jabodetabek and list only its lines', (tester) async {
+      await tester.pumpWidget(
+        _app(tiles: _FakeTileProvider(), stations: <Station>[..._stations, ...jogja]),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.text('Jabodetabek'), findsOneWidget);
+      expect(find.text('Yogyakarta'), findsOneWidget); // the tab
+      expect(find.text('Bogor'), findsOneWidget);
+      expect(find.text('Cikarang'), findsOneWidget);
+    });
+
+    testWidgets('the Yogyakarta tab swaps the line chips and frames Jogja', (
+      tester,
+    ) async {
+      await tester.pumpWidget(
+        _app(tiles: _FakeTileProvider(), stations: <Station>[..._stations, ...jogja]),
+      );
+      await tester.pumpAndSettle();
+      final map = tester.element(find.byType(MapPointsLayer));
+      expect(MapCamera.of(map).center.latitude, lessThan(-6));
+      expect(MapCamera.of(map).center.latitude, greaterThan(-6.5));
+
+      await tester.tap(find.text('Yogyakarta'));
+      await tester.pumpAndSettle();
+
+      // Chips: Semua + the Yogyakarta line (plus the tab label itself).
+      expect(find.text('Bogor'), findsNothing);
+      expect(find.text('Cikarang'), findsNothing);
+      expect(find.text('Yogyakarta'), findsNWidgets(2));
+      final camera = MapCamera.of(tester.element(find.byType(MapPointsLayer)));
+      expect(camera.center.latitude, lessThan(-7.5));
+      expect(camera.center.longitude, greaterThan(110));
+
+      await tester.tap(find.text('Jabodetabek'));
+      await tester.pumpAndSettle();
+      expect(find.text('Bogor'), findsOneWidget);
+      expect(
+        MapCamera.of(tester.element(find.byType(MapPointsLayer))).center.longitude,
+        lessThan(107.5),
+      );
+    });
+  });
 }
