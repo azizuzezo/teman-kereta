@@ -1,7 +1,7 @@
 name: teman_kereta
 description: Pendamping perjalanan KRL yang berjalan local-first dan offline-capable.
 publish_to: none
-version: 1.0.18+19
+version: 1.1.0+20
 
 
 environment:
