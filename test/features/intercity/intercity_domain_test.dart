@@ -333,45 +333,52 @@ void main() {
   });
 
   group('IntercityReminderPlanner', () {
-    test('fires 30, 15 and 10 once each, in order, as the estimate falls', () {
+    test('fires 30, 15 and 10 km once each, in order, as the distance falls', () {
       final p = IntercityReminderPlanner();
       final fired = <int>[];
-      for (var minutes = 120; minutes >= 0; minutes -= 1) {
-        final due = p.onEta(Duration(minutes: minutes));
+      for (var km = 120; km >= 0; km -= 1) {
+        final due = p.onRemainingKm(km.toDouble());
         if (due != null) fired.add(due);
       }
       expect(fired, <int>[30, 15, 10]);
     });
 
-    test('boarding with 20 minutes left skips the 30 but keeps 15 and 10', () {
+    test('boarding with 20 km left skips the 30 but keeps 15 and 10', () {
       final p = IntercityReminderPlanner();
       final fired = <int>[];
-      for (var minutes = 20; minutes >= 0; minutes -= 1) {
-        final due = p.onEta(Duration(minutes: minutes));
+      for (var km = 20; km >= 0; km -= 1) {
+        final due = p.onRemainingKm(km.toDouble());
         if (due != null) fired.add(due);
       }
       expect(fired, <int>[15, 10]);
     });
 
-    test('boarding with 8 minutes left announces nothing', () {
+    test('a short ride announces no distance reminder at all', () {
       final p = IntercityReminderPlanner();
-      expect(p.onEta(const Duration(minutes: 8)), isNull);
-      expect(p.onEta(const Duration(minutes: 5)), isNull);
+      expect(p.onRemainingKm(8), isNull);
+      expect(p.onRemainingKm(5), isNull);
+      expect(p.onRemainingKm(1), isNull);
     });
 
-    test('a wobbling estimate never repeats a reminder', () {
-      final p = IntercityReminderPlanner()..onEta(const Duration(minutes: 90));
-      expect(p.onEta(const Duration(minutes: 29)), 30);
-      expect(p.onEta(const Duration(minutes: 31)), isNull);
-      expect(p.onEta(const Duration(minutes: 29)), isNull);
-      expect(p.onEta(const Duration(minutes: 30)), isNull);
+    test('a reminder comes a little early, never late', () {
+      final p = IntercityReminderPlanner()..onRemainingKm(90);
+      expect(p.onRemainingKm(30.6), isNull);
+      expect(p.onRemainingKm(30.2), 30);
+    });
+
+    test('a wobbling reading never repeats a reminder', () {
+      final p = IntercityReminderPlanner()..onRemainingKm(90);
+      expect(p.onRemainingKm(29.8), 30);
+      expect(p.onRemainingKm(31), isNull);
+      expect(p.onRemainingKm(29), isNull);
+      expect(p.onRemainingKm(30), isNull);
     });
 
     test('a signal gap that jumps past reminders announces only the nearest', () {
-      final p = IntercityReminderPlanner()..onEta(const Duration(minutes: 90));
-      expect(p.onEta(const Duration(minutes: 12)), 15);
+      final p = IntercityReminderPlanner()..onRemainingKm(90);
+      expect(p.onRemainingKm(12), 15);
       expect(p.hasFired(30), isTrue);
-      expect(p.onEta(const Duration(minutes: 9)), 10);
+      expect(p.onRemainingKm(9), 10);
     });
   });
 }

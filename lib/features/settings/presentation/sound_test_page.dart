@@ -220,16 +220,16 @@ class _SoundTestPageState extends ConsumerState<SoundTestPage>
           log: false,
         ),
       ),
-      for (final minutes in intercityReminderMinutes)
+      for (final km in intercityReminderKm)
         _SoundTestEntry(
-          key: 'intercity_$minutes',
-          title: 'Antar kota: $minutes menit lagi',
-          subtitle: bellFollowsIntercityVoice(minutes)
+          key: 'intercity_$km',
+          title: 'Antar kota: $km km lagi',
+          subtitle: bellFollowsIntercityVoice(km)
               ? 'Pengingat terakhir kereta antar kota, disusul bell.'
               : 'Pengingat kereta antar kota.',
           icon: Icons.train_rounded,
-          play: () => notifications.showIntercityEtaAlert(
-            minutes: minutes,
+          play: () => notifications.showIntercityDistanceAlert(
+            km: km,
             destination: 'Bandung',
             vibrate: vibrate,
             log: false,

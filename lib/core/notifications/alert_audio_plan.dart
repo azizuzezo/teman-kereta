@@ -38,24 +38,26 @@ String? transferApproachingVoice(int remainingStops) {
 /// station before a stop or transfer.
 bool bellFollowsVoice(int remainingStops) => remainingStops == 1;
 
-/// Minutes before arrival at which an intercity ride is announced, largest
+/// Rail distance left, in km, at which an intercity ride is announced, largest
 /// first. Intercity stops are tens of minutes apart, so "3, 2, 1 stations
-/// before" says nothing there; time does.
-const intercityReminderMinutes = <int>[30, 15, 10];
+/// before" says nothing there; and with no timetable the distance along the
+/// rails is the one thing that is known for sure.
+const intercityReminderKm = <int>[30, 15, 10];
 
-/// Recorded voice line for "[minutes] menit lagi" (`res/raw`), or null when
-/// there is no clip for that number and the text-to-speech reads it instead.
-String? intercityEtaVoice(int minutes) => switch (minutes) {
-  30 => 'eta_minutes_30',
-  15 => 'eta_minutes_15',
-  10 => 'eta_minutes_10',
-  _ => null,
-};
+/// Recorded voice lines for "[km] kilometer lagi" that are bundled in
+/// `res/raw` as `eta_km_<km>`. A distance goes here only together with its file
+/// (and its line in `keep.xml`): an alert whose clip is missing would be
+/// silent, so without one the text-to-speech reads it instead.
+const _bundledIntercityKmClips = <int>{30, 15, 10};
+
+/// Recorded voice line for "[km] kilometer lagi", or null when there is no
+/// clip for that distance and the text-to-speech reads it instead.
+String? intercityKmVoice(int km) =>
+    _bundledIntercityKmClips.contains(km) ? 'eta_km_$km' : null;
 
 /// The bell follows the last reminder only: the one that means "get ready to
 /// leave the seat".
-bool bellFollowsIntercityVoice(int minutes) =>
-    minutes == intercityReminderMinutes.last;
+bool bellFollowsIntercityVoice(int km) => km == intercityReminderKm.last;
 
 /// Channel id for an alert whose voice line is [voice].
 ///

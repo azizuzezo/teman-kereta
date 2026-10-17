@@ -201,30 +201,30 @@ class LocalNotificationService {
     );
   }
 
-  /// "[minutes] menit lagi" for an intercity ride (30 / 15 / 10 before
-  /// arriving). The last one is followed by the bell.
-  Future<void> showIntercityEtaAlert({
-    required int minutes,
+  /// "[km] kilometer lagi" for an intercity ride (30 / 15 / 10 km of rail left).
+  /// The last one is followed by the bell.
+  Future<void> showIntercityDistanceAlert({
+    required int km,
     required String destination,
     bool vibrate = true,
     bool sound = true,
     bool log = true,
   }) async {
-    final customSound = intercityEtaVoice(minutes);
+    final customSound = intercityKmVoice(km);
     await _showAndLog(
-      type: 'intercity_eta_alert',
-      id: 4200 + minutes,
-      title: '$minutes menit lagi',
+      type: 'intercity_distance_alert',
+      id: 4200 + km,
+      title: '$km km lagi',
       body: 'Bersiap turun di $destination.',
       channelId: alertChannelId(customSound),
       channelName: 'Pengingat kereta antar kota',
-      channelDescription: 'Pengingat 30, 15 dan 10 menit sebelum tiba',
+      channelDescription: 'Pengingat 30, 15 dan 10 km sebelum tiba',
       payload: '/active-trip',
       vibrate: vibrate,
       sound: sound,
       customSoundResource: customSound,
-      spokenText: '$minutes menit lagi menuju $destination.',
-      alarmDelay: bellFollowsIntercityVoice(minutes)
+      spokenText: '$km kilometer lagi menuju $destination.',
+      alarmDelay: bellFollowsIntercityVoice(km)
           ? const Duration(seconds: 4)
           : null,
       log: log,

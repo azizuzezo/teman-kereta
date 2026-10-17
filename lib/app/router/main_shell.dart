@@ -19,7 +19,7 @@ class MainShell extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final activeTrip = ref.watch(activeTripControllerProvider);
-    // Keeps the intercity estimate and its 30 / 15 / 10 minute reminders
+    // Keeps the intercity estimate and its 30 / 15 / 10 km reminders
     // running whichever tab is open. Only the trip id is watched, so the shell
     // does not rebuild on every GPS fix.
     ref.watch(intercityRideControllerProvider.select((ride) => ride.tripId));

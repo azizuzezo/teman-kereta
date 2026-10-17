@@ -42,20 +42,23 @@ the train's real speed.
 `IntercityRideController` (mounted in `MainShell`) follows the active trip and the
 GPS fixes the native tracker already delivers.
 
-- `IntercityEtaEstimator`: remaining track distance (the fix is projected onto the
-  train's own track) divided by a speed that starts as the dataset estimate and
-  moves toward the speed the train actually keeps (weight up to 0.8, and 0.9 in
-  the last 25 km), plus the standing time at the stops still ahead.
-- `IntercityReminderPlanner`: fires 30, 15 and 10 once each, one minute early on
-  purpose (a late reminder is worse than an early one). A reminder already inside
-  the first estimate is skipped; if a GPS gap jumps past several, only the nearest
-  is announced.
-- Sound: `showIntercityEtaAlert`. 30 and 15 use the recorded clips
-  (`eta_minutes_30`, `eta_minutes_15` in `android/.../res/raw`, also listed in
-  `keep.xml`, which release builds need). The 10-minute clip
-  (`eta_minutes_10`, from `assets/10menit.wav`) is followed by the bell
-  (`alarm.mp3`). Source clips are kept in `assets/`; the copies in `res/raw` and
-  `ios/Runner/Sounds` are what ships.
+- Reminders are by **rail distance left**: 30, 15 and 10 km. Each fix is projected
+  onto the train's own track and the distance to the destination is measured along
+  it (never the straight line). Only when a fix is more than 600 m from the track
+  does it fall back to the straight line times 1.2.
+- `IntercityReminderPlanner`: fires each once, 0.3 km early to cover the projection
+  error. A reminder already inside the first reading is skipped (a ride that starts
+  with 20 km left gets 15 and 10 only; one under 10 km gets none), and if a GPS gap
+  jumps past several, only the nearest is announced.
+- `IntercityEtaEstimator` still gives the estimated arrival time shown on screen
+  (track distance at a speed that starts as the class estimate and follows the real
+  speed); it no longer decides when to announce.
+- Sound: `showIntercityDistanceAlert`. The clips are `eta_km_30`, `eta_km_15`,
+  `eta_km_10` in `android/.../res/raw` (also listed in `keep.xml`, which release
+  builds need), made from `assets/30km.wav`, `15km.wav` and `10km.wav`. A distance
+  without a clip (listed in `_bundledIntercityKmClips`) is read by the
+  text-to-speech instead. The last one is followed by the bell (`alarm.mp3`). Scripts for the clips are
+  in `docs/antar-kota-tts.md`.
 - "Tes suara peringatan" (Pengaturan) has an entry per reminder.
 
 ## The data
@@ -87,7 +90,7 @@ the track in the map data loops oddly around Medan. The app shows a note.
 
 ## Not done
 
-- The reminders run in Dart on the native tracker's fixes. The 30 / 15 / 10 logic is
+- The reminders run in Dart on the native tracker's fixes. The 30 / 15 / 10 km logic is
   not in the Kotlin service, so it can pause if Android freezes the Dart side in
   deep doze. Port `IntercityRideController` to `TripProgressEngine` for that.
 - Real GPS on a device was not exercised (the emulator's injected locations did

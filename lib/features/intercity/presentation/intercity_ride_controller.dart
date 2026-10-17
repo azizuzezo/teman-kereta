@@ -18,7 +18,7 @@ class IntercityRideState {
     this.serviceName,
     this.destinationName,
     this.eta,
-    this.firedMinutes = const <int>{},
+    this.firedKm = const <int>{},
   });
 
   /// The active intercity trip this belongs to, or null when none is running.
@@ -29,22 +29,22 @@ class IntercityRideState {
   /// The latest estimate, or null until the first GPS fix has been placed.
   final IntercityEta? eta;
 
-  /// The "[n] menit lagi" reminders already announced on this ride.
-  final Set<int> firedMinutes;
+  /// The "[n] kilometer lagi" reminders already announced on this ride.
+  final Set<int> firedKm;
 
   bool get isActive => tripId != null;
 
-  IntercityRideState copyWith({IntercityEta? eta, Set<int>? firedMinutes}) =>
+  IntercityRideState copyWith({IntercityEta? eta, Set<int>? firedKm}) =>
       IntercityRideState(
         tripId: tripId,
         serviceName: serviceName,
         destinationName: destinationName,
         eta: eta ?? this.eta,
-        firedMinutes: firedMinutes ?? this.firedMinutes,
+        firedKm: firedKm ?? this.firedKm,
       );
 }
 
-/// Runs the live estimate and the 30 / 15 / 10 minute reminders of an
+/// Runs the live estimate and the 30 / 15 / 10 km reminders of an
 /// intercity ride.
 ///
 /// It follows the active trip session and the GPS fixes the native tracker
@@ -155,23 +155,25 @@ class IntercityRideController extends Notifier<IntercityRideState> {
       at: fix.at,
       speedKmh: speed == null || speed < 0 ? null : speed * 3.6,
     );
-    final due = planner.onEta(eta.eta);
-    var fired = state.firedMinutes;
+    // Rail distance left (the fix is projected onto the train's own track),
+    // not the straight line and not a guessed time.
+    final due = planner.onRemainingKm(eta.remainingKm);
+    var fired = state.firedKm;
     if (due != null) {
       fired = <int>{...fired, ...planner.thresholds.where(planner.hasFired)};
       final settings = ref.read(settingsControllerProvider);
       unawaited(
         ref
             .read(localNotificationServiceProvider)
-            .showIntercityEtaAlert(
-              minutes: due,
+            .showIntercityDistanceAlert(
+              km: due,
               destination: state.destinationName ?? 'tujuan',
               vibrate: settings.vibrationEnabled,
               sound: settings.soundEnabled,
             ),
       );
     }
-    state = state.copyWith(eta: eta, firedMinutes: fired);
+    state = state.copyWith(eta: eta, firedKm: fired);
   }
 }
 

@@ -10,8 +10,8 @@ class FakeNotificationService implements LocalNotificationService {
   int missedAlerts = 0;
   int arrivalAlerts = 0;
   int rideDetectedAlerts = 0;
-  /// Minutes of every intercity "[n] menit lagi" reminder shown, in order.
-  final List<int> intercityEtaAlerts = <int>[];
+  /// Km of every intercity "[n] kilometer lagi" reminder shown, in order.
+  final List<int> intercityDistanceAlerts = <int>[];
 
   @override
   void Function(String type, String title, String body)? get onShown => null;
@@ -67,14 +67,14 @@ class FakeNotificationService implements LocalNotificationService {
   }
 
   @override
-  Future<void> showIntercityEtaAlert({
-    required int minutes,
+  Future<void> showIntercityDistanceAlert({
+    required int km,
     required String destination,
     bool vibrate = true,
     bool sound = true,
     bool log = true,
   }) async {
-    intercityEtaAlerts.add(minutes);
+    intercityDistanceAlerts.add(km);
   }
 
   @override

@@ -60,13 +60,13 @@ class IntercityRideCard extends ConsumerWidget {
             spacing: 8,
             runSpacing: 6,
             children: <Widget>[
-              for (final minutes in intercityReminderMinutes)
+              for (final km in intercityReminderKm)
                 TkPill(
-                  label: '$minutes menit',
-                  icon: ride.firedMinutes.contains(minutes)
+                  label: '$km km',
+                  icon: ride.firedKm.contains(km)
                       ? Icons.check_circle_rounded
                       : Icons.notifications_none_rounded,
-                  tone: ride.firedMinutes.contains(minutes)
+                  tone: ride.firedKm.contains(km)
                       ? TkPillTone.success
                       : TkPillTone.neutral,
                   dense: true,
@@ -75,8 +75,8 @@ class IntercityRideCard extends ConsumerWidget {
           ),
           const SizedBox(height: 8),
           Text(
-            'Tanpa jadwal resmi: waktu dihitung dari jarak rel, jenis kereta dan '
-            'kecepatan yang benar-benar dijalani.',
+            'Pengingat dihitung dari sisa jarak sepanjang rel, bukan garis lurus. '
+            'Jam tiba hanya estimasi karena jadwal resmi tidak tersedia.',
             style: textTheme.bodySmall?.copyWith(color: tk.textMuted),
           ),
         ],

@@ -13,6 +13,8 @@ param (
     [string]$FlutterSdkPath = "C:\Users\aziz\develop\flutter\bin\flutter.bat",
     [string]$DbUrl = "postgresql://postgres.slcttxbxcdrsavgugzdy:.Keenan14062@aws-1-ap-northeast-2.pooler.supabase.com:5432/postgres",
     [string]$Changelog = "",
+    # Body of the push notification. Empty keeps the short default ("Versi X sudah bisa diunduh.").
+    [string]$PushBody = "",
     [Nullable[int]]$MinSupportedVersionCode = $null,
     [switch]$SkipPublish
 )
@@ -150,7 +152,7 @@ if ($userIds.Count -eq 0) {
     $pushPayload = @{
         user_ids = $userIds
         title    = "Pembaruan Teman Kereta tersedia"
-        body     = "Versi $versionName sudah bisa diunduh."
+        body     = $(if ($PushBody) { $PushBody } else { "Versi $versionName sudah bisa diunduh." })
     } | ConvertTo-Json -Compress
 
     $pushPayloadFile = New-TemporaryFile

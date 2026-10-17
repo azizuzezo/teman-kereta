@@ -247,9 +247,9 @@ class _IntercityTripCardState extends ConsumerState<IntercityTripCard> {
               const SizedBox(width: 6),
               Expanded(
                 child: Text(
-                  'Kamu diingatkan 30, 15 dan 10 menit sebelum tiba. Jadwal '
-                  'resmi tidak tersedia, jadi waktunya estimasi dari jarak rel '
-                  'dan kecepatan kereta, lalu menyesuaikan saat berjalan.',
+                  'Kamu diingatkan saat sisa 30, 15 dan 10 km menuju tujuan, '
+                  'dihitung sepanjang rel. Jadwal resmi tidak tersedia, jadi jam '
+                  'tiba hanya estimasi.',
                   style: textTheme.bodySmall?.copyWith(color: tk.textMuted),
                 ),
               ),

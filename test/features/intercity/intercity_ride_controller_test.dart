@@ -190,7 +190,7 @@ void main() {
   /// A ride down [service]'s own track at [kmh], one fix every 4 s, standing
   /// still at each intermediate stop for as long as the dataset says the train
   /// does. Returns the fixes and the moment the train reaches the end.
-  ({List<NativeGpsFix> fixes, DateTime arrival}) simulate(
+  ({List<NativeGpsFix> fixes, List<double> kms, DateTime arrival}) simulate(
     IntercityService service, {
     required double kmh,
     required DateTime start,
@@ -225,6 +225,7 @@ void main() {
     }
 
     final fixes = <NativeGpsFix>[];
+    final kms = <double>[];
     var clock = start;
     var km = 0.0;
     var nextStop = 1;
@@ -238,6 +239,7 @@ void main() {
           speedMetersPerSecond: kmh / 3.6,
         ),
       );
+      kms.add(km);
       km += kmh * 4 / 3600;
       clock = clock.add(const Duration(seconds: 4));
       if (nextStop < service.stops.length - 1 && km >= service.stops[nextStop].km) {
@@ -253,15 +255,16 @@ void main() {
               speedMetersPerSecond: 0,
             ),
           );
+          kms.add(stop.km);
           clock = clock.add(const Duration(seconds: 4));
         }
         nextStop += 1;
       }
     }
-    return (fixes: fixes, arrival: clock);
+    return (fixes: fixes, kms: kms, arrival: clock);
   }
 
-  test('a full ride announces 30, 15 and 10 minutes once each, in order', () async {
+  test('a full ride announces 30, 15 and 10 km of rail left, once each, in order', () async {
     final service = catalog.serviceById('parahyangan')!;
     final trip = tripFor('parahyangan', 'GMR', 'BD');
     container.listen(intercityRideControllerProvider, (_, _) {});
@@ -274,26 +277,25 @@ void main() {
 
     final ride = simulate(service, kmh: 85, start: DateTime(2026, 10, 18, 8));
     final fixNotifier = container.read(latestNativeGpsFixProvider.notifier);
-    final realMinutesLeft = <int, double>{};
+    final railKmLeft = <int, double>{};
     var seen = 0;
-    for (final fix in ride.fixes) {
-      fixNotifier.set(fix);
-      if (notifications.intercityEtaAlerts.length > seen) {
-        final minutes = notifications.intercityEtaAlerts.last;
-        realMinutesLeft[minutes] =
-            ride.arrival.difference(fix.at).inSeconds / 60.0;
-        seen = notifications.intercityEtaAlerts.length;
+    for (var i = 0; i < ride.fixes.length; i += 1) {
+      fixNotifier.set(ride.fixes[i]);
+      if (notifications.intercityDistanceAlerts.length > seen) {
+        final km = notifications.intercityDistanceAlerts.last;
+        railKmLeft[km] = service.totalKm - ride.kms[i];
+        seen = notifications.intercityDistanceAlerts.length;
       }
     }
 
-    expect(notifications.intercityEtaAlerts, intercityReminderMinutes);
-    // Each reminder is on time, and never later than it promised.
-    for (final minutes in intercityReminderMinutes) {
-      final left = realMinutesLeft[minutes]!;
-      expect(left, closeTo(minutes.toDouble(), 4),
-          reason: '$minutes-minute reminder came with $left min left');
-      expect(left, greaterThanOrEqualTo(minutes - 2.5),
-          reason: '$minutes-minute reminder must not come late');
+    expect(notifications.intercityDistanceAlerts, intercityReminderKm);
+    // Each one comes when that much track is left: not later than promised,
+    // and at most a few hundred metres early.
+    for (final km in intercityReminderKm) {
+      final left = railKmLeft[km]!;
+      expect(left, closeTo(km.toDouble(), 0.8),
+          reason: '$km km reminder came with $left km of rail left');
+      expect(left, lessThanOrEqualTo(km + 0.5), reason: '$km km must not come late');
     }
     // And no "3 stasiun lagi" style alert was raised for an intercity ride.
     expect(notifications.stopAlerts, 0);
