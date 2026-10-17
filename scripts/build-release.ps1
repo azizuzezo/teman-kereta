@@ -127,7 +127,11 @@ Write-Host "[OK] Uploaded and verified: $apkUrl" -ForegroundColor Green
 
 $escapedChangelog = $Changelog.Replace("'", "''")
 $minSupportedSql = if ($null -ne $MinSupportedVersionCode) { $MinSupportedVersionCode } else { "null" }
-$changelogSql = if ($Changelog) { "'$escapedChangelog'" } else { "null" }
+# One line only: npx.cmd cuts a command-line argument at a newline, which dropped
+# --db-url and sent the insert to a local database. A bullet list therefore goes as
+# a Postgres escape string, E'line\nline'.
+$changelogLiteral = ($escapedChangelog.Replace("\", "\\") -replace "\r?\n", "\n")
+$changelogSql = if ($Changelog) { "E'$changelogLiteral'" } else { "null" }
 $sql = "insert into public.app_releases (version_code, version_name, apk_url, changelog, min_supported_version_code) values ($versionCode, '$versionName', '$apkUrl', $changelogSql, $minSupportedSql) on conflict (version_code) do update set version_name = excluded.version_name, apk_url = excluded.apk_url, changelog = excluded.changelog, min_supported_version_code = excluded.min_supported_version_code;"
 
 Write-Host "Publishing app_releases row (version_code=$versionCode)..." -ForegroundColor Yellow
