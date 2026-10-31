@@ -20,6 +20,8 @@ import '../../schedule/presentation/trip_search_controller.dart';
 import 'active_trip_controller.dart';
 import 'active_trip_stations.dart';
 import 'trip_battery_warning.dart';
+import 'trip_hop_progress.dart';
+import 'trip_progress_bar.dart';
 import 'trip_progress_math.dart';
 import 'trip_rail_timeline.dart';
 
@@ -142,7 +144,10 @@ class ActiveTripPage extends ConsumerWidget {
       for (final station in demoStations) station.id: station,
       for (final station in stations) station.id: station,
     };
-    final hopFraction = hopFractionFromGps(
+    final hop = ref.watch(tripHopProgressProvider);
+    // Native's along-the-track fraction when it has one; the straight-line
+    // GPS estimate only until the first native sync lands.
+    final hopFraction = hop?.fraction ?? hopFractionFromGps(
       from: stationsById[session.currentStationId],
       to: session.nextStationId == null
           ? null
@@ -180,7 +185,11 @@ class ActiveTripPage extends ConsumerWidget {
       stations,
     );
     final isArrived = session.state == ActiveTripState.arrived;
-    final isTransferring = session.state == ActiveTripState.transferring;
+    // Left the station just reached: everything reads as moving towards the
+    // next one, including a transfer station already pulled out of.
+    final departed = hop?.departed ?? false;
+    final isTransferring =
+        session.state == ActiveTripState.transferring && !departed;
     final isApproachingTransfer =
         session.state == ActiveTripState.approachingTransfer;
     final isApproachingDestination =
@@ -365,33 +374,41 @@ class ActiveTripPage extends ConsumerWidget {
                     label: 'Progres perjalanan',
                     value: '${(progress.clamp(0.0, 1.0) * 100).round()} persen',
                     child: ExcludeSemantics(
-                      child: ClipRRect(
-                        borderRadius: BorderRadius.circular(6),
-                        child: TweenAnimationBuilder<double>(
-                          tween: Tween<double>(begin: 0, end: progress),
-                          duration: reduceMotion
-                              ? Duration.zero
-                              : const Duration(milliseconds: 500),
-                          curve: Curves.easeOut,
-                          builder: (context, value, _) =>
-                              LinearProgressIndicator(
-                                value: value.clamp(0.0, 1.0),
-                                minHeight: 10,
-                                backgroundColor: hero.track,
-                                color: hero.bar,
-                              ),
-                        ),
+                      child: TripProgressBar(
+                        progress: progress,
+                        moving: departed && !isArrived,
+                        reduceMotion: reduceMotion,
+                        trackColor: hero.track,
+                        fillColor: hero.bar,
+                        markerColor: hero.bar,
+                        markerIconColor: hero.background,
                       ),
                     ),
                   ),
                   if (!isArrived) ...<Widget>[
                     const SizedBox(height: 10),
                     Text(
-                      'Stasiun saat ini: $currentName',
+                      departed
+                          ? 'Dalam perjalanan $currentName → $nextName'
+                          : 'Stasiun saat ini: $currentName',
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                       style: textTheme.bodyMedium?.copyWith(color: hero.muted),
                     ),
+                    if (hop?.distanceToNextMeters
+                        case final toNext? when !isIntercity) ...<Widget>[
+                      const SizedBox(height: 2),
+                      Text(
+                        '${formatDistanceMeters(toNext)} lagi ke $nextName',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: textTheme.bodyMedium?.copyWith(
+                          color: hero.foreground,
+                          fontWeight: FontWeight.w700,
+                          fontFeatures: AppTheme.timeFeatures,
+                        ),
+                      ),
+                    ],
                   ],
                   const SizedBox(height: 16),
                   _TripStatsRow(session: session, palette: hero),
@@ -445,6 +462,7 @@ class ActiveTripPage extends ConsumerWidget {
                 ],
                 currentIndex: session.currentStationIndex,
                 hopFraction: isArrived ? 0 : hopFraction,
+                departed: departed && !isArrived,
                 reduceMotion: reduceMotion,
               ),
             ),

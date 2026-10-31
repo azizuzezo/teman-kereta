@@ -43,6 +43,35 @@ internal object GeoMath {
      * ever asking "are they at the one station we expect next?" — the
      * question that leaves a trip permanently stuck when the answer is no.
      */
+    /**
+     * Where a point falls on a polyline given as flattened lat,lon pairs:
+     * [alongMeters] from its start to the nearest point on it, [offsetMeters]
+     * from the point to that nearest point, [lengthMeters] the whole line.
+     */
+    data class PolylineMatch(val alongMeters: Double, val offsetMeters: Double, val lengthMeters: Double)
+
+    fun projectOntoPolyline(lat: Double, lon: Double, line: DoubleArray): PolylineMatch {
+        var cumulative = 0.0
+        var bestAlong = 0.0
+        var bestOffset = Double.MAX_VALUE
+        var i = 0
+        while (i + 3 < line.size) {
+            val lat1 = line[i]
+            val lon1 = line[i + 1]
+            val lat2 = line[i + 2]
+            val lon2 = line[i + 3]
+            val segmentMeters = haversineMeters(lat1, lon1, lat2, lon2)
+            val match = segmentMatch(lat, lon, lat1, lon1, lat2, lon2)
+            if (match.crossTrackMeters < bestOffset) {
+                bestOffset = match.crossTrackMeters
+                bestAlong = cumulative + segmentMeters * match.fraction
+            }
+            cumulative += segmentMeters
+            i += 2
+        }
+        return PolylineMatch(bestAlong, bestOffset, cumulative)
+    }
+
     data class SegmentMatch(val crossTrackMeters: Double, val fraction: Double)
 
     fun segmentMatch(

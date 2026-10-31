@@ -2,20 +2,26 @@ import 'package:flutter/material.dart';
 
 import '../../../../core/utils/relative_time.dart';
 
-/// "Name  @username  . 5 menit lalu" on one line. Name and @username are a
-/// single ellipsizing run (the handle is cut first when space runs out) and
-/// the time stays whole beside it.
+/// "Name  @username › Jalur · 5 menit lalu" on one line, Threads style.
+/// Name, @username and the line [topic] are a single ellipsizing run (cut
+/// from the end when space runs out) and the time stays whole beside it.
 class ForumByline extends StatelessWidget {
   const ForumByline({
     required this.name,
     required this.time,
     super.key,
     this.handle,
+    this.topic,
+    this.topicColor,
     this.onTap,
   });
 
   final String name;
   final String? handle;
+
+  /// The line the post is tagged with, shown after a "›".
+  final String? topic;
+  final Color? topicColor;
   final DateTime time;
   final VoidCallback? onTap;
 
@@ -32,6 +38,15 @@ class ForumByline extends StatelessWidget {
                   TextSpan(text: name, style: textTheme.titleSmall),
                   if (handle != null)
                     TextSpan(text: '  $handle', style: textTheme.bodySmall),
+                  if (topic != null) ...<InlineSpan>[
+                    TextSpan(text: '  ›  ', style: textTheme.bodySmall),
+                    TextSpan(
+                      text: topic,
+                      style: textTheme.titleSmall?.copyWith(
+                        color: topicColor,
+                      ),
+                    ),
+                  ],
                 ],
               ),
               maxLines: 1,

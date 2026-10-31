@@ -5,6 +5,7 @@ import '../../data/providers/demo_data.dart';
 import '../../domain/entities/active_trip.dart';
 import '../../domain/entities/ride_detection.dart';
 import '../../domain/entities/transit_models.dart';
+import '../../domain/usecases/rail_distance.dart';
 import 'audio_route.dart';
 
 export 'audio_route.dart';
@@ -381,13 +382,20 @@ class NativeTripService {
       'vibrationEnabled': vibrationEnabled,
       'soundEnabled': soundEnabled,
       'stations': <Map<String, Object?>>[
-        for (final id in stationIds)
+        for (final (index, id) in stationIds.indexed)
           if (stationsById[id] case final station?)
             <String, Object?>{
               'id': station.id,
               'name': station.name,
               'latitude': station.latitude,
               'longitude': station.longitude,
+              // Real track to the next station, flattened lat,lon pairs —
+              // native measures progress along it instead of the straight
+              // line (see `TripProgressEngine.hopProgress`).
+              if (index + 1 < stationIds.length)
+                if (stationsById[stationIds[index + 1]] case final next?)
+                  if (railTrackBetween(station, next) case final track?)
+                    'track': <double>[for (final p in track) ...p],
             },
       ],
       'transferBoundaries': <Map<String, Object?>>[

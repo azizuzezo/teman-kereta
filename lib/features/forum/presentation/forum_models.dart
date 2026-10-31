@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../../domain/entities/social_models.dart';
+import 'forum_media.dart';
 
 /// A forum post, with an optional embedded [author] snapshot (populated via
 /// the `users(username, display_name, avatar_url)` nested select) and
@@ -16,6 +17,7 @@ class ForumPost {
     required this.commentCount,
     required this.createdAt,
     this.imageUrl,
+    this.media = const <ForumMedia>[],
     this.lineId,
     this.author,
     this.likedByMe = false,
@@ -23,11 +25,20 @@ class ForumPost {
 
   factory ForumPost.fromJson(Map<String, dynamic> json) {
     final authorJson = json['users'] as Map<String, dynamic>?;
+    final imageUrl = json['image_url'] as String?;
+    final media = <ForumMedia>[
+      for (final raw in (json['media'] as List<dynamic>?) ?? const <dynamic>[])
+        ?ForumMedia.fromJson(raw),
+    ];
     return ForumPost(
       id: json['id'] as String,
       userId: json['user_id'] as String,
       body: json['body'] as String,
-      imageUrl: json['image_url'] as String?,
+      imageUrl: imageUrl,
+      // Posts from before multi-media carry only `image_url`.
+      media: media.isEmpty && imageUrl != null && imageUrl.isNotEmpty
+          ? <ForumMedia>[ForumMedia(url: imageUrl, type: ForumMediaType.image)]
+          : media,
       lineId: json['line_id'] as String?,
       likeCount: (json['like_count'] as int?) ?? 0,
       commentCount: (json['comment_count'] as int?) ?? 0,
@@ -45,6 +56,9 @@ class ForumPost {
   final String userId;
   final String body;
   final String? imageUrl;
+
+  /// Photos and videos in posting order, `image_url` folded in for old posts.
+  final List<ForumMedia> media;
   final String? lineId;
   final int likeCount;
   final int commentCount;
@@ -63,6 +77,7 @@ class ForumPost {
       userId: userId,
       body: body ?? this.body,
       imageUrl: imageUrl,
+      media: media,
       lineId: lineId,
       likeCount: likeCount ?? this.likeCount,
       commentCount: commentCount ?? this.commentCount,

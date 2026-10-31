@@ -111,6 +111,41 @@ internal class TripNotifier(context: Context) {
     }
 
     /**
+     * About [TripProgressEngine.APPROACH_ALERT_RADIUS_METERS] out from a
+     * transfer station or the destination: the transit/arrival voice line,
+     * sounded ahead of the arrival gate (which needs the rider inside 120 m)
+     * so GPS jitter right at the platform can never swallow it. No bell —
+     * the bell belongs to "1 stasiun lagi" only. Shares its id with the
+     * arrival/transfer alert that follows, so the shade keeps only the
+     * latest of the two.
+     */
+    fun showApproachAlert(stationName: String, isTransfer: Boolean, vibrate: Boolean, sound: Boolean) {
+        if (isTransfer) {
+            post(
+                id = 4200,
+                title = "Sebentar lagi transit di $stationName",
+                body = "Bersiap turun dan pindah kereta di $stationName.",
+                vibrate = vibrate,
+                sound = sound,
+                voice = "transit_reminder",
+                spokenText = "Sebentar lagi transit di $stationName.",
+
+            )
+        } else {
+            post(
+                id = 4100,
+                title = "Sebentar lagi tiba di $stationName",
+                body = "Bersiap turun di $stationName.",
+                vibrate = vibrate,
+                sound = sound,
+                voice = "arrive_station",
+                spokenText = "Sebentar lagi tiba di $stationName.",
+
+            )
+        }
+    }
+
+    /**
      * Arrival at the trip's destination — the trip auto-finishes at this
      * point (see `ActiveTripController`), so this is the rider's summary,
      * not a "get ready" warning. Fired from here rather than Dart because

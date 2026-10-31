@@ -1,4 +1,3 @@
-import 'dart:typed_data';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
@@ -6,6 +5,7 @@ import 'package:uuid/uuid.dart';
 
 import '../../../app/config/app_environment.dart';
 import '../../account/presentation/account_controller.dart';
+import 'forum_media.dart';
 import 'forum_models.dart';
 
 const _pageSize = 20;
@@ -177,7 +177,7 @@ class ForumController extends AsyncNotifier<ForumFeedState> {
   /// Returns an error message on failure, or null on success.
   Future<String?> createPost(
     String body, {
-    Uint8List? imageBytes,
+    List<ForumMediaDraft> media = const <ForumMediaDraft>[],
     String? lineId,
   }) async {
     final userId = Supabase.instance.client.auth.currentUser?.id;
@@ -186,27 +186,40 @@ class ForumController extends AsyncNotifier<ForumFeedState> {
     if (trimmed.isEmpty) return 'Tulis sesuatu dulu sebelum posting.';
     try {
       final postId = const Uuid().v4();
-      String? imageUrl;
-      if (imageBytes != null) {
-        final path = '$userId/$postId/${const Uuid().v4()}.jpg';
-        await Supabase.instance.client.storage
-            .from('forum-post-images')
-            .uploadBinary(
-              path,
-              imageBytes,
-              fileOptions: const FileOptions(contentType: 'image/jpeg'),
-            );
-        imageUrl = Supabase.instance.client.storage
-            .from('forum-post-images')
-            .getPublicUrl(path);
+      final storage = Supabase.instance.client.storage.from(
+        'forum-post-media',
+      );
+      final uploaded = <ForumMedia>[];
+      for (final draft in media.take(forumMaxMedia)) {
+        final path = '$userId/$postId/${const Uuid().v4()}.${draft.extension}';
+        await storage.uploadBinary(
+          path,
+          await draft.file.readAsBytes(),
+          fileOptions: FileOptions(contentType: draft.contentType),
+        );
+        uploaded.add(
+          ForumMedia(
+            url: storage.getPublicUrl(path),
+            type: draft.type,
+            width: draft.width,
+            height: draft.height,
+            duration: draft.duration,
+            fit: draft.fit,
+          ),
+        );
       }
+      // Older app builds only know `image_url`: give them the first photo.
+      final firstImage = uploaded.where((m) => !m.isVideo).firstOrNull;
       await Supabase.instance.client
           .from('forum_posts')
           .insert(<String, Object?>{
             'id': postId,
             'user_id': userId,
             'body': trimmed,
-            'image_url': ?imageUrl,
+            'media': <Map<String, Object?>>[
+              for (final item in uploaded) item.toJson(),
+            ],
+            'image_url': ?firstImage?.url,
             'line_id': ?lineId,
           });
       await refresh();

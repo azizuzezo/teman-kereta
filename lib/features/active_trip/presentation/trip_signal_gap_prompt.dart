@@ -73,20 +73,32 @@ Future<void> showTripSignalGapPrompt(
 /// Watches for a pending gap and shows [showTripSignalGapPrompt] once per
 /// outage. Mixed into the app-shell watcher so it fires wherever the rider
 /// happens to be in the app when they reopen it.
+///
+/// Never more than one dialog at a time: a gap that turns up while one is
+/// already open is answered by that same dialog (acknowledging clears
+/// whatever native has pending), instead of stacking a second one on top.
 mixin TripSignalGapPromptMixin<T extends ConsumerStatefulWidget>
     on ConsumerState<T> {
   String? _promptedGapKey;
+  bool _promptOpen = false;
 
   void listenForSignalGapPrompts() {
     ref.listen(tripSignalGapProvider, (previous, next) {
-      if (next == null || next.key == _promptedGapKey) {
+      if (next == null || next.key == _promptedGapKey || _promptOpen) {
         return;
       }
       if (ref.read(activeTripControllerProvider) == null) {
         return;
       }
       _promptedGapKey = next.key;
-      unawaited(showTripSignalGapPrompt(context, ref, next));
+      _promptOpen = true;
+      unawaited(
+        showTripSignalGapPrompt(
+          context,
+          ref,
+          next,
+        ).whenComplete(() => _promptOpen = false),
+      );
     });
   }
 }

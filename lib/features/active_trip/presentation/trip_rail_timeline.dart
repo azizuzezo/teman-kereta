@@ -24,6 +24,7 @@ class TripRailTimeline extends StatefulWidget {
     required this.currentIndex,
     required this.hopFraction,
     required this.reduceMotion,
+    this.departed = false,
     super.key,
   });
 
@@ -32,6 +33,10 @@ class TripRailTimeline extends StatefulWidget {
 
   /// 0-1 progress from the current station toward the next one.
   final double hopFraction;
+
+  /// The train has left the current station: it renders as passed, and the
+  /// next one as the station being headed for.
+  final bool departed;
 
   /// True when the line-fill and pulse should render their end state
   /// immediately instead of animating: device reduce-motion, or the
@@ -96,21 +101,26 @@ class _TripRailTimelineState extends State<TripRailTimeline> {
         continue;
       }
 
-      final isCurrent = index == widget.currentIndex;
-      final isPast = index < widget.currentIndex;
+      final atCurrent = index == widget.currentIndex;
+      final isCurrent = atCurrent && !widget.departed;
+      final isPast =
+          index < widget.currentIndex || (atCurrent && widget.departed);
       final isDestination = index == total - 1;
       final station = widget.stations[index];
       children.add(
         _RailRow(
-          key: isCurrent ? _currentRowKey : null,
+          key: atCurrent ? _currentRowKey : null,
           name: station.name,
           isPast: isPast,
           isCurrent: isCurrent,
           isNext: index == widget.currentIndex + 1,
+          isHeadingTo: widget.departed && index == widget.currentIndex + 1,
           isDestination: isDestination,
           isLast: index == total - 1,
           transferInstruction: station.transferInstruction,
-          belowFraction: isCurrent ? widget.hopFraction : (isPast ? 1.0 : 0.0),
+          belowFraction: atCurrent
+              ? widget.hopFraction
+              : (isPast ? 1.0 : 0.0),
           reduceMotion: widget.reduceMotion,
         ),
       );
@@ -174,6 +184,7 @@ class _RailRow extends StatelessWidget {
     required this.name,
     required this.isPast,
     required this.isCurrent,
+    this.isHeadingTo = false,
     required this.isNext,
     required this.isDestination,
     required this.isLast,
@@ -187,6 +198,9 @@ class _RailRow extends StatelessWidget {
   final bool isPast;
   final bool isCurrent;
   final bool isNext;
+
+  /// The train is between the previous station and this one.
+  final bool isHeadingTo;
   final bool isDestination;
   final bool isLast;
   // Non-null exactly when this row is a real transfer station: gives it a
@@ -248,7 +262,7 @@ class _RailRow extends StatelessWidget {
                     iconColor: iconColor,
                     ring:
                         !isPast && !isCurrent && !isDestination && !isTransfer,
-                    pulse: isCurrent,
+                    pulse: isCurrent || isHeadingTo,
                     reduceMotion: reduceMotion,
                   ),
                   if (!isLast)
@@ -308,9 +322,11 @@ class _RailRow extends StatelessWidget {
                           ),
                         ] else if (isNext) ...<Widget>[
                           const SizedBox(width: 8),
-                          const TkPill(
-                            label: 'Berikutnya',
-                            tone: TkPillTone.neutral,
+                          TkPill(
+                            label: isHeadingTo ? 'Menuju' : 'Berikutnya',
+                            tone: isHeadingTo
+                                ? TkPillTone.primary
+                                : TkPillTone.neutral,
                             dense: true,
                           ),
                         ],

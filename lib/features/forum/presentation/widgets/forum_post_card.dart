@@ -1,7 +1,6 @@
 import 'dart:async';
 import 'dart:math' as math;
 
-import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -15,7 +14,7 @@ import '../forum_format.dart';
 import '../forum_models.dart';
 import '../forum_session.dart';
 import 'forum_byline.dart';
-import 'forum_line_chip.dart';
+import 'forum_media_gallery.dart';
 import 'forum_moderation_actions.dart';
 import 'mentions.dart';
 
@@ -242,7 +241,9 @@ class _ForumPostCardState extends ConsumerState<ForumPostCard>
     final threaded = widget.threaded;
     final label = forumAuthorLabel(post.author);
     final isOwner = currentForumUserId() == post.userId;
-    final hasImage = post.imageUrl != null && post.imageUrl!.isNotEmpty;
+    final line = post.lineId == null
+        ? null
+        : ref.watch(forumLineOptionsByIdProvider).asData?.value[post.lineId];
 
     final avatar = Semantics(
       button: true,
@@ -270,6 +271,8 @@ class _ForumPostCardState extends ConsumerState<ForumPostCard>
       child: ForumByline(
         name: label.name,
         handle: label.handle,
+        topic: line?.name,
+        topicColor: line?.resolvedColor,
         time: post.createdAt,
         onTap: _openProfile,
       ),
@@ -289,15 +292,18 @@ class _ForumPostCardState extends ConsumerState<ForumPostCard>
                   ?.copyWith(color: tk.text),
             ),
           ),
-        if (post.lineId != null) _PostLineTag(lineId: post.lineId!),
-        if (hasImage)
+        if (post.media.isNotEmpty)
           Padding(
-            padding: const EdgeInsets.only(top: 10, right: 16),
-            child: _PostImage(
-              url: post.imageUrl!,
-              burst: _heartBurst,
-              onTap: threaded ? null : _openPost,
-              onDoubleTap: _onDoubleTapImage,
+            padding: const EdgeInsets.only(top: 10),
+            child: Stack(
+              alignment: Alignment.center,
+              children: <Widget>[
+                ForumMediaGallery(
+                  media: post.media,
+                  onDoubleTap: _onDoubleTapImage,
+                ),
+                IgnorePointer(child: _HeartBurst(burst: _heartBurst)),
+              ],
             ),
           ),
         Transform.translate(
@@ -487,111 +493,34 @@ class _ActionButton extends StatelessWidget {
   }
 }
 
-/// The post's line tag, resolved through [forumLineOptionsByIdProvider].
-/// Renders nothing while lines are loading or if the id doesn't resolve (a
-/// line deactivated after the post was made).
-class _PostLineTag extends ConsumerWidget {
-  const _PostLineTag({required this.lineId});
+/// The heart that pops over a post's media on a double-tap like.
+class _HeartBurst extends StatelessWidget {
+  const _HeartBurst({required this.burst});
 
-  final String lineId;
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final option = ref
-        .watch(forumLineOptionsByIdProvider)
-        .asData
-        ?.value[lineId];
-    if (option == null) return const SizedBox.shrink();
-    return Padding(
-      padding: const EdgeInsets.only(top: 8),
-      child: Align(
-        alignment: Alignment.centerLeft,
-        child: ForumLineChip(label: option.code, color: option.resolvedColor),
-      ),
-    );
-  }
-}
-
-class _PostImage extends StatelessWidget {
-  const _PostImage({
-    required this.url,
-    required this.burst,
-    required this.onDoubleTap,
-    required this.onTap,
-  });
-
-  final String url;
   final Animation<double> burst;
-  final VoidCallback? onTap;
-  final VoidCallback onDoubleTap;
 
   @override
   Widget build(BuildContext context) {
-    final tk = context.tk;
-    return Semantics(
-      image: true,
-      label: 'Foto postingan. Ketuk dua kali untuk menyukai.',
-      child: GestureDetector(
-        onTap: onTap,
-        onDoubleTap: onDoubleTap,
-        child: Container(
-          clipBehavior: Clip.antiAlias,
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(TkRadius.control),
-            border: Border.all(color: tk.border),
-          ),
-          child: ConstrainedBox(
-            constraints: const BoxConstraints(maxHeight: 360),
-            child: Stack(
-              alignment: Alignment.center,
-              children: <Widget>[
-                CachedNetworkImage(
-                  imageUrl: url,
-                  fit: BoxFit.cover,
-                  width: double.infinity,
-                  placeholder: (context, url) => AspectRatio(
-                    aspectRatio: 4 / 3,
-                    child: ColoredBox(color: tk.surfaceAlt),
-                  ),
-                  errorWidget: (context, url, error) => AspectRatio(
-                    aspectRatio: 4 / 3,
-                    child: ColoredBox(
-                      color: tk.surfaceAlt,
-                      child: Icon(
-                        Icons.broken_image_outlined,
-                        color: tk.textMuted,
-                      ),
-                    ),
-                  ),
-                ),
-                AnimatedBuilder(
-                  animation: burst,
-                  builder: (context, child) {
-                    final t = burst.value;
-                    if (t == 0 || t == 1) return const SizedBox.shrink();
-                    final scale = t < 0.4 ? t / 0.4 : 1.0;
-                    final opacity = t < 0.7 ? 1.0 : 1 - (t - 0.7) / 0.3;
-                    return Opacity(
-                      opacity: opacity.clamp(0.0, 1.0),
-                      child: Transform.scale(
-                        scale: 0.7 + 0.5 * scale,
-                        child: const Icon(
-                          Icons.favorite_rounded,
-                          color: Colors.white,
-                          size: 88,
-                          shadows: <Shadow>[
-                            Shadow(color: Colors.black38, blurRadius: 16),
-                          ],
-                        ),
-                      ),
-                    );
-                  },
-                ),
-              ],
+    return AnimatedBuilder(
+      animation: burst,
+      builder: (context, child) {
+        final t = burst.value;
+        if (t == 0 || t == 1) return const SizedBox.shrink();
+        final scale = t < 0.4 ? t / 0.4 : 1.0;
+        final opacity = t < 0.7 ? 1.0 : 1 - (t - 0.7) / 0.3;
+        return Opacity(
+          opacity: opacity.clamp(0.0, 1.0),
+          child: Transform.scale(
+            scale: 0.7 + 0.5 * scale,
+            child: const Icon(
+              Icons.favorite_rounded,
+              color: Colors.white,
+              size: 88,
+              shadows: <Shadow>[Shadow(color: Colors.black38, blurRadius: 16)],
             ),
           ),
-        ),
-      ),
+        );
+      },
     );
   }
 }

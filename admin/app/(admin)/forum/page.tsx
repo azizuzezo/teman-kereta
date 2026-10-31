@@ -35,7 +35,7 @@ export default async function ForumPage({
   let query = supabase
     .from("forum_posts")
     .select(
-      "id, body, image_url, like_count, comment_count, status, created_at, users(display_name, email)"
+      "id, body, image_url, media, like_count, comment_count, status, created_at, users(display_name, email)"
     )
     .order("created_at", { ascending: false })
     .limit(100);
@@ -92,7 +92,9 @@ export default async function ForumPage({
               badges={
                 <>
                   <StatusBadge status={post.status} />
-                  {post.image_url && <Badge tone="neutral">Ada gambar</Badge>}
+                  {mediaLabel(post) && (
+                    <Badge tone="neutral">{mediaLabel(post)}</Badge>
+                  )}
                 </>
               }
               meta={`${author?.email ? `${author.email} · ` : ""}${formatDate(
@@ -115,4 +117,15 @@ export default async function ForumPage({
       </RecordList>
     </div>
   );
+}
+
+/** "2 foto, 1 video" for a post's attachments; `image_url` alone for posts made before multi-media. */
+function mediaLabel(post: { image_url: string | null; media: unknown }): string | null {
+  const media = Array.isArray(post.media) ? (post.media as { type?: string }[]) : [];
+  if (media.length === 0) return post.image_url ? "Ada gambar" : null;
+  const videos = media.filter((item) => item.type === "video").length;
+  const photos = media.length - videos;
+  return [photos ? `${photos} foto` : null, videos ? `${videos} video` : null]
+    .filter(Boolean)
+    .join(", ");
 }

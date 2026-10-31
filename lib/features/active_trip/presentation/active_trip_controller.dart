@@ -22,6 +22,7 @@ import '../../live_map/presentation/native_gps_fix.dart';
 import '../../settings/presentation/settings_controller.dart';
 import 'active_trip_stations.dart';
 import 'trip_battery_warning.dart';
+import 'trip_hop_progress.dart';
 import 'trip_signal_gap.dart';
 
 /// How often the rider's own position is reported while onBoard, when
@@ -43,6 +44,11 @@ class ActiveTripController extends Notifier<ActiveTripSession?> {
   late final PreferencesStore _store;
   Timer? _crowdReportTimer;
   Timer? _nativeSyncTimer;
+
+  /// Session the rider already answered "Ya, masih di kereta" for. Later
+  /// outages on the same trip (every tunnel, every dead zone) are cleared
+  /// silently instead of asking again.
+  String? _gapConfirmedSessionId;
 
   @override
   ActiveTripSession? build() {
@@ -227,8 +233,17 @@ class ActiveTripController extends Notifier<ActiveTripSession?> {
     // the trip up to wherever the rider really is, so this only decides
     // whether to *ask* them to confirm it (see `TripSignalGapPrompt`).
     final gap = TripSignalGap.fromNative(native['locationGap']);
-    if (gap != null && ref.read(tripSignalGapProvider)?.key != gap.key) {
+    if (gap != null && updated.id == _gapConfirmedSessionId) {
+      await ref.read(nativeTripServiceProvider).acknowledgeLocationGap();
+      if (!ref.mounted) return;
+    } else if (gap != null &&
+        ref.read(tripSignalGapProvider)?.key != gap.key) {
       ref.read(tripSignalGapProvider.notifier).set(gap);
+    }
+
+    final hop = TripHopProgress.fromNative(native);
+    if (hop != ref.read(tripHopProgressProvider)) {
+      ref.read(tripHopProgressProvider.notifier).set(hop);
     }
 
     final locationStatus = native['locationStatus'] as String?;
@@ -464,6 +479,7 @@ class ActiveTripController extends Notifier<ActiveTripSession?> {
     await ref.read(nativeTripServiceProvider).stop();
     _stopTimers();
     ref.read(tripSignalGapProvider.notifier).set(null);
+    ref.read(tripHopProgressProvider.notifier).set(null);
     await _store.setActiveTripSnapshot(null);
     state = null;
   }
@@ -486,6 +502,7 @@ class ActiveTripController extends Notifier<ActiveTripSession?> {
     await ref.read(nativeTripServiceProvider).stop();
     _stopTimers();
     ref.read(tripSignalGapProvider.notifier).set(null);
+    ref.read(tripHopProgressProvider.notifier).set(null);
     await _store.setActiveTripSnapshot(null);
     await _logHistory(current);
   }
@@ -578,6 +595,9 @@ class ActiveTripController extends Notifier<ActiveTripSession?> {
   /// continue.
   Future<void> acknowledgeLocationGap({required bool stillOnBoard}) async {
     ref.read(tripSignalGapProvider.notifier).set(null);
+    if (stillOnBoard) {
+      _gapConfirmedSessionId = state?.id;
+    }
     await ref.read(nativeTripServiceProvider).acknowledgeLocationGap();
     if (!stillOnBoard) {
       await cancel();

@@ -30,10 +30,13 @@ import android.location.Location
  *    "signal died at Universitas Pancasila, came back at Depok Baru"
  *    resume at Depok Baru instead of waiting forever for Lenteng Agung.
  *
- * Cumulative distance is floored at the route's own station-to-station
- * length for whatever index the rider has reached ([routeDistanceMeters]),
- * so a catch-up jump reports the real distance travelled rather than the
- * straight line the GPS gap happened to record.
+ * Distance is measured along the rails, not GPS-to-GPS: each fix is
+ * projected onto the real track of the hop the rider is on (sent from Dart
+ * per station pair, see `railTrackBetween`), and the odometer is the track
+ * length of every completed hop plus how far along the current one the fix
+ * sits ([hopProgress]). A hop with no known geometry falls back to the
+ * straight line between its stations. This also makes a catch-up jump
+ * report the real distance travelled rather than what the GPS gap recorded.
  */
 internal class TripProgressEngine(
     private val context: Context,
@@ -55,6 +58,8 @@ internal class TripProgressEngine(
     private var proximityStreakIndex = -1
     private var proximityStreakAtStation = false
     private var lastDistanceToCandidateMeters: Double? = null
+    private var approachStreak = 0
+    private var approachStreakIndex = -1
 
     fun shutdown() {
         notifier.shutdown()
@@ -66,19 +71,13 @@ internal class TripProgressEngine(
      * when the fix itself had no usable reported speed (`hasSpeed()` false, or a flat 0 some
      * devices/emulators report regardless of real movement); a genuine reported speed always wins.
      */
-    fun onAcceptedFix(location: Location, deltaMeters: Double, fallbackSpeedMps: Double? = null) {
+    fun onAcceptedFix(location: Location, fallbackSpeedMps: Double? = null) {
         val stations = NativeStateStore.routeStations(context)
         if (stations.isEmpty()) return
 
         val currentIndex = NativeStateStore.currentStationIndex(context)
         val lastIndex = stations.size - 1
-        // Never below the route length already covered: a signal gap that
-        // swallowed every intermediate fix must still leave the odometer
-        // reading what the rider actually travelled, not what GPS saw.
-        val distanceSoFar = maxOf(
-            NativeStateStore.distanceMeters(context) + deltaMeters.coerceAtLeast(0.0),
-            routeDistanceMeters(stations, currentIndex),
-        )
+        val storedDistance = NativeStateStore.distanceMeters(context)
         // `fallbackSpeedMps` is only non-null when the caller already
         // decided the fix's own reported speed isn't usable (see
         // ActiveTripLocationService.MIN_USABLE_REPORTED_SPEED_MPS) — so a
@@ -96,9 +95,17 @@ internal class TripProgressEngine(
             // again without the arrival trigger ever having fired (that
             // path is handled below, before this branch would be reached,
             // so reaching here means arrival already fired normally).
-            NativeStateStore.applyProgressUpdate(context, distanceMeters = distanceSoFar, speedKmh = speedKmh)
+            NativeStateStore.applyProgressUpdate(context, distanceMeters = storedDistance, speedKmh = speedKmh)
             return
         }
+
+        val hop = hopProgress(location, stations, currentIndex)
+        // The odometer only grows: a fix that projects a little behind the
+        // last one (GPS noise, a stop) must not wind it back.
+        val distanceSoFar = maxOf(storedDistance, routeDistanceMeters(stations, currentIndex) + hop.alongMeters)
+        // Latched until the next station is reached, so a train standing at
+        // a signal just past the platform still reads "in transit".
+        val departed = NativeStateStore.departed(context) || hop.alongMeters >= DEPARTED_METERS
 
         val nextIndex = currentIndex + 1
         val next = stations[nextIndex]
@@ -126,14 +133,27 @@ internal class TripProgressEngine(
                 distanceMeters = distanceSoFar,
                 speedKmh = speedKmh,
                 minDestinationDistanceMeters = newMin,
+                distanceToNextMeters = hop.remainingMeters,
+                departed = departed,
+                hopFraction = hop.fraction,
             )
         } else {
-            NativeStateStore.applyProgressUpdate(context, distanceMeters = distanceSoFar, speedKmh = speedKmh)
+            NativeStateStore.applyProgressUpdate(
+                context,
+                distanceMeters = distanceSoFar,
+                speedKmh = speedKmh,
+                distanceToNextMeters = hop.remainingMeters,
+                departed = departed,
+                hopFraction = hop.fraction,
+            )
         }
 
         if (location.accuracy > PROXIMITY_ACCURACY_CEILING_METERS) {
             return
         }
+
+        announceDepartureFromTransfer(location, stations, currentIndex)
+        announceApproach(location, stations, currentIndex)
 
         val candidate = resolveReachedIndex(location, stations, currentIndex)
         if (candidate == null) {
@@ -248,20 +268,145 @@ internal class TripProgressEngine(
         return null
     }
 
+    /**
+     * The 200 m transit/arrival announcement before the next transfer station or the
+     * destination, whichever comes first. Measured straight to that station
+     * rather than waiting for [advanceStop], so it does not depend on the
+     * tight 120 m arrival gate surviving GPS jitter at the platform. Two
+     * agreeing fixes are required so a single wild fix can't ring it early;
+     * sounds once per station, persisted so a service restart can't repeat it.
+     */
+    private fun announceApproach(
+        location: Location,
+        stations: List<NativeStateStore.RouteStation>,
+        currentIndex: Int,
+    ) {
+        val lastIndex = stations.size - 1
+        val transferIndex = NativeStateStore.transferBoundaries(context)
+            .filter { it.index > currentIndex }
+            .minOfOrNull { it.index }
+        val keyIndex = transferIndex ?: lastIndex
+        if (NativeStateStore.approachAlertedIndex(context) == keyIndex) return
+        val station = stations[keyIndex]
+        val distance = GeoMath.haversineMeters(location.latitude, location.longitude, station.latitude, station.longitude)
+        if (keyIndex != approachStreakIndex || distance > APPROACH_ALERT_RADIUS_METERS) {
+            approachStreakIndex = keyIndex
+            approachStreak = if (distance > APPROACH_ALERT_RADIUS_METERS) 0 else 1
+            return
+        }
+        approachStreak += 1
+        if (approachStreak < REQUIRED_CONSECUTIVE_FIXES) return
+        approachStreak = 0
+        NativeStateStore.setApproachAlertedIndex(context, keyIndex)
+        val isTransfer = transferIndex != null
+        val name = if (isTransfer) {
+            station.name
+        } else {
+            val destinationId = NativeStateStore.destinationStationId(context)
+            stations.firstOrNull { it.id == destinationId }?.name ?: station.name
+        }
+        notifier.showApproachAlert(
+            name,
+            isTransfer = isTransfer,
+            vibrate = NativeStateStore.vibrationEnabled(context),
+            sound = NativeStateStore.soundEnabled(context),
+        )
+    }
+
+    /**
+     * The countdown that arriving at a transfer station swallows. Arrival
+     * there announces only "saatnya transit", so when the destination (or
+     * the next transfer) is within the alert threshold of it — say one
+     * station after the transfer — the "1 stasiun lagi" voice and its bell
+     * never sounded at all. It is announced here instead, once the rider is
+     * demonstrably on the next train: [DEPARTURE_RADIUS_METERS] away from
+     * the transfer station.
+     */
+    private fun announceDepartureFromTransfer(
+        location: Location,
+        stations: List<NativeStateStore.RouteStation>,
+        currentIndex: Int,
+    ) {
+        if (NativeStateStore.tripState(context) != "transferring") return
+        if (NativeStateStore.departureAlertedIndex(context) == currentIndex) return
+        val here = stations[currentIndex]
+        val distance = GeoMath.haversineMeters(location.latitude, location.longitude, here.latitude, here.longitude)
+        if (distance < DEPARTURE_RADIUS_METERS) return
+        NativeStateStore.setDepartureAlertedIndex(context, currentIndex)
+        // Already close enough for the approach alert: that one says more.
+        if (NativeStateStore.approachAlertedIndex(context) > currentIndex) return
+
+        val vibrate = NativeStateStore.vibrationEnabled(context)
+        val sound = NativeStateStore.soundEnabled(context)
+        val threshold = NativeStateStore.stopAlertThreshold(context)
+        val boundary = NativeStateStore.transferBoundaries(context)
+            .filter { it.index > currentIndex }
+            .minByOrNull { it.index }
+        if (boundary != null) {
+            val stopsToTransfer = boundary.index - currentIndex
+            if (stopsToTransfer in 1..threshold) {
+                val transferStation = stations.getOrNull(boundary.index)?.name ?: return
+                notifier.showTransferApproachingAlert(stopsToTransfer, transferStation, vibrate, sound)
+            }
+            return
+        }
+        val remaining = stations.size - 1 - currentIndex
+        if (remaining in 1..threshold) {
+            val destinationId = NativeStateStore.destinationStationId(context)
+            val destinationName = stations.firstOrNull { it.id == destinationId }?.name ?: stations.last().name
+            notifier.showStopAlert(remaining, destinationName, vibrate, sound)
+        }
+    }
+
     private data class Candidate(val index: Int, val distanceMeters: Double, val atStation: Boolean)
 
-    /** Cumulative straight-line route length from the origin up to [index]. */
+    /** Cumulative route length along the rails from the origin up to [index]. */
     private fun routeDistanceMeters(stations: List<NativeStateStore.RouteStation>, index: Int): Double {
         var total = 0.0
         for (hop in 0 until index.coerceAtMost(stations.size - 1)) {
-            total += GeoMath.haversineMeters(
-                stations[hop].latitude,
-                stations[hop].longitude,
-                stations[hop + 1].latitude,
-                stations[hop + 1].longitude,
-            )
+            total += hopLengthMeters(stations, hop)
         }
         return total
+    }
+
+    /** Length of the hop from station [index] to the next: its track, or the straight line. */
+    private fun hopLengthMeters(stations: List<NativeStateStore.RouteStation>, index: Int): Double {
+        val from = stations[index]
+        val to = stations[index + 1]
+        val track = from.trackToNext
+        if (track != null) return GeoMath.projectOntoPolyline(from.latitude, from.longitude, track).lengthMeters
+        return GeoMath.haversineMeters(from.latitude, from.longitude, to.latitude, to.longitude)
+    }
+
+    private data class HopProgress(val alongMeters: Double, val remainingMeters: Double) {
+        /** 0 at the station just reached, 1 at the next. */
+        val fraction: Double
+            get() = (alongMeters + remainingMeters).let { if (it > 0) alongMeters / it else 0.0 }
+    }
+
+    /**
+     * How far the fix is along the hop from station [index] to the next, and
+     * how far is left, both along the track. A fix too far off the track to
+     * be on it (or a hop with no geometry) is measured by straight line to
+     * the next station instead.
+     */
+    private fun hopProgress(
+        location: Location,
+        stations: List<NativeStateStore.RouteStation>,
+        index: Int,
+    ): HopProgress {
+        val from = stations[index]
+        val to = stations[index + 1]
+        val track = from.trackToNext
+        if (track != null) {
+            val match = GeoMath.projectOntoPolyline(location.latitude, location.longitude, track)
+            if (match.offsetMeters <= CORRIDOR_RADIUS_METERS) {
+                return HopProgress(match.alongMeters, (match.lengthMeters - match.alongMeters).coerceAtLeast(0.0))
+            }
+        }
+        val length = GeoMath.haversineMeters(from.latitude, from.longitude, to.latitude, to.longitude)
+        val remaining = GeoMath.haversineMeters(location.latitude, location.longitude, to.latitude, to.longitude)
+        return HopProgress((length - remaining).coerceIn(0.0, length), remaining)
     }
 
     /**
@@ -305,12 +450,18 @@ internal class TripProgressEngine(
             nextStationName = followingStation?.name,
             remainingStations = remaining,
             pendingCompletionLog = if (nextState == "arrived") true else null,
+            distanceToNextMeters = if (nextIndex < lastIndex) hopLengthMeters(stations, nextIndex) else 0.0,
+            departed = false,
+            hopFraction = 0.0,
         )
 
         onStationAdvanced()
 
         val vibrate = NativeStateStore.vibrationEnabled(context)
-        val sound = NativeStateStore.soundEnabled(context)
+        val soundEnabled = NativeStateStore.soundEnabled(context)
+        // The 200 m approach alert already announced this station; the
+        // arrival/transfer notification still posts, silently.
+        val sound = soundEnabled && NativeStateStore.approachAlertedIndex(context) != nextIndex
         val threshold = NativeStateStore.stopAlertThreshold(context)
 
         when {
@@ -386,5 +537,14 @@ internal class TripProgressEngine(
         private const val MIN_SEGMENT_FRACTION = 0.08
         private const val OVERSHOOT_WATCH_RADIUS_METERS = 300.0
         private const val OVERSHOOT_REGROWTH_METERS = 400.0
+        // Ahead of ARRIVAL_RADIUS_METERS on purpose: the announcement must not wait
+        // for the arrival gate, which jitter at the platform can delay.
+        const val APPROACH_ALERT_RADIUS_METERS = 200.0
+        // Wide enough that walking a long interchange (Manggarai) does not
+        // count as having left on the next train.
+        private const val DEPARTURE_RADIUS_METERS = 500.0
+        // Along the track from the station just reached: past this the
+        // train has left it, and the trip reads "dalam perjalanan".
+        private const val DEPARTED_METERS = 300.0
     }
 }

@@ -1,7 +1,7 @@
 name: teman_kereta
 description: Pendamping perjalanan KRL yang berjalan local-first dan offline-capable.
 publish_to: none
-version: 1.1.1+21
+version: 1.2.0+22
 
 
 environment:
@@ -48,6 +48,7 @@ dependencies:
   supabase_flutter: ^2.16.0
   url_launcher: ^6.3.2
   uuid: ^4.6.0
+  video_player: ^2.14.1
 
 dev_dependencies:
   flutter_test:

@@ -142,10 +142,15 @@ void main() {
     handle.dispose();
   });
 
-  testWidgets('renders the line tag once lines have loaded', (tester) async {
+  testWidgets('names the line in the byline once lines have loaded', (
+    tester,
+  ) async {
     await _pump(tester, _post(lineId: 'bogor'));
     await tester.pump();
-    expect(find.text('BGR'), findsOneWidget);
+    expect(
+      find.textContaining('›  Lin Bogor', findRichText: true),
+      findsOneWidget,
+    );
   });
 
   testWidgets('threaded detail head renders with its thread line', (

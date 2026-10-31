@@ -228,6 +228,12 @@ class ActiveTripLocationService : Service() {
         if (gapMs < SIGNAL_GAP_THRESHOLD_MS) return
         val movedMeters = GeoMath.haversineMeters(previousLat, previousLng, location.latitude, location.longitude)
         if (movedMeters < SIGNAL_GAP_MIN_DISTANCE_METERS) return
+        // One outage, one record. The baseline above only moves on an
+        // *accepted* fix, so after a gap every rejected (low-accuracy) fix
+        // that follows — one every ~3s on a train — used to look like a
+        // fresh outage with a new `toAt`, and each one popped another
+        // "masih di kereta?" dialog on top of the last.
+        if (NativeStateStore.lastLocationGapFromAt(this) == previousAtMs) return
         NativeStateStore.recordLocationGap(
             this,
             fromLatitude = previousLat,
@@ -303,7 +309,6 @@ class ActiveTripLocationService : Service() {
             location.hasSpeed() && location.speed > MIN_USABLE_REPORTED_SPEED_MPS
         progressEngine?.onAcceptedFix(
             location,
-            deltaMeters,
             fallbackSpeedMps = if (hasUsableReportedSpeed) null else derivedSpeedMps,
         )
     }

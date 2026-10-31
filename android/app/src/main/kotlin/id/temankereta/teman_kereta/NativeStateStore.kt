@@ -74,6 +74,11 @@ internal object NativeStateStore {
     const val ACTIVE_GAP_TO_LONGITUDE = "active_trip.location_gap.to_longitude"
     const val ACTIVE_GAP_TO_AT = "active_trip.location_gap.to_at_epoch_ms"
     const val ACTIVE_GAP_DISTANCE_METERS = "active_trip.location_gap.distance_meters"
+    const val ACTIVE_APPROACH_ALERTED_INDEX = "active_trip.approach_alerted_index"
+    const val ACTIVE_DEPARTURE_ALERTED_INDEX = "active_trip.departure_alerted_index"
+    const val ACTIVE_DISTANCE_TO_NEXT_METERS = "active_trip.distance_to_next_meters"
+    const val ACTIVE_DEPARTED = "active_trip.departed"
+    const val ACTIVE_HOP_FRACTION = "active_trip.hop_fraction"
 
     const val NEXT_HAS_DATA = "next_departure.has_data"
     const val NEXT_STATION = "next_departure.station"
@@ -164,6 +169,11 @@ internal object NativeStateStore {
         ACTIVE_GAP_TO_LONGITUDE,
         ACTIVE_GAP_TO_AT,
         ACTIVE_GAP_DISTANCE_METERS,
+        ACTIVE_APPROACH_ALERTED_INDEX,
+        ACTIVE_DEPARTURE_ALERTED_INDEX,
+        ACTIVE_DISTANCE_TO_NEXT_METERS,
+        ACTIVE_DEPARTED,
+        ACTIVE_HOP_FRACTION,
     )
 
     fun preferences(context: Context): SharedPreferences =
@@ -287,6 +297,13 @@ internal object NativeStateStore {
         if (!isStaleProgress) {
             data.stringIfPresent("state")?.let { editor.putString(ACTIVE_STATE, it) }
             if (incomingIndex != null) {
+                // A manual "Lanjut" moved the trip to a new station: the
+                // hop progress measured for the old one no longer applies.
+                if (incomingIndex != prefs.getInt(ACTIVE_CURRENT_STATION_INDEX, 0)) {
+                    editor.putBoolean(ACTIVE_DEPARTED, false)
+                    editor.remove(ACTIVE_DISTANCE_TO_NEXT_METERS)
+                    editor.remove(ACTIVE_HOP_FRACTION)
+                }
                 editor.putInt(ACTIVE_CURRENT_STATION_INDEX, incomingIndex)
             }
             // The odometer only ever grows, for the same reason: a restored
@@ -409,6 +426,8 @@ internal object NativeStateStore {
         val name: String,
         val latitude: Double,
         val longitude: Double,
+        /** Real track to the next station as flattened lat,lon pairs, or null (straight line). */
+        val trackToNext: DoubleArray? = null,
     )
 
     data class TransferBoundaryDetail(
@@ -426,7 +445,11 @@ internal object NativeStateStore {
                     .put("id", id)
                     .put("name", station.string("name").orEmpty().ifEmpty { id })
                     .put("latitude", station.double("latitude", "lat") ?: 0.0)
-                    .put("longitude", station.double("longitude", "lng", "lon") ?: 0.0),
+                    .put("longitude", station.double("longitude", "lng", "lon") ?: 0.0)
+                    .apply {
+                        val track = (station.value("track") as? List<*>)?.mapNotNull { (it as? Number)?.toDouble() }
+                        if (track != null && track.size >= 4 && track.size % 2 == 0) put("track", JSONArray(track))
+                    },
             )
         }
         return array.toString()
@@ -443,6 +466,9 @@ internal object NativeStateStore {
                     name = obj.optString("name", obj.getString("id")),
                     latitude = obj.getDouble("latitude"),
                     longitude = obj.getDouble("longitude"),
+                    trackToNext = obj.optJSONArray("track")?.let { track ->
+                        DoubleArray(track.length()) { track.getDouble(it) }
+                    },
                 )
             }
         } catch (error: JSONException) {
@@ -522,6 +548,9 @@ internal object NativeStateStore {
         }
     }
 
+    fun departed(context: Context): Boolean =
+        preferences(context).getBoolean(ACTIVE_DEPARTED, false)
+
     fun minDestinationDistanceMeters(context: Context): Double? {
         val prefs = preferences(context)
         return if (prefs.contains(ACTIVE_MIN_DESTINATION_DISTANCE_METERS)) {
@@ -567,6 +596,29 @@ internal object NativeStateStore {
             .apply()
     }
 
+    /// `fromAt` of the most recently recorded gap, answered or not — lets
+    /// the service tell a new outage from more fixes after the same one.
+    fun lastLocationGapFromAt(context: Context): Long? =
+        preferences(context).optionalLong(ACTIVE_GAP_FROM_AT)
+
+    /// Index of the transfer/destination station whose 200 m "segera tiba"
+    /// alert has already sounded, or -1.
+    fun approachAlertedIndex(context: Context): Int =
+        preferences(context).getInt(ACTIVE_APPROACH_ALERTED_INDEX, -1)
+
+    fun setApproachAlertedIndex(context: Context, index: Int) {
+        preferences(context).edit().putInt(ACTIVE_APPROACH_ALERTED_INDEX, index).apply()
+    }
+
+    /// Index of the transfer station whose post-departure countdown has
+    /// already sounded, or -1.
+    fun departureAlertedIndex(context: Context): Int =
+        preferences(context).getInt(ACTIVE_DEPARTURE_ALERTED_INDEX, -1)
+
+    fun setDepartureAlertedIndex(context: Context, index: Int) {
+        preferences(context).edit().putInt(ACTIVE_DEPARTURE_ALERTED_INDEX, index).apply()
+    }
+
     private fun locationGap(context: Context): Map<String, Any?>? {
         val prefs = preferences(context)
         if (!prefs.getBoolean(ACTIVE_GAP_PENDING, false)) return null
@@ -603,8 +655,16 @@ internal object NativeStateStore {
         minDestinationDistanceMeters: Double? = null,
         pendingCompletionLog: Boolean? = null,
         pendingMissedLog: Boolean? = null,
+        distanceToNextMeters: Double? = null,
+        departed: Boolean? = null,
+        hopFraction: Double? = null,
     ) {
         val editor = preferences(context).edit()
+        if (hopFraction != null) editor.putFloat(ACTIVE_HOP_FRACTION, hopFraction.toFloat())
+        if (distanceToNextMeters != null) {
+            editor.putLong(ACTIVE_DISTANCE_TO_NEXT_METERS, java.lang.Double.doubleToRawLongBits(distanceToNextMeters))
+        }
+        if (departed != null) editor.putBoolean(ACTIVE_DEPARTED, departed)
         editor.putLong(ACTIVE_DISTANCE_METERS, java.lang.Double.doubleToRawLongBits(distanceMeters))
         if (speedKmh != null) editor.putFloat(ACTIVE_SPEED_KMH, speedKmh)
         if (currentStationIndex != null) {
@@ -668,6 +728,9 @@ internal object NativeStateStore {
             "pendingCompletionLog" to pendingCompletion,
             "pendingMissedDestinationLog" to pendingMissed,
             "locationGap" to locationGap(context),
+            "distanceToNextMeters" to prefs.optionalDouble(ACTIVE_DISTANCE_TO_NEXT_METERS),
+            "departed" to prefs.getBoolean(ACTIVE_DEPARTED, false),
+            "hopFraction" to prefs.optionalFloat(ACTIVE_HOP_FRACTION)?.toDouble(),
         )
     }
 

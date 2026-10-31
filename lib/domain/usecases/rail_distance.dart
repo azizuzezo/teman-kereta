@@ -114,6 +114,58 @@ double? railTrackDistanceMeters(Station a, Station b) {
   return best;
 }
 
+/// The stretch of real track between two *adjacent* stations, from [a] to
+/// [b], as `[lat, lon]` points — what native trip tracking projects GPS
+/// fixes onto, so distance travelled and distance left are measured along
+/// the rails rather than straight from station to station.
+///
+/// Null when no line's geometry plausibly joins the pair (same tests as
+/// [railTrackDistanceMeters], plus the adjacent-station length bound), in
+/// which case the caller falls back to the straight line.
+List<List<double>>? railTrackBetween(Station a, Station b) {
+  final straight = haversineMeters(
+    a.latitude,
+    a.longitude,
+    b.latitude,
+    b.longitude,
+  );
+  List<List<double>>? best;
+  var bestOffset = double.infinity;
+
+  for (final key in _candidateShapeKeys(a, b)) {
+    final shape = railLineShapes[key];
+    if (shape == null || shape.length < 2) {
+      continue;
+    }
+    final from = _projectDetailed(shape, a.latitude, a.longitude);
+    final to = _projectDetailed(shape, b.latitude, b.longitude);
+    if (from.offset > _maxTrackOffsetMeters ||
+        to.offset > _maxTrackOffsetMeters) {
+      continue;
+    }
+    final length = (from.along - to.along).abs();
+    if (length < straight || length > (straight * 2) + 500) {
+      continue;
+    }
+    final offset = from.offset + to.offset;
+    if (offset >= bestOffset) {
+      continue;
+    }
+    bestOffset = offset;
+    // Points strictly between the two projections, walked in travel order.
+    final forward = from.along <= to.along;
+    final first = forward ? from : to;
+    final last = forward ? to : from;
+    final points = <List<double>>[
+      first.point,
+      for (var i = first.segment + 1; i <= last.segment; i += 1) shape[i],
+      last.point,
+    ];
+    best = forward ? points : points.reversed.toList();
+  }
+  return best;
+}
+
 /// Lines to test for a station pair: the ones both stations are recorded on,
 /// falling back to every known shape for providers that don't populate
 /// `lineIds` at all (mock/GTFS) — the offset threshold is what rejects a
@@ -156,6 +208,47 @@ _Projection _projectOntoShape(List<List<double>> shape, double lat, double lon) 
     cumulative += segmentMeters;
   }
   return (along: bestAlong, offset: bestOffset);
+}
+
+/// [_projectOntoShape] plus where it landed: the index of the polyline
+/// segment and the projected point itself, for cutting a slice of track.
+({double along, double offset, int segment, List<double> point})
+_projectDetailed(List<List<double>> shape, double lat, double lon) {
+  var cumulative = 0.0;
+  var bestAlong = 0.0;
+  var bestOffset = double.infinity;
+  var bestSegment = 0;
+  var bestPoint = shape.first;
+
+  for (var i = 0; i < shape.length - 1; i += 1) {
+    final start = shape[i];
+    final end = shape[i + 1];
+    final segmentMeters = haversineMeters(
+      start[0],
+      start[1],
+      end[0],
+      end[1],
+    );
+    final t = _projectionFactor(start, end, lat, lon);
+    final point = <double>[
+      start[0] + ((end[0] - start[0]) * t),
+      start[1] + ((end[1] - start[1]) * t),
+    ];
+    final offset = haversineMeters(lat, lon, point[0], point[1]);
+    if (offset < bestOffset) {
+      bestOffset = offset;
+      bestAlong = cumulative + (segmentMeters * t);
+      bestSegment = i;
+      bestPoint = point;
+    }
+    cumulative += segmentMeters;
+  }
+  return (
+    along: bestAlong,
+    offset: bestOffset,
+    segment: bestSegment,
+    point: bestPoint,
+  );
 }
 
 /// How far along the segment start->end the nearest point to (lat, lon) sits,

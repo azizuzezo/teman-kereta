@@ -341,7 +341,16 @@ class _ComposerRow extends ConsumerWidget {
                       ).textTheme.bodyLarge?.copyWith(color: tk.textMuted),
                     ),
                   ),
-                  Icon(Icons.edit_outlined, size: 20, color: tk.textMuted),
+                  OutlinedButton(
+                    onPressed: () => context.push(
+                      signedIn ? '/forum/compose' : '/account/login',
+                    ),
+                    style: OutlinedButton.styleFrom(
+                      minimumSize: const Size(72, 40),
+                      padding: const EdgeInsets.symmetric(horizontal: 16),
+                    ),
+                    child: Text(signedIn ? 'Posting' : 'Masuk'),
+                  ),
                 ],
               ),
             ),
