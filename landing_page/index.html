@@ -4,25 +4,27 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <!-- Primary Meta Tags -->
-  <title>Teman Kereta — Teman Perjalanan KRL Setiap Hari</title>
-  <meta name="title" content="Teman Kereta — Teman Perjalanan KRL Setiap Hari">
+  <title>Teman Kereta | Teman Perjalanan KRL Setiap Hari</title>
+  <meta name="title" content="Teman Kereta | Teman Perjalanan KRL Setiap Hari">
   <meta name="description" content="Pengingat sisa stasiun, pencarian rute dan estimasi tarif KRL Jabodetabek, serta kabar kepadatan kereta dari sesama penumpang. Tanpa biaya dan tanpa iklan.">
   <meta name="keywords" content="Teman Kereta, aplikasi Teman Kereta, KRL Commuter Line, Jadwal KRL, Posisi Kereta Realtime, Transit KRL, Jabodetabek, Sisa Stasiun, Forum KRL, KRL Jabodetabek, download teman kereta apk">
   <meta name="author" content="Teman Kereta">
+  <meta name="application-name" content="Teman Kereta">
+  <meta name="apple-mobile-web-app-title" content="Teman Kereta">
   <meta name="robots" content="index, follow, max-image-preview:large, max-snippet:-1, max-video-preview:-1">
   <meta name="googlebot" content="index, follow, max-snippet:-1, max-image-preview:large, max-video-preview:-1">
   <meta name="theme-color" content="#2563eb">
-  <link rel="canonical" href="https://temankereta.web.id/">
+  <link rel="canonical" href="https://temankereta.tech/">
 
   <!-- Open Graph / Facebook / WhatsApp / Telegram -->
   <meta property="og:type" content="website">
-  <meta property="og:url" content="https://temankereta.web.id/">
+  <meta property="og:url" content="https://temankereta.tech/">
   <meta property="og:site_name" content="Teman Kereta">
   <meta property="og:locale" content="id_ID">
-  <meta property="og:title" content="Teman Kereta — Pengingat Stasiun untuk Perjalanan KRL">
+  <meta property="og:title" content="Teman Kereta | Pengingat Stasiun untuk Perjalanan KRL">
   <meta property="og:description" content="Peringatan dua stasiun sebelum turun, pencarian rute dan tarif KRL, serta kabar kepadatan kereta dari penumpang lain. Tanpa biaya dan tanpa iklan.">
-  <meta property="og:image" content="https://temankereta.web.id/assets/branding/og-image.png">
-  <meta property="og:image:secure_url" content="https://temankereta.web.id/assets/branding/og-image.png">
+  <meta property="og:image" content="https://temankereta.tech/assets/branding/og-image.png">
+  <meta property="og:image:secure_url" content="https://temankereta.tech/assets/branding/og-image.png">
   <meta property="og:image:type" content="image/png">
   <meta property="og:image:width" content="1200">
   <meta property="og:image:height" content="630">
@@ -30,10 +32,10 @@
 
   <!-- Twitter / X Card -->
   <meta name="twitter:card" content="summary_large_image">
-  <meta name="twitter:url" content="https://temankereta.web.id/">
-  <meta name="twitter:title" content="Teman Kereta — Pengingat Stasiun untuk Perjalanan KRL">
+  <meta name="twitter:url" content="https://temankereta.tech/">
+  <meta name="twitter:title" content="Teman Kereta | Pengingat Stasiun untuk Perjalanan KRL">
   <meta name="twitter:description" content="Peringatan dua stasiun sebelum turun, pencarian rute dan tarif KRL, serta kabar kepadatan kereta dari penumpang lain.">
-  <meta name="twitter:image" content="https://temankereta.web.id/assets/branding/og-image.png">
+  <meta name="twitter:image" content="https://temankereta.tech/assets/branding/og-image.png">
 
   <!-- Favicon & Touch Icons & Web Manifest -->
   <link rel="icon" type="image/png" sizes="32x32" href="assets/branding/tk_icon.png">
@@ -48,31 +50,38 @@
     "@graph": [
       {
         "@type": "WebSite",
-        "@id": "https://temankereta.web.id/#website",
-        "url": "https://temankereta.web.id/",
+        "@id": "https://temankereta.tech/#website",
+        "url": "https://temankereta.tech/",
         "name": "Teman Kereta",
+        "alternateName": [
+          "Teman Kereta KRL",
+          "Aplikasi Teman Kereta"
+        ],
         "description": "Teman Perjalanan KRL Setiap Hari di Jabodetabek",
         "inLanguage": "id-ID",
         "publisher": {
-          "@id": "https://temankereta.web.id/#organization"
+          "@id": "https://temankereta.tech/#organization"
         }
       },
       {
         "@type": "Organization",
-        "@id": "https://temankereta.web.id/#organization",
+        "@id": "https://temankereta.tech/#organization",
         "name": "Teman Kereta",
-        "url": "https://temankereta.web.id/",
+        "url": "https://temankereta.tech/",
         "logo": {
           "@type": "ImageObject",
-          "url": "https://temankereta.web.id/assets/branding/tk_icon.png",
-          "width": "512",
-          "height": "512"
+          "url": "https://temankereta.tech/assets/branding/tk_icon.png",
+          "width": "1024",
+          "height": "1024"
         },
-        "image": "https://temankereta.web.id/assets/branding/og-image.png"
+        "image": "https://temankereta.tech/assets/branding/og-image.png",
+        "sameAs": [
+          "https://github.com/azizuzezo/teman-kereta"
+        ]
       },
       {
         "@type": "SoftwareApplication",
-        "@id": "https://temankereta.web.id/#app",
+        "@id": "https://temankereta.tech/#app",
         "name": "Teman Kereta",
         "operatingSystem": "Android, iOS",
         "applicationCategory": "TravelApplication",
@@ -83,20 +92,13 @@
           "price": "0",
           "priceCurrency": "IDR"
         },
-        "aggregateRating": {
-          "@type": "AggregateRating",
-          "ratingValue": "4.9",
-          "ratingCount": "128",
-          "bestRating": "5",
-          "worstRating": "1"
-        },
-        "screenshot": "https://temankereta.web.id/assets/branding/og-image.png",
-        "softwareVersion": "1.0.0",
-        "downloadUrl": "https://temankereta.web.id/assets/downloads/teman-kereta-v1.0.apk"
+        "screenshot": "https://temankereta.tech/assets/branding/og-image.png",
+        "softwareVersion": "1.1.1",
+        "downloadUrl": "https://dl.temankereta.tech/Teman-Kereta.1.1.1.apk"
       },
       {
         "@type": "FAQPage",
-        "@id": "https://temankereta.web.id/#faq",
+        "@id": "https://temankereta.tech/#faq",
         "mainEntity": [
           {
             "@type": "Question",
@@ -203,6 +205,7 @@
         <a href="#tangkapan-layar" class="hover:text-blue-600 transition-colors">Tangkapan Layar</a>
         <a href="#cara-kerja" class="hover:text-blue-600 transition-colors">Cara Kerja</a>
         <a href="#faq" class="hover:text-blue-600 transition-colors">FAQ</a>
+        <a href="/artikel/" class="hidden xl:inline-flex hover:text-blue-600 transition-colors">Artikel</a>
       </nav>
 
       <!-- Desktop Action CTA -->
@@ -240,6 +243,8 @@
       <a href="#tangkapan-layar" class="block px-4 py-2.5 rounded-xl text-slate-700 font-medium hover:bg-blue-50 hover:text-blue-600 transition-colors">Tangkapan Layar</a>
       <a href="#cara-kerja" class="block px-4 py-2.5 rounded-xl text-slate-700 font-medium hover:bg-blue-50 hover:text-blue-600 transition-colors">Cara Kerja</a>
       <a href="#faq" class="block px-4 py-2.5 rounded-xl text-slate-700 font-medium hover:bg-blue-50 hover:text-blue-600 transition-colors">FAQ</a>
+      <a href="/artikel/" class="block px-4 py-2.5 rounded-xl text-slate-700 font-medium hover:bg-blue-50 hover:text-blue-600 transition-colors">Artikel</a>
+      <a href="/tentang/" class="block px-4 py-2.5 rounded-xl text-slate-700 font-medium hover:bg-blue-50 hover:text-blue-600 transition-colors">Tentang</a>
       <div class="pt-2">
         <a href="#unduh" class="flex items-center justify-center gap-2 w-full px-5 py-3 rounded-xl bg-blue-600 text-white font-semibold text-sm shadow-md shadow-blue-600/20">
           <i data-lucide="download" class="w-4 h-4"></i>
@@ -301,17 +306,21 @@
 
           <!-- CTA Buttons (Hidden on Mobile, Visible on Tablet & Desktop) -->
           <div class="hidden sm:flex flex-col sm:flex-row items-center justify-center lg:justify-start gap-3 pt-1">
-            <a id="apk-download-link-1" href="assets/downloads/teman-kereta-v1.0.apk" download class="btn-download-apk w-full sm:w-auto inline-flex items-center justify-center gap-3 px-5 py-3 sm:px-6 sm:py-3.5 rounded-xl bg-blue-600 hover:bg-blue-700 active:bg-blue-800 text-white font-semibold text-sm shadow-md shadow-blue-600/25 hover:-translate-y-0.5 transition-all">
+            <div aria-disabled="true" class="play-cta-hero relative w-full sm:w-auto inline-flex items-center justify-center gap-3 pl-5 pr-7 py-3 rounded-xl bg-gradient-to-br from-slate-900 via-blue-950 to-blue-800 text-white shadow-xl shadow-blue-900/30 ring-1 ring-white/20 opacity-90 cursor-default select-none">
+              <span class="absolute -top-2.5 right-3 px-2 py-0.5 rounded-full bg-amber-400 text-slate-900 text-[9px] font-extrabold uppercase tracking-wider shadow">Segera hadir</span>
+              <svg viewBox="0 0 512 512" class="w-9 h-9 shrink-0" aria-hidden="true"><path fill="#00d2ff" d="M48 59v394c0 9 10 15 18 10l216-207z"/><path fill="#00f076" d="M48 59c0-9 10-15 18-10l262 150-46 48z"/><path fill="#ff3a44" d="M282 256l46 48-262 150c-8 5-18-1-18-10z"/><path fill="#ffd400" d="M328 199l112 64c12 7 12 25 0 32l-112 64-46-48z"/></svg>
+              <div class="text-left leading-tight">
+                <div class="text-[11px] uppercase tracking-wide font-medium text-blue-100">Segera hadir di</div>
+                <div class="text-[22px] font-semibold tracking-tight -mt-0.5">Google Play</div>
+              </div>
+            </div>
+
+            <a id="apk-download-link-1" href="https://dl.temankereta.tech/Teman-Kereta.1.1.1.apk" download class="btn-download-apk w-full sm:w-auto inline-flex items-center justify-center gap-3 px-5 py-3 sm:px-6 sm:py-3.5 rounded-2xl bg-white hover:bg-blue-50 border border-slate-300 hover:border-blue-300 text-slate-700 font-semibold text-sm shadow-sm hover:-translate-y-0.5 transition-all">
               <i data-lucide="download" class="w-4 h-4"></i>
               <div class="text-left">
-                <div class="text-[10px] opacity-85 leading-none">Unduh Langsung</div>
-                <div class="text-sm font-bold"><span class="apk-version-label">APK Android (v1.0)</span></div>
+                <div class="text-[10px] opacity-85 leading-none">Unduh langsung (beta tertutup)</div>
+                <div class="text-sm font-bold"><span class="apk-version-label">APK Android (v1.1.1)</span></div>
               </div>
-            </a>
-
-            <a href="#unduh" class="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-5 py-3 sm:py-3.5 rounded-xl bg-white hover:bg-blue-50/50 border border-slate-300 hover:border-blue-300 text-slate-700 font-semibold text-sm shadow-sm transition-all">
-              <i data-lucide="play" class="w-4 h-4 text-blue-600"></i>
-              <span>Google Play (Segera)</span>
             </a>
           </div>
 
@@ -942,40 +951,31 @@
 
               <!-- Buttons Column -->
               <div class="flex flex-col gap-2.5 w-full sm:w-auto">
-                <!-- Direct APK Download Button -->
-                <a id="apk-download-link-2" href="assets/downloads/teman-kereta-v1.0.apk" download class="btn-download-apk w-full sm:w-auto inline-flex items-center justify-center gap-3 px-5 py-3 rounded-2xl bg-white hover:bg-blue-50 active:bg-slate-100 text-blue-700 font-bold text-sm shadow-xl shadow-black/15 hover:-translate-y-0.5 transition-all">
-                  <i data-lucide="download" class="w-4 h-4 text-blue-600"></i>
+                <!-- Google Play (segera hadir: beta masih tertutup) -->
+                <div aria-disabled="true" class="play-cta-section relative w-full sm:w-auto inline-flex items-center justify-center gap-3.5 pl-5 pr-8 py-3.5 rounded-xl bg-gradient-to-br from-white to-blue-50 text-slate-900 shadow-2xl shadow-black/30 ring-4 ring-white/25 opacity-90 cursor-default select-none">
+                  <span class="absolute -top-2.5 right-3 px-2 py-0.5 rounded-full bg-amber-400 text-slate-900 text-[9px] font-extrabold uppercase tracking-wider shadow">Segera hadir</span>
+                  <svg viewBox="0 0 512 512" class="w-9 h-9 shrink-0" aria-hidden="true"><path fill="#00d2ff" d="M48 59v394c0 9 10 15 18 10l216-207z"/><path fill="#00f076" d="M48 59c0-9 10-15 18-10l262 150-46 48z"/><path fill="#ff3a44" d="M282 256l46 48-262 150c-8 5-18-1-18-10z"/><path fill="#ffd400" d="M328 199l112 64c12 7 12 25 0 32l-112 64-46-48z"/></svg>
+                  <div class="text-left leading-tight">
+                    <div class="text-[11px] uppercase tracking-wide font-semibold text-blue-700">Segera hadir di</div>
+                    <div class="text-2xl font-semibold tracking-tight -mt-0.5">Google Play</div>
+                  </div>
+                </div>
+
+                <a id="apk-download-link-2" href="https://dl.temankereta.tech/Teman-Kereta.1.1.1.apk" download class="btn-download-apk w-full sm:w-auto inline-flex items-center justify-center gap-3 px-5 py-3 rounded-2xl bg-white/10 hover:bg-white/20 border border-white/25 text-white font-bold backdrop-blur-md text-sm  hover:-translate-y-0.5 transition-all">
+                  <i data-lucide="download" class="w-4 h-4 text-blue-200"></i>
                   <div class="text-left">
-                    <div class="text-[9px] uppercase font-bold tracking-wider text-blue-500 leading-none">Unduh Berkas Langsung</div>
-                    <div class="text-xs sm:text-sm font-extrabold text-blue-700"><span class="apk-version-label">APK Android (v1.0)</span></div>
+                    <div class="text-[9px] uppercase font-bold tracking-wider text-blue-200 leading-none">Unduh langsung (beta tertutup)</div>
+                    <div class="text-xs sm:text-sm font-extrabold text-white"><span class="apk-version-label">APK Android (v1.1.1)</span></div>
                   </div>
                 </a>
-
-                <!-- Google Play Placeholder -->
-                <div class="w-full sm:w-auto inline-flex items-center justify-center gap-2.5 px-4 py-2.5 rounded-2xl bg-white/10 hover:bg-white/15 border border-white/20 text-white text-left backdrop-blur-md">
-                  <i data-lucide="play" class="w-3.5 h-3.5 text-blue-200"></i>
-                  <div>
-                    <div class="text-[9px] text-blue-200 uppercase font-semibold">Google Play Store</div>
-                    <div class="text-xs font-bold text-white">Segera Hadir</div>
-                  </div>
-                </div>
               </div>
 
-              <!-- Compact QR Code Card -->
-              <div class="hidden sm:block bg-white p-2.5 rounded-2xl shadow-2xl text-center space-y-1 border border-white text-slate-900 shrink-0 w-32 sm:w-34">
-                <div class="w-20 h-20 sm:w-22 sm:h-22 mx-auto rounded-lg overflow-hidden p-0.5 flex items-center justify-center">
-                  <img src="assets/screenshots/qr-code.svg" alt="Kode QR unduhan APK" class="w-full h-full object-contain">
-                </div>
-                <div class="text-[10px] sm:text-[10.5px] font-bold text-slate-900">Pindai Kode QR</div>
-                <div class="text-[8px] text-slate-500 leading-tight">Unduh langsung di ponsel</div>
               </div>
-
-            </div>
 
             <!-- Install Note -->
             <p class="text-[11px] sm:text-xs text-blue-200 flex items-center justify-center lg:justify-start gap-1.5 pt-1">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" class="w-4 h-4 text-emerald-300 shrink-0" aria-hidden="true"><path d="M4 12.5l5 5L20 6.5"/></svg>
-              <span>Tanpa biaya • Tanpa iklan</span>
+              <span>Tanpa biaya • Tanpa iklan • Beta masih tertutup, unduh APK dulu</span>
             </p>
           </div>
 
@@ -1024,7 +1024,7 @@
             <i data-lucide="chevron-down" class="faq-icon w-4 h-4 text-slate-500 transition-transform duration-200 shrink-0"></i>
           </button>
           <div class="faq-content hidden px-5 pb-4 pt-1 text-sm text-slate-600 leading-relaxed border-t border-slate-100 bg-slate-50/50">
-            Dua stasiun sebelum tujuan, ponsel kamu berbunyi dan bergetar meskipun layarnya mati.
+            Dua stasiun sebelum tujuan, ponsel kamu berbunyi dan bergetar meskipun layarnya mati. <a href="/artikel/tips-tidak-kebablasan-stasiun-krl/" class="text-blue-600 font-semibold hover:underline">Lihat tips agar tidak kebablasan</a>.
           </div>
         </div>
 
@@ -1034,7 +1034,7 @@
             <i data-lucide="chevron-down" class="faq-icon w-4 h-4 text-slate-500 transition-transform duration-200 shrink-0"></i>
           </button>
           <div class="faq-content hidden px-5 pb-4 pt-1 text-sm text-slate-600 leading-relaxed border-t border-slate-100 bg-slate-50/50">
-            Buka berkas yang telah diunduh, lalu pilih Pasang. Apabila diminta, aktifkan "Izinkan dari sumber ini".
+            Buka berkas yang telah diunduh, lalu pilih Pasang. Apabila diminta, aktifkan "Izinkan dari sumber ini". <a href="/artikel/cara-pasang-apk-teman-kereta/" class="text-blue-600 font-semibold hover:underline">Baca panduan lengkap memasang APK</a>.
           </div>
         </div>
 
@@ -1064,6 +1064,8 @@
           <a href="#tangkapan-layar" class="hover:text-blue-600 transition-colors">Tangkapan Layar</a>
           <a href="#cara-kerja" class="hover:text-blue-600 transition-colors">Cara Kerja</a>
           <a href="#faq" class="hover:text-blue-600 transition-colors">FAQ</a>
+          <a href="/artikel/" class="hover:text-blue-600 transition-colors">Artikel</a>
+          <a href="/tentang/" class="hover:text-blue-600 transition-colors">Tentang</a>
           <a href="/privacy" class="hover:text-blue-600 transition-colors">Kebijakan Privasi</a>
           <a href="/delete-account" class="hover:text-blue-600 transition-colors">Hapus Akun</a>
         </div>
@@ -1100,19 +1102,64 @@
   <!-- Main JavaScript -->
   <script src="assets/js/main.js?v=9"></script>
 
-  <!-- Dynamic Supabase Release Version Syncer -->
+  <!-- Dynamic release sync + host-aware download link -->
   <script>
     (function () {
       var SUPABASE_URL = 'https://slcttxbxcdrsavgugzdy.supabase.co';
       var SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InNsY3R0eGJ4Y2Ryc2F2Z3VnemR5Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODU4NDM5NjksImV4cCI6MjEwMTQxOTk2OX0.o-N_03nF0ZmlurmHM3_ogRDupnXLOPY2ztAU8zU0kbE';
+
+      // Pasangan domain situs -> domain unduhan. Tambahkan host baru di sini
+      // bila nanti ada domain lain; host yang tidak dikenal memakai URL dari
+      // Supabase apa adanya.
+      var DOWNLOAD_ORIGIN_BY_SITE_HOST = {
+        'temankereta.tech': 'https://dl.temankereta.tech',
+        'www.temankereta.tech': 'https://dl.temankereta.tech',
+        'temankereta.web.id': 'https://dl.temankereta.web.id',
+        'www.temankereta.web.id': 'https://dl.temankereta.web.id',
+      };
+      var FALLBACK_APK_URL = 'https://dl.temankereta.tech/Teman-Kereta.1.1.1.apk';
+      var FALLBACK_VERSION = '1.1.1';
+
       var links = [
         document.getElementById('apk-download-link-1'),
         document.getElementById('apk-download-link-2'),
       ].filter(Boolean);
 
+      function resolveApkUrl(url) {
+        var siteHost = window.location.hostname.toLowerCase().replace(/^www\./, '');
+        var downloadOrigin = DOWNLOAD_ORIGIN_BY_SITE_HOST[siteHost];
+        if (!downloadOrigin) return url;
+
+        try {
+          var parsed = new URL(url, window.location.href);
+          var isKnownDownloadHost =
+            parsed.hostname === 'dl.temankereta.tech' ||
+            parsed.hostname === 'dl.temankereta.web.id';
+          if (!isKnownDownloadHost) return url;
+          return downloadOrigin + parsed.pathname + parsed.search;
+        } catch (err) {
+          return url;
+        }
+      }
+
+      function setDownload(url, versionName) {
+        var resolvedUrl = resolveApkUrl(url);
+        links.forEach(function (a) {
+          a.setAttribute('href', resolvedUrl);
+          a.setAttribute('download', '');
+          a.querySelectorAll('.apk-version-label').forEach(function (el) {
+            el.textContent = 'APK Android (v' + versionName + ')';
+          });
+        });
+      }
+
+      // Jangan pernah membiarkan tombol menunjuk ke APK lokal yang sudah
+      // dihapus dari repo (file APK > 25 MB tidak bisa ikut Cloudflare Pages).
+      setDownload(FALLBACK_APK_URL, FALLBACK_VERSION);
+
       fetch(
         SUPABASE_URL +
-          '/rest/v1/app_releases?select=apk_url,version_name&order=version_code.desc&limit=1',
+          '/rest/v1/app_releases?select=apk_url,version_name&order=version_code.desc&limit=10',
         { headers: { apikey: SUPABASE_ANON_KEY, Authorization: 'Bearer ' + SUPABASE_ANON_KEY } }
       )
         .then(function (res) {
@@ -1120,25 +1167,16 @@
           return res.json();
         })
         .then(function (rows) {
-          var latest = rows && rows[0];
-          if (!latest || !latest.apk_url) return;
-          links.forEach(function (a) {
-            a.setAttribute('href', latest.apk_url);
-            a.setAttribute('download', '');
-            a.querySelectorAll('.apk-version-label').forEach(function (el) {
-              el.textContent = 'APK Android (v' + latest.version_name + ')';
-            });
+          // Baris rilis bisa berisi tautan Play Store (pengalih untuk pengguna APK);
+          // tombol APK hanya boleh memakai rilis yang benar-benar berkas .apk.
+          var latest = (rows || []).find(function (r) {
+            return r && /\.apk(\?|$)/i.test(r.apk_url || '');
           });
+          if (!latest) return;
+          setDownload(latest.apk_url, latest.version_name || FALLBACK_VERSION);
         })
         .catch(function () {
-          // Fallback to local apk
-          links.forEach(function (a) {
-            a.setAttribute('href', 'assets/downloads/teman-kereta-v1.0.apk');
-            a.setAttribute('download', '');
-            a.querySelectorAll('.apk-version-label').forEach(function (el) {
-              el.textContent = 'APK Android (v1.0)';
-            });
-          });
+          // Fallback yang sudah dipasang di atas tetap dipakai.
         });
     })();
   </script>
