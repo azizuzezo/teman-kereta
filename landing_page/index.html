@@ -324,6 +324,12 @@
             </div>
           </div>
 
+          <!-- Total pengguna terdaftar (diisi dari Supabase; tersembunyi bila gagal dimuat) -->
+          <div id="user-count-badge" hidden class="mb-4 inline-flex items-center gap-2 px-3.5 py-2 rounded-xl bg-white border border-slate-200/90 shadow-sm">
+            <i data-lucide="users" class="w-4 h-4 text-blue-600"></i>
+            <span class="text-sm text-slate-600"><strong id="user-count-value" class="text-slate-900 font-extrabold tabular-nums">0</strong> pengguna sudah mengunduh dan terdaftar di Teman Kereta</span>
+          </div>
+
           <!-- Highlights Marquee (Directly Under Text/Buttons) -->
           <div class="pt-4 sm:pt-6 border-t border-slate-200/80 overflow-hidden w-full min-w-0 max-w-full">
             <div class="marquee-container py-1">
@@ -1178,6 +1184,25 @@
         .catch(function () {
           // Fallback yang sudah dipasang di atas tetap dipakai.
         });
+
+      // Total pengguna terdaftar (hanya angka agregat).
+      fetch(SUPABASE_URL + '/rest/v1/rpc/public_user_stats', {
+        method: 'POST',
+        headers: {
+          apikey: SUPABASE_ANON_KEY,
+          Authorization: 'Bearer ' + SUPABASE_ANON_KEY,
+          'Content-Type': 'application/json'
+        },
+        body: '{}'
+      })
+        .then(function (res) { if (!res.ok) throw new Error('bad'); return res.json(); })
+        .then(function (stats) {
+          var n = stats && Number(stats.registered_users);
+          if (!n || n < 1) return;
+          document.getElementById('user-count-value').textContent = n.toLocaleString('id-ID');
+          document.getElementById('user-count-badge').hidden = false;
+        })
+        .catch(function () {});
     })();
   </script>
 </body>

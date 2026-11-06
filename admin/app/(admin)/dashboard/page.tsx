@@ -8,6 +8,7 @@ import {
   OperatorIcon,
   ReportIcon,
   StationIcon,
+  UsersIcon,
 } from "@/components/ui/icons";
 import { PageHeader } from "@/components/ui/page-header";
 import { StatCard } from "@/components/ui/stat-card";
@@ -49,6 +50,7 @@ export default async function DashboardPage() {
     latestTripUpdate,
     latestServiceAlert,
     operatorsBySource,
+    userStatsResult,
   ] = await Promise.all([
     supabase.from("operators").select("id", { count: "exact", head: true }),
     supabase.from("lines").select("id", { count: "exact", head: true }),
@@ -80,7 +82,17 @@ export default async function DashboardPage() {
       .limit(1)
       .maybeSingle(),
     supabase.from("operators").select("data_source_type"),
+    supabase.rpc("admin_user_stats"),
   ]);
+
+  const userStats = (userStatsResult.data ?? null) as {
+    registered_users: number;
+    installed_devices: number;
+    users_with_device: number;
+    active_24h: number;
+    active_7d: number;
+    active_30d: number;
+  } | null;
 
   const sourceCounts = new Map<string, number>();
   for (const row of operatorsBySource.data ?? []) {
@@ -101,6 +113,46 @@ export default async function DashboardPage() {
           loadedAt.toISOString()
         )} WIB.`}
       />
+
+      <Section
+        title="Pengguna aplikasi"
+        description="Aktif = membuka aplikasi dalam keadaan masuk akun. Unduhan dihitung dari perangkat unik yang pernah membuka aplikasi dan mendaftarkan notifikasi (belum ada penghitung unduhan APK)."
+      >
+        {userStatsResult.error || !userStats ? (
+          <p className="text-sm text-bad">
+            Statistik pengguna belum bisa dimuat. Pastikan migrasi 20261107090000_user_stats sudah dijalankan.
+          </p>
+        ) : (
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+            <StatCard
+              label="Pengguna terdaftar"
+              value={userStats.registered_users}
+              href="/users"
+              icon={<UsersIcon />}
+            />
+            <StatCard
+              label="Perangkat terpasang (unduhan)"
+              value={userStats.installed_devices}
+              icon={<UsersIcon />}
+            />
+            <StatCard
+              label="Pengguna aktif 24 jam"
+              value={userStats.active_24h}
+              icon={<UsersIcon />}
+            />
+            <StatCard
+              label="Pengguna aktif 7 hari"
+              value={userStats.active_7d}
+              icon={<UsersIcon />}
+            />
+            <StatCard
+              label="Pengguna aktif 30 hari"
+              value={userStats.active_30d}
+              icon={<UsersIcon />}
+            />
+          </div>
+        )}
+      </Section>
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
         <StatCard
