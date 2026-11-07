@@ -1,0 +1,100 @@
+<!doctype html>
+<html lang="id">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Pengaturan · Admin Teman Kereta</title>
+<style>
+  :root{--ink:#0f2236;--mute:#64768a;--line:#e6ecf2;--bg:#f3f7fb;--brand:#2f74bb;--navy:#0f2236;--ok:#1d8a4c;--bad:#c9432a}
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--ink);font-family:'Plus Jakarta Sans',Inter,system-ui,-apple-system,'Segoe UI',sans-serif;-webkit-font-smoothing:antialiased}
+  .hero{background:linear-gradient(135deg,#0f2236,#1b4268);color:#fff;padding:34px 20px 70px}
+  .wrap{max-width:680px;margin:0 auto}
+  .brand{display:flex;align-items:center;gap:14px;padding:0 20px}
+  .brand img{width:46px;height:46px;border-radius:13px;background:#fff;padding:4px}
+  .brand h1{margin:0;font-size:22px;letter-spacing:-.02em}.brand p{margin:3px 0 0;font-size:13.5px;color:#a9c0d6}
+  main{max-width:680px;margin:-44px auto 40px;padding:0 20px;display:grid;gap:16px}
+  .card{background:#fff;border-radius:18px;padding:22px;box-shadow:0 14px 34px -18px rgba(15,34,54,.35),0 0 0 1px rgba(15,34,54,.05)}
+  .card h2{margin:0 0 4px;font-size:15.5px;letter-spacing:-.01em;display:flex;align-items:center;gap:9px}
+  .card h2 i{width:26px;height:26px;border-radius:8px;background:#e8f1fb;color:var(--brand);display:grid;place-items:center;font-style:normal;font-size:14px}
+  .card>p{margin:0 0 16px;color:var(--mute);font-size:13px;line-height:1.5}
+  label.f{display:block;font-size:12.5px;font-weight:700;margin:14px 0 6px}
+  input[type=text],input[type=password],input[type=url]{width:100%;border:1.5px solid var(--line);border-radius:11px;padding:11px 13px;font:inherit;font-size:14px;color:var(--ink);background:#fbfdff;transition:.15s}
+  input:focus{outline:none;border-color:var(--brand);background:#fff;box-shadow:0 0 0 4px rgba(47,116,187,.14)}
+  .hint{font-size:12px;color:var(--mute);margin-top:6px;line-height:1.45}
+  code{background:#eef3f8;border-radius:5px;padding:1px 6px;font-size:12px}
+  .sw{display:flex;align-items:center;gap:14px;padding:4px 0}
+  .sw+.sw{border-top:1px solid var(--line);margin-top:10px;padding-top:14px}
+  .sw .tx{flex:1}.sw .tx b{display:block;font-size:14px}.sw .tx span{font-size:12.5px;color:var(--mute);line-height:1.4}
+  .tg{position:relative;width:46px;height:27px;flex:none}
+  .tg input{position:absolute;inset:0;opacity:0;cursor:pointer;margin:0;z-index:1}
+  .tg i{position:absolute;inset:0;background:#cbd6e1;border-radius:99px;transition:.18s}
+  .tg i::after{content:'';position:absolute;left:3px;top:3px;width:21px;height:21px;background:#fff;border-radius:50%;box-shadow:0 2px 5px rgba(0,0,0,.25);transition:.18s}
+  .tg input:checked+i{background:var(--brand)}.tg input:checked+i::after{transform:translateX(19px)}
+  .tg input:focus-visible+i{box-shadow:0 0 0 4px rgba(47,116,187,.25)}
+  .bar{display:flex;gap:10px;align-items:center;flex-wrap:wrap;position:sticky;bottom:14px;background:rgba(255,255,255,.92);backdrop-filter:blur(8px);padding:12px;border-radius:16px;box-shadow:0 14px 34px -14px rgba(15,34,54,.45),0 0 0 1px rgba(15,34,54,.06)}
+  button{border:0;border-radius:11px;padding:11px 18px;font:inherit;font-size:14px;font-weight:700;cursor:pointer;transition:.15s}
+  .pri{background:var(--brand);color:#fff;box-shadow:0 8px 16px -8px rgba(47,116,187,.8)}.pri:hover{background:#2766a8}
+  .gh{background:#eef3f8;color:var(--ink)}.gh:hover{background:#e2eaf2}
+  #status{font-size:13px;font-weight:600;flex:1;min-width:140px;line-height:1.4}
+  #status.ok{color:var(--ok)}#status.bad{color:var(--bad)}
+  ol{margin:0;padding-left:20px;font-size:13.5px;line-height:1.75;color:#2b3f53}
+  ol b{color:var(--ink)}kbd{background:#eef3f8;border:1px solid #d9e3ed;border-bottom-width:2px;border-radius:6px;padding:1px 7px;font-size:12px}
+</style>
+</head>
+<body>
+<div class="hero"><div class="wrap brand"><img src="icons/icon48.png" alt=""><div><h1>Admin Teman Kereta</h1><p>Asisten balasan komentar · Pengaturan</p></div></div></div>
+<main>
+  <section class="card">
+    <h2><i>✦</i>AI (kompatibel OpenAI)</h2>
+    <p>Tanpa AI, ekstensi memakai template lokal. Dengan AI, balasan menyesuaikan isi video dan maksud komentar.</p>
+    <div class="sw"><div class="tx"><b>Pakai AI untuk menyusun balasan</b><span>Komentar dan judul video dikirim ke Base URL di bawah.</span></div>
+      <label class="tg"><input type="checkbox" id="aiEnabled"><i></i></label></div>
+    <label class="f" for="baseUrl">Base URL</label>
+    <input type="url" id="baseUrl" placeholder="https://api.contoh.com/v1">
+    <div class="hint">Endpoint yang dipanggil: <code>{Base URL}/chat/completions</code></div>
+    <label class="f" for="apiKey">API key</label>
+    <input type="password" id="apiKey" autocomplete="off" placeholder="sk-…">
+    <div class="hint">Disimpan hanya di browser ini dan dikirim hanya ke Base URL di atas.</div>
+    <label class="f" for="model">Nama model</label>
+    <input type="text" id="model" placeholder="nama model dari penyedia AI kamu">
+  </section>
+
+  <section class="card">
+    <h2><i>⚡</i>Perilaku</h2>
+    <p>Atur kapan panel muncul.</p>
+    <div class="sw"><div class="tx"><b>Buka otomatis saat klik komentar</b><span>Satu klik pada komentar atau tombol Balas: komentar, nama, dan konteks video langsung terbaca.</span></div>
+      <label class="tg"><input type="checkbox" id="autoOpen"><i></i></label></div>
+  </section>
+
+  <section class="card">
+    <h2><i>☺</i>Identitas admin</h2>
+    <p>Dipakai di balasan dan sebagai persona AI.</p>
+    <label class="f" for="adminName">Nama persona</label>
+    <input type="text" id="adminName">
+    <label class="f" for="signOff">Penutup (opsional)</label>
+    <input type="text" id="signOff" placeholder="mis. – Mimin TK">
+    <label class="f" for="downloadUrl">Link unduh</label>
+    <input type="text" id="downloadUrl">
+  </section>
+
+  <section class="card">
+    <h2><i>?</i>Cara pakai</h2>
+    <p>Berlaku di Instagram, Threads, TikTok, YouTube, Facebook, dan X.</p>
+    <ol>
+      <li><b>Klik komentar</b> yang mau dibalas. Panel terbuka dan membaca komentarnya.</li>
+      <li>Cek baris <b>“Dipahami”</b> dan konteks video. Kalau meleset, edit lalu <b>Buat ulang</b>.</li>
+      <li>Pilih saran, edit kalau perlu, klik <b>Tempel</b>, lalu <b>kirim sendiri</b>.</li>
+      <li>Cadangan: blok teks → klik kanan → “Balas sebagai Admin Teman Kereta”, atau <kbd>Alt</kbd>+<kbd>Shift</kbd>+<kbd>R</kbd>.</li>
+    </ol>
+  </section>
+
+  <div class="bar">
+    <button class="pri" id="save">Simpan</button>
+    <button class="gh" id="test">Tes koneksi AI</button>
+    <span id="status"></span>
+  </div>
+</main>
+<script type="module" src="options.js"></script>
+</body>
+</html>
