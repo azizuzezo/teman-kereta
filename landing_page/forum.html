@@ -5,19 +5,19 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   
   <!-- Primary Meta Tags -->
-  <title>Forum Komunitas Teman Kereta — Kabar & Info KRL Real-Time</title>
-  <meta name="title" content="Forum Komunitas Teman Kereta — Kabar & Info KRL Real-Time">
+  <title>Forum Komunitas Teman Kereta | Kabar &amp; Info KRL Real-Time</title>
+  <meta name="title" content="Forum Komunitas Teman Kereta | Kabar &amp; Info KRL Real-Time">
   <meta name="description" content="Forum diskusi dan kabar real-time sesama pejuang komuter KRL Jabodetabek. Pantau situasi kereta, transit Manggarai, info kepadatan stasiun, dan tips perjalanan.">
   <meta name="theme-color" content="#2563eb">
-  <link rel="canonical" href="https://temankereta.web.id/forum">
+  <link rel="canonical" href="https://temankereta.tech/forum">
 
   <!-- Open Graph / Meta Sosial -->
   <meta property="og:type" content="website">
-  <meta property="og:url" content="https://temankereta.web.id/forum">
+  <meta property="og:url" content="https://temankereta.tech/forum">
   <meta property="og:site_name" content="Teman Kereta">
-  <meta property="og:title" content="Forum Komunitas Teman Kereta — Info & Kabar KRL Terkini">
+  <meta property="og:title" content="Forum Komunitas Teman Kereta | Info &amp; Kabar KRL Terkini">
   <meta property="og:description" content="Pantau situasi stasiun, kepadatan kereta, dan info transit langsung dari sesama komuter KRL Jabodetabek.">
-  <meta property="og:image" content="https://temankereta.web.id/assets/branding/og-image.png">
+  <meta property="og:image" content="https://temankereta.tech/assets/branding/og-image.png">
 
   <!-- Favicon -->
   <link rel="icon" type="image/png" href="assets/branding/tk_icon.png">
@@ -396,9 +396,9 @@
             Aktifkan alarm getar otomatis saat tidur di kereta agar tidak kebablasan. 100% Gratis &amp; Bebas Iklan.
           </p>
 
-          <a href="/#unduh" class="flex items-center justify-center gap-2 w-full py-2.5 px-4 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs transition-colors shadow-sm shadow-blue-600/20">
+          <a href="https://play.google.com/store/apps/details?id=id.temankereta.teman_kereta&amp;hl=id" class="flex items-center justify-center gap-2 w-full py-2.5 px-4 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs transition-colors shadow-sm shadow-blue-600/20">
             <i data-lucide="download" class="w-3.5 h-3.5"></i>
-            <span>Unduh APK Android (v1.0)</span>
+            <span>Unduh di Google Play</span>
           </a>
         </div>
 
@@ -408,9 +408,12 @@
             <a href="/" class="hover:text-blue-600">Beranda</a>
             <a href="/#fitur" class="hover:text-blue-600">Fitur</a>
             <a href="/#faq" class="hover:text-blue-600">FAQ</a>
+            <a href="/artikel/" class="hover:text-blue-600">Artikel</a>
+            <a href="/tentang/" class="hover:text-blue-600">Tentang</a>
             <a href="/privacy" class="hover:text-blue-600">Kebijakan Privasi</a>
+            <a href="/terms" class="hover:text-blue-600">Syarat dan Ketentuan</a>
             <a href="/delete-account" class="hover:text-blue-600">Hapus Akun</a>
-            <a href="https://temankereta.web.id" class="hover:text-blue-600">temankereta.web.id</a>
+            <a href="https://temankereta.tech" class="hover:text-blue-600">temankereta.tech</a>
           </div>
           <div>&copy; 2026 Teman Kereta. Aplikasi independen pejuang komuter.</div>
         </div>
@@ -999,14 +1002,14 @@
         return `
           <div class="flex items-center justify-between p-2.5 rounded-xl bg-slate-50 border border-slate-100 hover:bg-slate-100/70 transition-colors">
             <div>
-              <div class="font-bold text-slate-800 text-xs">${item.station}</div>
+              <div class="font-bold text-slate-800 text-xs">${esc(item.station)}</div>
               <div class="text-[10px] text-slate-400">
-                ${elapsedMins}m lalu oleh <span class="font-semibold text-slate-600">${item.author}</span>
-                ${item.note ? `&bull; ${item.note}` : ''}
+                ${elapsedMins}m lalu oleh <span class="font-semibold text-slate-600">${esc(item.author)}</span>
+                ${item.note ? `&bull; ${esc(item.note)}` : ''}
               </div>
             </div>
             <span class="px-2 py-0.5 rounded-md font-bold text-[10px] border ${badgeColor}">
-              ${item.condition}
+              ${esc(item.condition)}
             </span>
           </div>
         `;
@@ -1379,6 +1382,21 @@
         .subscribe();
     }
 
+    // Semua teks dari pengguna/database wajib di-escape sebelum masuk innerHTML (cegah XSS tersimpan)
+    function esc(v) {
+      return String(v == null ? '' : v).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+    }
+    function safeUrl(u) {
+      try {
+        const x = new URL(String(u), location.href);
+        return (x.protocol === 'https:' || x.protocol === 'http:') ? x.href : '';
+      } catch (e) { return ''; }
+    }
+    function openImage(u) {
+      const safe = safeUrl(u);
+      if (safe) window.open(safe, '_blank', 'noopener');
+    }
+
     // Render Posts Feed
     function renderPosts() {
       const container = document.getElementById('posts-container');
@@ -1421,9 +1439,10 @@
         ` : '';
 
         // Image Attachment HTML
-        const imageHtml = post.imageUrl ? `
+        const imageSafe = post.imageUrl ? safeUrl(post.imageUrl) : '';
+        const imageHtml = imageSafe ? `
           <div class="mt-2 rounded-2xl overflow-hidden border border-slate-100 bg-slate-50 max-h-96">
-            <img src="${post.imageUrl}" alt="Lampiran Kabar KRL" class="w-full h-auto max-h-96 object-cover hover:scale-[1.01] transition-transform cursor-pointer" onclick="window.open('${post.imageUrl}', '_blank')">
+            <img src="${esc(imageSafe)}" alt="Lampiran Kabar KRL" class="w-full h-auto max-h-96 object-cover hover:scale-[1.01] transition-transform cursor-pointer" data-full="${esc(imageSafe)}" onclick="openImage(this.dataset.full)">
           </div>
         ` : '';
 
@@ -1432,23 +1451,23 @@
           <div class="flex items-center justify-between">
             <div class="flex items-center gap-2.5 sm:gap-3">
               <div class="w-9 h-9 sm:w-10 sm:h-10 rounded-full ${post.avatarBg} text-white font-bold text-xs sm:text-sm flex items-center justify-center shrink-0 shadow-sm">
-                ${post.initials}
+                ${esc(post.initials)}
               </div>
               <div>
                 <div class="flex items-center gap-1.5">
-                  <span class="font-bold text-xs sm:text-sm text-slate-950">${post.author}</span>
-                  <span class="text-[11px] text-slate-400">${post.handle}</span>
+                  <span class="font-bold text-xs sm:text-sm text-slate-950">${esc(post.author)}</span>
+                  <span class="text-[11px] text-slate-400">${esc(post.handle)}</span>
                 </div>
                 <div class="flex items-center gap-2 mt-0.5">
-                  <span class="px-1.5 py-0.5 rounded text-[10px] font-medium bg-slate-100 text-slate-600">${post.badge}</span>
-                  <span class="text-[10px] text-slate-400">&bull; ${post.time}</span>
+                  <span class="px-1.5 py-0.5 rounded text-[10px] font-medium bg-slate-100 text-slate-600">${esc(post.badge)}</span>
+                  <span class="text-[10px] text-slate-400">&bull; ${esc(post.time)}</span>
                 </div>
               </div>
             </div>
 
             <div class="flex items-center gap-1.5">
               ${categoryBadge}
-              <button onclick="bookmarkPost('${post.id}')" class="text-slate-400 hover:text-blue-600 p-1.5 rounded-lg hover:bg-slate-50 transition-colors" title="Simpan Postingan">
+              <button onclick="bookmarkPost(${esc(JSON.stringify(String(post.id)))})" class="text-slate-400 hover:text-blue-600 p-1.5 rounded-lg hover:bg-slate-50 transition-colors" title="Simpan Postingan">
                 <i data-lucide="bookmark" class="w-4 h-4"></i>
               </button>
             </div>
@@ -1456,7 +1475,7 @@
 
           <!-- Post Body Text -->
           <p class="text-xs sm:text-sm text-slate-800 leading-relaxed font-normal whitespace-pre-line pt-0.5">
-            ${post.body}
+            ${esc(post.body)}
           </p>
 
           <!-- Image Attachment -->
@@ -1465,17 +1484,17 @@
           <!-- Actions Bar -->
           <div class="pt-3 border-t border-slate-100 flex items-center justify-between text-xs text-slate-500">
             <div class="flex items-center gap-4 sm:gap-6">
-              <button onclick="toggleLike('${post.id}')" class="flex items-center gap-1.5 hover:text-red-600 transition-colors group ${post.liked ? 'text-red-600 font-bold' : ''}">
+              <button onclick="toggleLike(${esc(JSON.stringify(String(post.id)))})" class="flex items-center gap-1.5 hover:text-red-600 transition-colors group ${post.liked ? 'text-red-600 font-bold' : ''}">
                 <i data-lucide="heart" class="w-4 h-4 ${post.liked ? 'fill-red-600 text-red-600' : 'group-hover:scale-110'} transition-transform"></i>
-                <span id="like-count-${post.id}">${post.likes}</span>
+                <span id="like-count-${esc(post.id)}">${esc(post.likes)}</span>
               </button>
 
-              <button onclick="toggleCommentBox('${post.id}')" class="flex items-center gap-1.5 hover:text-blue-600 transition-colors group">
+              <button onclick="toggleCommentBox(${esc(JSON.stringify(String(post.id)))})" class="flex items-center gap-1.5 hover:text-blue-600 transition-colors group">
                 <i data-lucide="message-circle" class="w-4 h-4 group-hover:scale-110 transition-transform"></i>
                 <span>${post.comments ? post.comments.length : 0} Balasan</span>
               </button>
 
-              <button onclick="sharePost('${post.id}')" class="flex items-center gap-1.5 hover:text-emerald-600 transition-colors group">
+              <button onclick="sharePost(${esc(JSON.stringify(String(post.id)))})" class="flex items-center gap-1.5 hover:text-emerald-600 transition-colors group">
                 <i data-lucide="share-2" class="w-4 h-4 group-hover:scale-110 transition-transform"></i>
                 <span class="hidden sm:inline">Bagikan</span>
               </button>
@@ -1485,19 +1504,19 @@
           </div>
 
           <!-- Slide-down Comments Section -->
-          <div id="comments-section-${post.id}" class="hidden pt-3 border-t border-slate-100 space-y-2.5">
+          <div id="comments-section-${esc(post.id)}" class="hidden pt-3 border-t border-slate-100 space-y-2.5">
             <div class="space-y-2">
               ${post.comments && post.comments.length > 0 ? post.comments.map(c => `
                 <div class="flex items-start gap-2 pt-2 border-t border-slate-100 text-xs">
                   <div class="w-6 h-6 rounded-full bg-slate-200 text-slate-700 font-bold text-[10px] flex items-center justify-center shrink-0">
-                    ${c.author.substring(0, 2).toUpperCase()}
+                    ${esc(c.author.substring(0, 2).toUpperCase())}
                   </div>
                   <div class="flex-1 bg-slate-50 rounded-xl p-2.5">
                     <div class="flex items-center justify-between">
-                      <span class="font-bold text-slate-900">${c.author}</span>
-                      <span class="text-[10px] text-slate-400">${c.time}</span>
+                      <span class="font-bold text-slate-900">${esc(c.author)}</span>
+                      <span class="text-[10px] text-slate-400">${esc(c.time)}</span>
                     </div>
-                    <p class="text-slate-700 mt-0.5 text-xs whitespace-pre-line leading-relaxed">${c.text}</p>
+                    <p class="text-slate-700 mt-0.5 text-xs whitespace-pre-line leading-relaxed">${esc(c.text)}</p>
                   </div>
                 </div>
               `).join('') : ''}
@@ -1506,14 +1525,14 @@
             <!-- Multiline Comment Box (Bisa Enter untuk Baris Baru) -->
             <div class="flex items-start gap-2 pt-2">
               <textarea 
-                id="comment-input-${post.id}"
+                id="comment-input-${esc(post.id)}"
                 rows="1"
                 placeholder="Tulis tanggapan atau info tambahan... (Tekan Enter untuk baris baru)" 
                 class="flex-1 text-xs bg-slate-50 focus:bg-white border border-slate-200 rounded-xl px-3 py-2.5 outline-none focus:ring-1 focus:ring-blue-600 resize-none min-h-[38px] leading-relaxed transition-all"
                 oninput="this.style.height = ''; this.style.height = Math.min(this.scrollHeight, 120) + 'px'"
-                onkeydown="if(event.ctrlKey && event.key === 'Enter') submitComment('${post.id}')"
+                onkeydown="if(event.ctrlKey && event.key === 'Enter') submitComment(${esc(JSON.stringify(String(post.id)))})"
               ></textarea>
-              <button onclick="submitComment('${post.id}')" class="px-3.5 py-2.5 bg-blue-600 hover:bg-blue-700 active:bg-blue-800 text-white rounded-xl text-xs font-bold transition-all shadow-xs shrink-0 flex items-center gap-1">
+              <button onclick="submitComment(${esc(JSON.stringify(String(post.id)))})" class="px-3.5 py-2.5 bg-blue-600 hover:bg-blue-700 active:bg-blue-800 text-white rounded-xl text-xs font-bold transition-all shadow-xs shrink-0 flex items-center gap-1">
                 <i data-lucide="send" class="w-3.5 h-3.5"></i>
                 <span>Kirim</span>
               </button>
@@ -1604,12 +1623,12 @@
       }
 
       container.innerHTML = sortedTopics.map(t => `
-        <div class="cursor-pointer hover:bg-slate-50 p-2 rounded-xl border border-transparent hover:border-slate-100 transition-all group" onclick="filterByTag('${t.query}')">
+        <div class="cursor-pointer hover:bg-slate-50 p-2 rounded-xl border border-transparent hover:border-slate-100 transition-all group" onclick="filterByTag(${esc(JSON.stringify(String(t.query)))})">
           <div class="flex items-center justify-between text-[10px] text-slate-400">
-            <span>${t.category}</span>
+            <span>${esc(t.category)}</span>
             <span class="text-blue-600 font-semibold opacity-0 group-hover:opacity-100 transition-opacity">Cari &rarr;</span>
           </div>
-          <div class="font-bold text-slate-900 text-xs mt-0.5 group-hover:text-blue-600 transition-colors">${t.tag}</div>
+          <div class="font-bold text-slate-900 text-xs mt-0.5 group-hover:text-blue-600 transition-colors">${esc(t.tag)}</div>
           <div class="text-[11px] text-slate-500 mt-0.5">${t.count} interaksi obrolan</div>
         </div>
       `).join('');
