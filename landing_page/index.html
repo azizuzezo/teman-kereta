@@ -179,6 +179,19 @@
 
   <!-- Custom CSS -->
   <link rel="stylesheet" href="assets/css/style.css?v=21">
+  <style>
+    /* QR unduh: sudut bidik + garis pemindai */
+    .tk-qr-corner{position:absolute;width:14px;height:14px;border-color:#22d3ee;border-style:solid;border-width:0;transition:transform .3s}
+    .tk-qr-corner.tl{top:-5px;left:-5px;border-top-width:3px;border-left-width:3px;border-top-left-radius:8px}
+    .tk-qr-corner.tr{top:-5px;right:-5px;border-top-width:3px;border-right-width:3px;border-top-right-radius:8px}
+    .tk-qr-corner.bl{bottom:-5px;left:-5px;border-bottom-width:3px;border-left-width:3px;border-bottom-left-radius:8px}
+    .tk-qr-corner.br{bottom:-5px;right:-5px;border-bottom-width:3px;border-right-width:3px;border-bottom-right-radius:8px}
+    .tk-qr:hover .tk-qr-corner.tl{transform:translate(-2px,-2px)} .tk-qr:hover .tk-qr-corner.tr{transform:translate(2px,-2px)}
+    .tk-qr:hover .tk-qr-corner.bl{transform:translate(-2px,2px)} .tk-qr:hover .tk-qr-corner.br{transform:translate(2px,2px)}
+    .tk-qr-scan{position:absolute;left:6px;right:6px;top:8px;height:2px;border-radius:2px;background:linear-gradient(90deg,transparent,#22d3ee,transparent);box-shadow:0 0 10px 2px rgba(34,211,238,.55);animation:tkQrScan 2.4s ease-in-out infinite}
+    @keyframes tkQrScan{0%,100%{transform:translateY(0);opacity:.2}10%,90%{opacity:1}50%{transform:translateY(66px)}}
+    @media (prefers-reduced-motion:reduce){.tk-qr-scan{animation:none;opacity:0}}
+  </style>
 </head>
 
 <body class="bg-slate-50 text-slate-900 font-sans antialiased selection:bg-blue-600 selection:text-white overflow-x-hidden w-full max-w-full relative">
@@ -912,7 +925,7 @@
     <div class="tk-container">
 
       <!-- Brand Blue Gradient Hero Card (Slimmer height, slightly wider 920px, ~50% pop-out mockup) -->
-      <div class="rounded-3xl bg-gradient-to-br from-blue-600 via-blue-700 to-indigo-900 text-white px-6 py-5 sm:px-8 sm:py-6 lg:px-9 lg:py-6 border border-blue-500/40 shadow-2xl shadow-blue-900/30 relative">
+      <div class="rounded-3xl bg-gradient-to-br from-blue-600 via-blue-700 to-indigo-900 text-white px-6 py-7 sm:px-8 sm:py-9 lg:px-12 lg:py-12 border border-blue-500/40 shadow-2xl shadow-blue-900/30 relative">
 
         <!-- Ambient decorative gradient orbs contained inside rounded-3xl overflow-hidden wrapper -->
         <div class="absolute inset-0 rounded-3xl overflow-hidden pointer-events-none">
@@ -923,7 +936,7 @@
         <div class="grid lg:grid-cols-12 gap-6 lg:gap-8 items-center relative z-10">
 
           <!-- Left: 3D Smartphone Mockup (~50% pops out boldly above the box) -->
-          <div class="lg:col-span-5 flex justify-center items-center -mt-32 sm:-mt-44 lg:-mt-56 xl:-mt-60 -mb-12 sm:-mb-16 lg:-mb-20 relative z-20">
+          <div class="lg:col-span-5 flex justify-center items-center -mt-32 sm:-mt-44 lg:-mt-56 xl:-mt-60 mb-0 lg:-mb-20 relative z-20">
             <div class="w-64 sm:w-76 lg:w-88 xl:w-96 shrink-0 animate-float-reverse drop-shadow-2xl">
               <img
                 src="assets/screenshots/hero mockup.webp?v=3"
@@ -934,14 +947,14 @@
           </div>
 
           <!-- Right: information and the Google Play button -->
-          <div class="lg:col-span-7 space-y-3 text-center lg:text-left py-0.5">
+          <div class="lg:col-span-7 space-y-5 text-center lg:text-left py-0.5">
 
             <div class="space-y-1.5">
-              <h2 class="text-2xl sm:text-3xl lg:text-[32px] font-extrabold tracking-tight leading-tight text-white">
+              <h2 class="text-2xl sm:text-3xl lg:text-[40px] font-extrabold tracking-tight leading-tight text-white">
                 Unduh Aplikasi Teman Kereta
               </h2>
 
-              <p class="text-blue-100 text-xs sm:text-sm lg:text-[14px] max-w-md leading-relaxed mx-auto lg:mx-0">
+              <p class="text-blue-100 text-sm sm:text-base lg:text-[17px] max-w-lg leading-relaxed mx-auto lg:mx-0">
                 Unduh sekarang, pakai pada perjalanan berikutnya.
               </p>
             </div>
@@ -962,7 +975,41 @@
 
               </div>
 
+              <!-- QR ke Google Play: untuk pengunjung dari laptop (disembunyikan di HP) -->
+              <a href="https://play.google.com/store/apps/details?id=id.temankereta.teman_kereta&amp;hl=id" aria-label="Pindai QR untuk membuka Teman Kereta di Google Play" class="tk-qr group hidden sm:flex items-center gap-3.5 pl-2.5 pr-5 py-2.5 rounded-2xl bg-white/10 ring-1 ring-white/25 backdrop-blur hover:bg-white/15 hover:-translate-y-0.5 transition-all">
+                <span class="tk-qr-tile relative block w-[84px] h-[84px] shrink-0 rounded-xl bg-white p-2 shadow-lg shadow-black/20">
+                  <img src="assets/qr-google-play.svg" alt="" width="68" height="68" class="w-full h-full" loading="lazy">
+                  <img src="assets/branding/tk_icon.png" alt="" class="absolute left-1/2 top-1/2 w-[22px] h-[22px] -translate-x-1/2 -translate-y-1/2 rounded-md bg-white p-[2px] ring-2 ring-white">
+                  <span class="tk-qr-corner tl"></span><span class="tk-qr-corner tr"></span><span class="tk-qr-corner bl"></span><span class="tk-qr-corner br"></span>
+                  <span class="tk-qr-scan" aria-hidden="true"></span>
+                </span>
+                <span class="text-left leading-tight">
+                  <span class="flex items-center gap-1.5 text-[11px] uppercase tracking-wide font-semibold text-blue-100">
+                    <span class="relative flex w-2 h-2"><span class="absolute inline-flex w-full h-full rounded-full bg-emerald-300 opacity-75 animate-ping"></span><span class="relative inline-flex w-2 h-2 rounded-full bg-emerald-300"></span></span>
+                    Buka di laptop?
+                  </span>
+                  <span class="block text-lg font-semibold tracking-tight mt-0.5">Pindai pakai HP</span>
+                  <span class="block text-[11px] text-blue-100 mt-0.5">Langsung ke halaman instal</span>
+                </span>
+              </a>
+
               </div>
+
+            <!-- Ringkasan manfaat -->
+            <ul class="hidden sm:grid sm:grid-cols-3 gap-2.5 max-w-xl mx-auto lg:mx-0 text-left">
+              <li class="flex items-start gap-2.5 rounded-2xl bg-white/10 ring-1 ring-white/20 px-3.5 py-3">
+                <i data-lucide="bell-ring" class="w-5 h-5 text-amber-300 shrink-0 mt-0.5"></i>
+                <div><div class="text-[13px] font-bold leading-tight">Alarm Sisa Stasiun</div><div class="text-[11px] text-blue-100 mt-0.5">Bangun sebelum turun</div></div>
+              </li>
+              <li class="flex items-start gap-2.5 rounded-2xl bg-white/10 ring-1 ring-white/20 px-3.5 py-3">
+                <i data-lucide="train-front" class="w-5 h-5 text-emerald-300 shrink-0 mt-0.5"></i>
+                <div><div class="text-[13px] font-bold leading-tight">Posisi KRL Live</div><div class="text-[11px] text-blue-100 mt-0.5">Dari sinyal penumpang</div></div>
+              </li>
+              <li class="flex items-start gap-2.5 rounded-2xl bg-white/10 ring-1 ring-white/20 px-3.5 py-3">
+                <i data-lucide="calendar-clock" class="w-5 h-5 text-sky-200 shrink-0 mt-0.5"></i>
+                <div><div class="text-[13px] font-bold leading-tight">Jadwal Resmi</div><div class="text-[11px] text-blue-100 mt-0.5">Open Data GTFS</div></div>
+              </li>
+            </ul>
 
             <!-- Install Note -->
             <p class="text-[11px] sm:text-xs text-blue-200 flex items-center justify-center lg:justify-start gap-1.5 pt-1">
