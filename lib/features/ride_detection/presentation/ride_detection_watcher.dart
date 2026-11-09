@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../core/notifications/local_notification_service.dart';
+import '../../../core/platform/native_trip_service.dart';
 import '../../../core/updates/update_checker.dart';
 import '../../../data/providers/demo_data.dart';
 import '../../../data/providers/provider_registry.dart';
@@ -45,6 +46,23 @@ class _RideDetectionWatcherState extends ConsumerState<RideDetectionWatcher>
     super.initState();
     WidgetsBinding.instance.addObserver(this);
     _reschedule(enabled: _shouldPoll());
+    unawaited(_resumeActivityUpdatesIfAllowed());
+  }
+
+  /// Detection is on by default, so it may never have been switched on by
+  /// hand (which is what starts the native activity updates). Start them
+  /// here when the permission is already granted — never prompting.
+  Future<void> _resumeActivityUpdatesIfAllowed() async {
+    if (!ref.read(settingsControllerProvider).rideDetectionEnabled) return;
+    try {
+      final native = ref.read(nativeTripServiceProvider);
+      final status = await native.getPermissionStatus();
+      if (status['activityRecognition'] == true) {
+        await native.requestActivityRecognitionUpdates();
+      }
+    } on Object {
+      // Not available (tests, other platforms): detection just stays idle.
+    }
   }
 
   @override

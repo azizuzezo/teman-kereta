@@ -1,6 +1,8 @@
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
-import 'package:latlong2/latlong.dart';
+import 'package:latlong2/latlong.dart' hide Path;
 
 import '../../../app/theme/tk_colors.dart';
 import '../../../domain/entities/transit_models.dart';
@@ -97,7 +99,6 @@ class MapPointsLayer extends StatelessWidget {
     required this.lineFilter,
     required this.selection,
     required this.myLocation,
-    required this.tripPosition,
     required this.colors,
     super.key,
   });
@@ -108,7 +109,6 @@ class MapPointsLayer extends StatelessWidget {
   final String? lineFilter;
   final MapSelection? selection;
   final LatLng? myLocation;
-  final LatLng? tripPosition;
   final TkColors colors;
 
   @override
@@ -126,7 +126,6 @@ class MapPointsLayer extends StatelessWidget {
             lineFilter: lineFilter,
             selection: selection,
             myLocation: myLocation,
-            tripPosition: tripPosition,
             colors: colors,
           ),
         ),
@@ -211,7 +210,6 @@ class _MapPointsPainter extends CustomPainter {
     required this.lineFilter,
     required this.selection,
     required this.myLocation,
-    required this.tripPosition,
     required this.colors,
   });
 
@@ -222,7 +220,6 @@ class _MapPointsPainter extends CustomPainter {
   final String? lineFilter;
   final MapSelection? selection;
   final LatLng? myLocation;
-  final LatLng? tripPosition;
   final TkColors colors;
 
   @override
@@ -374,6 +371,29 @@ class _MapPointsPainter extends CustomPainter {
         canvas.drawCircle(o, 3, fillPaint);
         continue;
       }
+      final heading = v.bearing;
+      if (heading != null) {
+        // A pointer on the rim shows which way the train is going.
+        final angle = heading * math.pi / 180;
+        final dir = Offset(math.sin(angle), -math.cos(angle));
+        final side = Offset(-dir.dy, dir.dx);
+        final tip = o + dir * 21;
+        final pointer = Path()
+          ..moveTo(tip.dx, tip.dy)
+          ..lineTo((o + dir * 10 + side * 8).dx, (o + dir * 10 + side * 8).dy)
+          ..lineTo((o + dir * 10 - side * 8).dx, (o + dir * 10 - side * 8).dy)
+          ..close();
+        canvas
+          ..drawPath(
+            pointer,
+            Paint()
+              ..color = colors.surface
+              ..style = PaintingStyle.stroke
+              ..strokeWidth = 3
+              ..strokeJoin = StrokeJoin.round,
+          )
+          ..drawPath(pointer, Paint()..color = colors.primary);
+      }
       fillPaint.color = colors.surface;
       canvas.drawCircle(o, 13, fillPaint);
       fillPaint.color = colors.primary;
@@ -382,17 +402,7 @@ class _MapPointsPainter extends CustomPainter {
       glyph.paint(canvas, o - Offset(glyph.width / 2, glyph.height / 2));
     }
 
-    // The rider: where the phone is, and where the trip says the train is.
-    final trip = tripPosition;
-    if (trip != null) {
-      final o = toScreen(trip);
-      fillPaint.color = colors.accent.withValues(alpha: 0.25);
-      canvas.drawCircle(o, 17, fillPaint);
-      fillPaint.color = colors.surface;
-      canvas.drawCircle(o, 10.5, fillPaint);
-      fillPaint.color = colors.accent;
-      canvas.drawCircle(o, 7.5, fillPaint);
-    }
+    // The rider's phone. (The rider's train is drawn by `TripTrainLayer`.)
     final me = myLocation;
     if (me != null) {
       final o = toScreen(me);

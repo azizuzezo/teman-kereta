@@ -53,7 +53,9 @@ String? transferPlatformInstruction({
         if (nextIs('palmerah')) return 'Transit ke Peron 5/6.';
       }
       if (fromAny(['palmerah'])) {
-        if (nextIs('karet') || nextIs('bni city')) return 'Transit ke Peron 2/3.';
+        if (nextIs('karet') || nextIs('bni city')) {
+          return 'Transit ke Peron 2/3.';
+        }
         if (nextIs('duri')) return 'Transit ke Peron 1.';
       }
     case 'duri':

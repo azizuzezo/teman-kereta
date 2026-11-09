@@ -29,7 +29,7 @@ const _dailyRouteToKey = 'daily_route_to_station_id';
 class StoredPreferences {
   const StoredPreferences({
     this.onboardingComplete = false,
-    this.themeMode = ThemeMode.system,
+    this.themeMode = ThemeMode.light,
     this.palette = TkPaletteId.navyKrl,
     this.reduceMotion = false,
     this.favoriteRoute,
@@ -38,7 +38,7 @@ class StoredPreferences {
     this.workStationId,
     this.homeAddress,
     this.workAddress,
-    this.rideDetectionEnabled = false,
+    this.rideDetectionEnabled = true,
     this.rideDetectionSuppressedUntil,
     this.vibrationEnabled = true,
     this.soundEnabled = true,
@@ -255,7 +255,7 @@ class SharedPreferencesStore implements PreferencesStore {
       workStationId: values[6] as String?,
       homeAddress: values[7] as String?,
       workAddress: values[8] as String?,
-      rideDetectionEnabled: values[9] as bool? ?? false,
+      rideDetectionEnabled: values[9] as bool? ?? true,
       rideDetectionSuppressedUntil: values[10] as String?,
       vibrationEnabled: values[11] as bool? ?? true,
       soundEnabled: values[12] as bool? ?? true,
@@ -403,8 +403,9 @@ class SharedPreferencesStore implements PreferencesStore {
   }
 
   static ThemeMode _decodeTheme(String? value) {
+    // Light unless the rider picked otherwise (not the phone's own theme).
     return ThemeMode.values.where((mode) => mode.name == value).firstOrNull ??
-        ThemeMode.system;
+        ThemeMode.light;
   }
 }
 

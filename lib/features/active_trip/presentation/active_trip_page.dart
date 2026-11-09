@@ -12,9 +12,11 @@ import '../../../core/widgets/tk_components.dart';
 import '../../../data/providers/demo_data.dart';
 import '../../../domain/entities/active_trip.dart';
 import '../../../domain/entities/transit_models.dart';
+import '../../../domain/usecases/estimated_trip_builder.dart';
 import '../../intercity/domain/intercity_trip.dart';
 import '../../intercity/presentation/intercity_ride_controller.dart';
 import '../../intercity/presentation/widgets/intercity_ride_card.dart';
+import '../../live_map/presentation/crowd_delays.dart';
 import '../../live_map/presentation/native_gps_fix.dart';
 import '../../schedule/presentation/trip_search_controller.dart';
 import 'active_trip_controller.dart';
@@ -91,7 +93,8 @@ class ActiveTripPage extends ConsumerWidget {
     final tk = context.tk;
     final textTheme = Theme.of(context).textTheme;
     final session = ref.watch(activeTripControllerProvider);
-    final stations = ref.watch(activeTripStationsProvider).value ?? const <Station>[];
+    final stations =
+        ref.watch(activeTripStationsProvider).value ?? const <Station>[];
     final gpsFix = ref.watch(latestNativeGpsFixProvider);
     final intercityRide = ref.watch(intercityRideControllerProvider);
     // A plain `ref.listen` would miss this: `start()` already flips the flag
@@ -147,13 +150,15 @@ class ActiveTripPage extends ConsumerWidget {
     final hop = ref.watch(tripHopProgressProvider);
     // Native's along-the-track fraction when it has one; the straight-line
     // GPS estimate only until the first native sync lands.
-    final hopFraction = hop?.fraction ?? hopFractionFromGps(
-      from: stationsById[session.currentStationId],
-      to: session.nextStationId == null
-          ? null
-          : stationsById[session.nextStationId],
-      fix: gpsFix,
-    );
+    final hopFraction =
+        hop?.fraction ??
+        hopFractionFromGps(
+          from: stationsById[session.currentStationId],
+          to: session.nextStationId == null
+              ? null
+              : stationsById[session.nextStationId],
+          fix: gpsFix,
+        );
     final progress = totalStops <= 1
         ? 1.0
         : (session.currentStationIndex + hopFraction) / (totalStops - 1);
@@ -395,8 +400,8 @@ class ActiveTripPage extends ConsumerWidget {
                       overflow: TextOverflow.ellipsis,
                       style: textTheme.bodyMedium?.copyWith(color: hero.muted),
                     ),
-                    if (hop?.distanceToNextMeters
-                        case final toNext? when !isIntercity) ...<Widget>[
+                    if (hop?.distanceToNextMeters case final toNext?
+                        when !isIntercity) ...<Widget>[
                       const SizedBox(height: 2),
                       Text(
                         '${formatDistanceMeters(toNext)} lagi ke $nextName',
@@ -420,6 +425,29 @@ class ActiveTripPage extends ConsumerWidget {
             if (isIntercity) ...<Widget>[
               const SizedBox(height: 16),
               const IntercityRideCard(),
+            ] else if (!isArrived) ...<Widget>[
+              const SizedBox(height: 12),
+              SizedBox(
+                width: double.infinity,
+                child: OutlinedButton.icon(
+                  onPressed: () => context.go('/map'),
+                  icon: const Icon(Icons.map_outlined, size: 18),
+                  label: const Text('Lihat keretaku di peta'),
+                ),
+              ),
+              if (session.currentStationId != null &&
+                  session.nextStationId != null) ...<Widget>[
+                const SizedBox(height: 12),
+                CrowdDelayCard(
+                  stationCode: session.currentStationId!,
+                  towardCode: session.nextStationId,
+                  showEmpty: false,
+                ),
+              ],
+              if (session.trip.routeVia != null) ...<Widget>[
+                const SizedBox(height: 12),
+                _RouteChoiceRow(session: session, stations: stations),
+              ],
             ],
             const SizedBox(height: 24),
             Row(
@@ -677,6 +705,320 @@ class ActiveTripPage extends ConsumerWidget {
 /// This just lets a rider who can see the app is behind skip the wait
 /// instead of sitting there wondering: it feeds the same pipeline and can
 /// never move the trip somewhere automatic tracking wouldn't have.
+/// "Rute: via Pasar Senen · Ganti". For a trip started without picking a
+/// route, also asks once in a dialog which way round the train goes.
+class _RouteChoiceRow extends ConsumerStatefulWidget {
+  const _RouteChoiceRow({required this.session, required this.stations});
+
+  final ActiveTripSession session;
+  final List<Station> stations;
+
+  @override
+  ConsumerState<_RouteChoiceRow> createState() => _RouteChoiceRowState();
+}
+
+class _RouteChoiceRowState extends ConsumerState<_RouteChoiceRow> {
+  static final Set<String> _askedSessions = <String>{};
+
+  List<String> get _vias => <String>[
+    widget.session.trip.routeVia!,
+    ...otherRouteVias(widget.session.trip, widget.stations),
+  ];
+
+  /// The last stop both routes share, e.g. Jatinegara.
+  String? get _splitName {
+    final others = otherRouteVias(widget.session.trip, widget.stations);
+    if (others.isEmpty) return null;
+    final alt = alternativeEstimatedTrip(
+      trip: widget.session.trip,
+      allStations: widget.stations,
+      viaName: others.first,
+    );
+    if (alt == null) return null;
+    final a = widget.session.trip.stationIds;
+    final b = alt.stationIds;
+    var i = 0;
+    while (i < a.length && i < b.length && a[i] == b[i]) {
+      i++;
+    }
+    if (i == 0) return null;
+    return widget.stations.where((s) => s.id == a[i - 1]).firstOrNull?.name;
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    _maybeAsk();
+  }
+
+  @override
+  void didUpdateWidget(_RouteChoiceRow oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    _maybeAsk();
+  }
+
+  void _maybeAsk() {
+    final session = widget.session;
+    if (session.routeConfirmed ||
+        widget.stations.isEmpty ||
+        _vias.length < 2 ||
+        !_askedSessions.add(session.id)) {
+      return;
+    }
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) unawaited(_ask());
+    });
+  }
+
+  Future<void> _ask() async {
+    final trip = widget.session.trip;
+    final options = <TransitTrip>[
+      trip,
+      for (final via in otherRouteVias(trip, widget.stations))
+        ?alternativeEstimatedTrip(
+          trip: trip,
+          allStations: widget.stations,
+          viaName: via,
+        ),
+    ]..sort((a, b) => a.durationMinutes.compareTo(b.durationMinutes));
+    final picked = await showModalBottomSheet<String>(
+      context: context,
+      showDragHandle: true,
+      isScrollControlled: true,
+      useSafeArea: true,
+      backgroundColor: context.tk.surface,
+      builder: (_) => _RouteChoiceSheet(
+        options: options,
+        current: widget.session.routeConfirmed ? trip.routeVia : null,
+        splitName: _splitName,
+        stations: widget.stations,
+      ),
+    );
+    if (picked == null || !mounted) return;
+    await ref.read(activeTripControllerProvider.notifier).chooseRoute(picked);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final tk = context.tk;
+    final textTheme = Theme.of(context).textTheme;
+    final session = widget.session;
+    return Row(
+      children: <Widget>[
+        Icon(Icons.alt_route_rounded, size: 20, color: tk.textMuted),
+        const SizedBox(width: 8),
+        Expanded(
+          child: Text(
+            'Rute: via ${session.trip.routeVia}'
+            '${session.routeConfirmed ? '' : ' (belum pasti)'}',
+            style: textTheme.bodyMedium,
+          ),
+        ),
+        if (_vias.length > 1)
+          TextButton(onPressed: _ask, child: const Text('Ganti')),
+      ],
+    );
+  }
+}
+
+/// "Keretamu lewat mana?": one large card per way round, then a quiet way out
+/// that leaves it to GPS. Returns the chosen via name, or null.
+class _RouteChoiceSheet extends StatelessWidget {
+  const _RouteChoiceSheet({
+    required this.options,
+    required this.current,
+    required this.splitName,
+    required this.stations,
+  });
+
+  final List<TransitTrip> options;
+  final String? current;
+  final String? splitName;
+  final List<Station> stations;
+
+  @override
+  Widget build(BuildContext context) {
+    final tk = context.tk;
+    final textTheme = Theme.of(context).textTheme;
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(20, 0, 20, 16),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: <Widget>[
+          if (splitName != null)
+            Text(
+              'Rute bercabang di $splitName'.toUpperCase(),
+              style: textTheme.labelSmall?.copyWith(
+                color: tk.textMuted,
+                letterSpacing: 0.8,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+          const SizedBox(height: 6),
+          Text('Keretamu lewat mana?', style: textTheme.headlineSmall),
+          const SizedBox(height: 6),
+          Text(
+            'Lihat papan tujuan di kereta atau di peron.',
+            style: textTheme.bodyMedium?.copyWith(color: tk.textMuted),
+          ),
+          const SizedBox(height: 20),
+          for (final (i, option) in options.indexed) ...<Widget>[
+            if (i > 0) const SizedBox(height: 12),
+            _RouteOptionCard(
+              trip: option,
+              selected: option.routeVia == current,
+              fastest: i == 0 && options.length > 1,
+              splitName: splitName,
+              stations: stations,
+              onTap: () => Navigator.of(context).pop(option.routeVia),
+            ),
+          ],
+          const SizedBox(height: 12),
+          TextButton.icon(
+            onPressed: () => Navigator.of(context).pop(),
+            style: TextButton.styleFrom(minimumSize: const Size.fromHeight(48)),
+            icon: const Icon(Icons.gps_fixed_rounded, size: 18),
+            label: const Text('Belum tahu, deteksi otomatis lewat GPS'),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _RouteOptionCard extends StatelessWidget {
+  const _RouteOptionCard({
+    required this.trip,
+    required this.selected,
+    required this.fastest,
+    required this.splitName,
+    required this.stations,
+    required this.onTap,
+  });
+
+  final TransitTrip trip;
+  final bool selected;
+  final bool fastest;
+  final String? splitName;
+  final List<Station> stations;
+  final VoidCallback onTap;
+
+  /// Stops after the split, e.g. "Pondok Jati · Kramat · Gang Sentiong · +2".
+  String get _passes {
+    final names = <String>[
+      for (final id in trip.stationIds)
+        stations.where((s) => s.id == id).firstOrNull?.name ?? id,
+    ];
+    final from = splitName == null ? 0 : names.indexOf(splitName!) + 1;
+    final after = names.sublist(from.clamp(0, names.length));
+    if (after.length <= 4) return after.join(' · ');
+    return '${after.take(3).join(' · ')} · +${after.length - 3} stasiun';
+  }
+
+  String? get _transferAt {
+    if (trip.legs.length < 2) return null;
+    return trip.legs.first.destinationName;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final tk = context.tk;
+    final textTheme = Theme.of(context).textTheme;
+    final transferAt = _transferAt;
+    return Semantics(
+      button: true,
+      selected: selected,
+      label:
+          'via ${trip.routeVia}, ${trip.durationMinutes} menit, '
+          '${transferAt == null ? 'langsung' : 'transit di $transferAt'}',
+      excludeSemantics: true,
+      child: Material(
+        color: selected ? tk.primarySoft : tk.surface,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(18),
+          side: BorderSide(
+            color: selected ? tk.primary : tk.border,
+            width: selected ? 2 : 1,
+          ),
+        ),
+        clipBehavior: Clip.antiAlias,
+        child: InkWell(
+          onTap: onTap,
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(16, 14, 12, 14),
+            child: Row(
+              children: <Widget>[
+                Container(
+                  width: 44,
+                  height: 44,
+                  decoration: BoxDecoration(
+                    color: tk.primary.withValues(alpha: 0.12),
+                    shape: BoxShape.circle,
+                  ),
+                  child: Icon(Icons.train_rounded, color: tk.primary),
+                ),
+                const SizedBox(width: 14),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: <Widget>[
+                      Row(
+                        children: <Widget>[
+                          Flexible(
+                            child: Text(
+                              'via ${trip.routeVia}',
+                              style: textTheme.titleMedium?.copyWith(
+                                fontWeight: FontWeight.w800,
+                              ),
+                            ),
+                          ),
+                          if (fastest) ...<Widget>[
+                            const SizedBox(width: 8),
+                            const TkPill(
+                              label: 'Tercepat',
+                              tone: TkPillTone.success,
+                              dense: true,
+                            ),
+                          ],
+                        ],
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        '±${trip.durationMinutes} mnt · '
+                        '${transferAt == null ? 'Langsung' : 'Transit di $transferAt'}',
+                        style: textTheme.bodyMedium?.copyWith(
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        _passes,
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        style: textTheme.bodySmall?.copyWith(
+                          color: tk.textMuted,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Icon(
+                  selected
+                      ? Icons.check_circle_rounded
+                      : Icons.chevron_right_rounded,
+                  color: selected ? tk.primary : tk.textMuted,
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 class _LocationHealthRow extends ConsumerStatefulWidget {
   const _LocationHealthRow({required this.palette});
 
@@ -900,7 +1242,8 @@ class _MissedDestinationView extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final tk = context.tk;
     final textTheme = Theme.of(context).textTheme;
-    final stations = ref.watch(activeTripStationsProvider).value ?? const <Station>[];
+    final stations =
+        ref.watch(activeTripStationsProvider).value ?? const <Station>[];
     final destinationName = _resolveStationName(
       session.trip.destinationStationId,
       stations,

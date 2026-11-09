@@ -82,7 +82,7 @@
             <h2 id="h-data">2. Data yang kami proses</h2>
             <ul>
               <li><strong>Lokasi (GPS).</strong> Dipakai untuk mencari stasiun terdekat, memandu perjalanan aktif, dan membunyikan peringatan sebelum stasiun tujuan, termasuk saat layar terkunci selama perjalanan aktif. Lokasi hanya dipakai pada fitur itu.</li>
-              <li><strong>Deteksi otomatis naik KRL (opsional, nonaktif secara bawaan).</strong> Jika kamu menyalakannya, posisi GPS-mu dikirim ke server kami sesekali selama perjalanan supaya penumpang lain bisa melihat posisi kereta. Kiriman itu hanya berisi koordinat, waktu, kode perjalanan, dan kode acak per pemasangan aplikasi yang tidak terhubung ke akunmu. Data mentah dihapus otomatis paling lama 10 menit, lalu posisi dari beberapa penumpang digabung menjadi satu posisi rata-rata per kereta. Posisimu sendiri tidak pernah ditampilkan ke pengguna lain.</li>
+              <li><strong>Deteksi otomatis naik KRL (menyala secara bawaan, bisa dimatikan di Profil &gt; Lokasi).</strong> Selama pilihan ini menyala, posisi GPS-mu dikirim ke server kami sesekali selama perjalanan supaya penumpang lain bisa melihat posisi kereta. Kiriman itu hanya berisi koordinat, waktu, kode perjalanan, dan kode acak per pemasangan aplikasi yang tidak terhubung ke akunmu. Data mentah dihapus otomatis paling lama 10 menit, lalu posisi dari beberapa penumpang digabung menjadi satu posisi rata-rata per kereta. Posisimu sendiri tidak pernah ditampilkan ke pengguna lain: di peta mereka hanya tampil keretanya (arah, tujuan, dan relasi kereta). Saat GPS mendeteksi keretamu tiba di stasiun berikutnya, kami juga menerima kode stasiun itu, kode stasiun sebelum/sesudahnya, dan jam tibanya, lalu mencocokkannya dengan jadwal resmi untuk menghitung keterlambatan. Pengguna lain hanya melihat angka gabungan (median telat per arah dan jumlah HP yang melapor).</li>
               <li><strong>Aktivitas fisik.</strong> Dibaca di perangkat hanya untuk mengenali dimulainya perjalanan, dan hanya jika kamu menyalakan deteksi otomatis. Tidak disimpan dan tidak dikirim ke server.</li>
               <li><strong>Akun.</strong> Untuk memakai aplikasi, kamu mendaftar dan masuk dengan email, nama tampilan, username, dan kata sandi. Kata sandi disimpan terenkripsi oleh penyedia autentikasi, jadi kami tidak bisa membacanya. Preferensi seperti stasiun rumah atau kantor dan rute favorit tersimpan di akunmu.</li>
               <li><strong>Forum dan foto.</strong> Postingan, komentar, suka, foto yang kamu unggah, foto profil, serta siapa yang kamu ikuti dan yang mengikutimu bisa dilihat pengguna lain. Laporan dan blokir yang kamu buat hanya terlihat olehmu dan moderator.</li>
@@ -147,6 +147,7 @@
             <h2 id="h-retensi">8. Penyimpanan dan penghapusan</h2>
             <ul>
               <li>Ping lokasi mentah dari deteksi otomatis: dihapus dalam 10 menit.</li>
+              <li>Laporan jam tiba di stasiun dari deteksi otomatis: dihapus dalam 3 jam.</li>
               <li>Data akun, forum, favorit, dan laporan: disimpan selama akunmu aktif.</li>
               <li>Penghapusan akun: berlaku segera dan tidak bisa dibatalkan. Profil, preferensi, token notifikasi, daftar pengikut, postingan, komentar, suka, laporan, blokir, dan foto ikut terhapus.</li>
             </ul>

@@ -3,6 +3,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../domain/entities/transit_models.dart';
 import '../../domain/providers/transit_providers.dart';
+import '../../domain/usecases/estimated_trip_builder.dart';
 import '../../domain/usecases/line_transfer_router.dart';
 import '../../domain/usecases/transfer_platform_guidance.dart';
 import '../../domain/usecases/transit_network.dart';
@@ -446,94 +447,23 @@ class SupabaseTransitProvider
       // route is worse than an honest "no results" (confirmed live: this
       // fallback used to claim e.g. Bogor→Jurang Mangu, a real two-transfer
       // trip, was a single direct hop).
-      final legStations = await _fallbackLegStations(
+      final options = await _fallbackRouteOptions(
         query.originStationId,
         query.destinationStationId,
       );
-      if (legStations == null) {
-        trips = const <TransitTrip>[];
-      } else {
-        final departureOffsets = <int>[6, 18, 33];
-        trips = List<TransitTrip>.generate(departureOffsets.length, (index) {
-          final departure = query.departureAt.add(
-            Duration(minutes: departureOffsets[index]),
-          );
-          final travelMinutes = 35 + (index * 7 * legStations.length);
-          final arrival = departure.add(Duration(minutes: travelMinutes));
-          final legMinutes = travelMinutes ~/ legStations.length;
-          final legs = <TripLeg>[];
-          var legStart = departure;
-          for (var legIndex = 0; legIndex < legStations.length; legIndex++) {
-            final stations = legStations[legIndex];
-            final isLastLeg = legIndex == legStations.length - 1;
-            final legEnd = isLastLeg
-                ? arrival
-                : legStart.add(Duration(minutes: legMinutes));
-            final legOriginName = legIndex == 0
-                ? originName
-                : legStations[legIndex - 1].last.name;
-            final legDestinationName = isLastLeg
-                ? destinationName
-                : stations.last.name;
-            String? transferInstruction;
-            if (!isLastLeg) {
-              final nextStations = legStations[legIndex + 1];
-              final nextName = nextStations.length >= 2
-                  ? nextStations[1].name
-                  : null;
-              // The real station immediately before this transfer on the
-              // CURRENT leg — not the trip's ultimate origin — since almost
-              // no rider actually boards at one of transferPlatformInstruction's
-              // example stations (e.g. most Bogor-line riders board at
-              // Bojonggede/Depok/etc., not literally at Bogor). When the leg
-              // has only 2 stops, that adjacent stop and the leg's own start
-              // are the same station anyway.
-              final approachingFromName = stations[stations.length - 2].name;
-              transferInstruction =
-                  transferPlatformInstruction(
-                    approachingFromName: approachingFromName,
-                    transferName: legDestinationName,
-                    nextName: nextName,
-                  ) ??
-                  'Transit di $legDestinationName.';
-            }
-            legs.add(
-              TripLeg(
-                id: 'leg-$index-$legIndex',
-                mode: TransportMode.commuterRail,
-                originName: legOriginName,
-                destinationName: legDestinationName,
-                departureAt: legStart,
-                arrivalAt: legEnd,
-                lineName: 'Commuter Line',
-                headsign: legDestinationName,
-                stationIds: stations.map((s) => s.id).toList(growable: false),
-                transferInstruction: transferInstruction,
-              ),
-            );
-            legStart = legEnd.add(const Duration(minutes: 5));
-          }
-          return TransitTrip(
-            id: 'krl-trip-${query.originStationId}-${query.destinationStationId}-$index',
-            originStationId: query.originStationId,
-            destinationStationId: query.destinationStationId,
-            departureAt: departure,
-            arrivalAt: arrival,
-            legs: legs,
-            transfers: legs.length - 1,
-            // No walking distance or fare is invented here. Both were
-            // previously derived from this trip's position in the result list
-            // (`150 + index * 60`, `4000 + index * 1000`), which made the
-            // third option look longer and pricier than the first purely
-            // because it was listed third. Fare is now computed for real from
-            // track geometry at display time (see `krl_fare.dart`), and
-            // walking distance stays 0 until there is a real source for it.
-            freshness: DataFreshness.estimated,
-            sourceLabel: 'Jadwal Operasional KRL • Terjadwal',
-            updatedAt: DateTime.now(),
-          );
-        });
-      }
+      final allStations = await getStations();
+      trips = <TransitTrip>[
+        for (var o = 0; o < options.length; o++)
+          ...buildEstimatedTrips(
+            option: options[o],
+            optionIndex: o,
+            query: query,
+            originName: originName,
+            destinationName: destinationName,
+            labelRouteVia: options.length > 1,
+            allStations: allStations,
+          ),
+      ];
     } else {
       // Stagger departure times for alternative options so they don't share identical departure minutes
       final staggered = <TransitTrip>[];
@@ -627,20 +557,17 @@ class SupabaseTransitProvider
     };
   }
 
-  /// Real per-leg station sequences for [originId] -> [destinationId], used
-  /// only when the trip-schedule tables have no row for this pair (see
-  /// `searchTrips`'s empty-`trips` branch). See [routeBetweenStations] for
-  /// how this is computed and why it must never fall back to a fabricated
-  /// `[origin, destination]` trip (confirmed live: the old 1-transfer-max
-  /// version made two genuinely real two-transfer trips —
-  /// Bogor→Jurang Mangu, Bojong Gede→Tangerang — falsely look like a single
-  /// direct hop).
-  Future<List<List<Station>>?> _fallbackLegStations(
+  /// Real routes for [originId] -> [destinationId] (best first), used only
+  /// when the trip-schedule tables have no row for this pair (see
+  /// `searchTrips`'s empty-`trips` branch). See [routeOptionsBetweenStations]
+  /// for how this is computed and why it must never fall back to a fabricated
+  /// `[origin, destination]` trip.
+  Future<List<RouteOption>> _fallbackRouteOptions(
     String originId,
     String destinationId,
   ) async {
     final allStations = await getStations();
-    return routeBetweenStations(allStations, originId, destinationId);
+    return routeOptionsBetweenStations(allStations, originId, destinationId);
   }
 
   Future<List<String>> _tripStopCodes(
@@ -858,6 +785,8 @@ class SupabaseTransitProvider
       bearing: (row['bearing'] as num?)?.toDouble(),
       speedMetersPerSecond: (row['speed'] as num?)?.toDouble(),
       isDemo: source == 'demo',
+      headsign: row['headsign'] as String?,
+      relation: row['relation'] as String?,
     );
   }
 

@@ -140,6 +140,8 @@ class TripDetailPage extends ConsumerWidget {
                             ? 'Langsung'
                             : '${trip.transfers}x',
                       ),
+                      if (trip.routeVia != null)
+                        _Stat(label: 'Lewat', value: trip.routeVia!),
                       if (fareMeters != null)
                         _Stat(
                           label: 'Jarak',

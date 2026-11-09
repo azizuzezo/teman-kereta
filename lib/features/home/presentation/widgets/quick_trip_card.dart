@@ -93,7 +93,11 @@ class _QuickTripCardState extends ConsumerState<QuickTripCard> {
     final router = GoRouter.of(context);
     final trip = await _search();
     if (trip == null) return;
-    await ref.read(activeTripControllerProvider.notifier).start(trip);
+    // Started without looking at the route: ask which way round on the
+    // trip page (and let GPS settle it).
+    await ref
+        .read(activeTripControllerProvider.notifier)
+        .start(trip, routeConfirmed: false);
     unawaited(router.push('/active-trip'));
   }
 

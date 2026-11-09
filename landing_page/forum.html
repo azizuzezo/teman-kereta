@@ -1269,6 +1269,7 @@
               };
             });
             renderPosts();
+            await loadComments(posts.map(p => p.id));
             return;
           }
         } catch (e) {
@@ -1378,6 +1379,26 @@
           posts.unshift(realtimePost);
           renderPosts();
           showToast('Kabar Baru Masuk!', `${dName}: "${newRow.body.substring(0, 50)}..."`);
+        })
+        .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'forum_comments' }, async (payload) => {
+          const row = payload.new;
+          if (!row || row.status !== 'visible') return;
+          const post = posts.find(p => p.id === row.post_id);
+          if (!post) return;
+          if (!post.comments) post.comments = [];
+          if (post.comments.some(c => c.id === row.id)) return;
+          let author = 'Pejuang KRL';
+          try {
+            const { data: userRow } = await supabaseClient
+              .from('users')
+              .select('username, display_name')
+              .eq('id', row.user_id)
+              .maybeSingle();
+            if (userRow) author = userRow.display_name || userRow.username || author;
+          } catch (e) {}
+          if (post.comments.some(c => c.id === row.id)) return;
+          post.comments.push({ id: row.id, author, time: 'Baru saja', text: row.body || '' });
+          renderPosts();
         })
         .subscribe();
     }
@@ -1728,25 +1749,91 @@
       }
     }
 
-    function submitComment(postId) {
+    function commentFromRow(row) {
+      const u = row.users || {};
+      return {
+        id: row.id,
+        author: u.display_name || u.username || 'Pejuang KRL',
+        time: formatRelativeTime(row.created_at),
+        text: row.body || ''
+      };
+    }
+
+    // Komentar asli dari database (yang dikirim dari aplikasi maupun web).
+    async function loadComments(postIds) {
+      const ids = (postIds || []).filter(id => typeof id === 'string' && id.length > 20);
+      if (!supabaseClient || ids.length === 0) return;
+      try {
+        const { data, error } = await supabaseClient
+          .from('forum_comments')
+          .select('id, post_id, body, created_at, users:users!forum_comments_user_id_fkey(username, display_name)')
+          .in('post_id', ids)
+          .order('created_at', { ascending: true });
+        if (error || !data) return;
+        for (const post of posts) {
+          if (!ids.includes(post.id)) continue;
+          post.comments = data.filter(r => r.post_id === post.id).map(commentFromRow);
+        }
+        renderPosts();
+      } catch (e) {
+        console.warn("Could not load comments:", e);
+      }
+    }
+
+    async function submitComment(postId) {
       if (!currentUser) {
         requireLogin('mengirim balasan');
         return;
       }
       const input = document.getElementById(`comment-input-${postId}`);
-      if (!input || !input.value.trim()) return;
-
+      const text = input ? input.value.trim() : '';
+      if (!text) return;
+      if (text.length > 1000) {
+        showToast('Balasan terlalu panjang', 'Maksimal 1000 karakter.', false);
+        return;
+      }
       const post = posts.find(p => p.id === postId);
-      if (post) {
+      if (!post) return;
+
+      // Hanya akun yang benar-benar masuk yang bisa menyimpan balasan.
+      let userId = null;
+      if (supabaseClient) {
+        try {
+          const { data: { user } } = await supabaseClient.auth.getUser();
+          userId = user ? user.id : null;
+        } catch (e) {}
+      }
+      if (!userId) {
+        requireLogin('mengirim balasan');
+        return;
+      }
+
+      input.disabled = true;
+      try {
+        const { data, error } = await supabaseClient
+          .from('forum_comments')
+          .insert({ post_id: postId, user_id: userId, body: text })
+          .select('id, post_id, body, created_at')
+          .single();
+        if (error) throw error;
         if (!post.comments) post.comments = [];
-        post.comments.push({
-          author: currentUser.displayName,
-          time: 'Baru saja',
-          text: input.value.trim()
-        });
+        if (!post.comments.some(c => c.id === data.id)) {
+          post.comments.push({
+            id: data.id,
+            author: currentUser.displayName,
+            time: 'Baru saja',
+            text: data.body
+          });
+        }
         input.value = '';
         renderPosts();
         document.getElementById(`comments-section-${postId}`)?.classList.remove('hidden');
+      } catch (e) {
+        console.warn("Comment insert failed:", e);
+        showToast('Balasan belum terkirim', 'Coba lagi sebentar lagi.', false);
+      } finally {
+        const fresh = document.getElementById(`comment-input-${postId}`);
+        if (fresh) fresh.disabled = false;
       }
     }
 
@@ -1867,6 +1954,7 @@
 
             posts.unshift(singlePost);
             renderPosts();
+            await loadComments([singlePost.id]);
           }
         } catch(e) {
           console.warn("Could not fetch deep linked post:", e);

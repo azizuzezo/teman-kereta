@@ -17,11 +17,13 @@ import '../../../domain/entities/transit_models.dart';
 import '../../../domain/usecases/transit_network.dart';
 import '../../intercity/presentation/intercity_map_page.dart';
 import '../../intercity/presentation/trip_mode.dart';
+import 'active_trip_route.dart';
 import 'live_map_geometry.dart';
 import 'live_trip_position_controller.dart';
 import 'map_panels.dart';
 import 'map_points_layer.dart';
 import 'map_tiles.dart';
+import 'trip_train_layer.dart';
 
 /// Live map of the KRL network.
 ///
@@ -139,6 +141,12 @@ class _MapBodyState extends ConsumerState<_MapBody> {
   late final ValueNotifier<TransitNetwork> _network;
   final ValueNotifier<LatLng?> _myLocation = ValueNotifier(null);
   final ValueNotifier<bool> _locating = ValueNotifier(false);
+
+  /// Keeps the rider's train in view while true; any pan or zoom by hand
+  /// turns it off, the "Ikuti keretaku" button turns it back on.
+  final ValueNotifier<bool> _followTrain = ValueNotifier(false);
+  bool _mapReady = false;
+  String? _framedTripId;
   final TileHealthTracker _tileHealth = TileHealthTracker();
   final StreamController<void> _tileReset = StreamController<void>.broadcast();
 
@@ -167,6 +175,21 @@ class _MapBodyState extends ConsumerState<_MapBody> {
   void initState() {
     super.initState();
     _derive();
+    ref.listenManual<TripMapMarker?>(liveTripPositionControllerProvider, (
+      previous,
+      next,
+    ) {
+      if (next == null || !_followTrain.value || !_mapReady) return;
+      _mapController.move(
+        next.point,
+        math.max(_mapController.camera.zoom, 14.5),
+      );
+    });
+    ref.listenManual<ActiveTripRoute?>(
+      activeTripRouteProvider,
+      (previous, next) => _frameTrip(next),
+      fireImmediately: true,
+    );
     _network = ValueNotifier<TransitNetwork>(
       _networks.contains(TransitNetwork.jabodetabek)
           ? TransitNetwork.jabodetabek
@@ -251,6 +274,7 @@ class _MapBodyState extends ConsumerState<_MapBody> {
     _network.dispose();
     _myLocation.dispose();
     _locating.dispose();
+    _followTrain.dispose();
     _tileHealth.dispose();
     unawaited(_tileReset.close());
     _mapController.dispose();
@@ -288,11 +312,7 @@ class _MapBodyState extends ConsumerState<_MapBody> {
     );
   }
 
-  Widget _buildTrackLayer(
-    String? filter,
-    TransitNetwork network,
-    TkColors tk,
-  ) {
+  Widget _buildTrackLayer(String? filter, TransitNetwork network, TkColors tk) {
     final key = Object.hash(
       filter,
       network,
@@ -362,6 +382,38 @@ class _MapBodyState extends ConsumerState<_MapBody> {
       vehicles: vehicles,
       lineFilter: _lineFilter.value,
     );
+  }
+
+  /// Shows the whole trip route once per trip, the first time it is known
+  /// while the map is up.
+  void _frameTrip(ActiveTripRoute? route) {
+    if (route == null) {
+      _framedTripId = null;
+      _followTrain.value = false;
+      return;
+    }
+    if (!_mapReady || _framedTripId == route.tripId) return;
+    _framedTripId = route.tripId;
+    _mapController.fitCamera(
+      CameraFit.bounds(
+        bounds: LatLngBounds.fromPoints(route.points),
+        padding: const EdgeInsets.fromLTRB(48, 220, 48, 150),
+        maxZoom: 15,
+      ),
+    );
+  }
+
+  void _followMyTrain() {
+    final marker = ref.read(liveTripPositionControllerProvider);
+    _followTrain.value = true;
+    if (marker != null) {
+      _mapController.move(
+        marker.point,
+        math.max(_mapController.camera.zoom, 14.5),
+      );
+    } else {
+      _frameTrip(ref.read(activeTripRouteProvider));
+    }
   }
 
   void _zoomBy(double delta) {
@@ -574,6 +626,15 @@ class _MapBodyState extends ConsumerState<_MapBody> {
                 flags: InteractiveFlag.all & ~InteractiveFlag.rotate,
               ),
               onTap: _onMapTap,
+              onMapReady: () {
+                _mapReady = true;
+                _frameTrip(ref.read(activeTripRouteProvider));
+              },
+              onPositionChanged: (camera, hasGesture) {
+                if (hasGesture && _followTrain.value) {
+                  _followTrain.value = false;
+                }
+              },
             ),
             children: <Widget>[
               if (tk.isDark)
@@ -591,6 +652,7 @@ class _MapBodyState extends ConsumerState<_MapBody> {
                 builder: (context, _) =>
                     _buildTrackLayer(_lineFilter.value, _network.value, tk),
               ),
+              const TripRouteLayer(),
               ValueListenableBuilder<TransitNetwork>(
                 valueListenable: _network,
                 builder: (context, network, _) => _PointsHost(
@@ -602,6 +664,7 @@ class _MapBodyState extends ConsumerState<_MapBody> {
                   colors: tk,
                 ),
               ),
+              const TripTrainLayer(),
             ],
           ),
         ),
@@ -671,9 +734,16 @@ class _MapBodyState extends ConsumerState<_MapBody> {
                   crossAxisAlignment: CrossAxisAlignment.end,
                   children: <Widget>[
                     Flexible(
-                      child: Align(
-                        alignment: Alignment.bottomLeft,
-                        child: _AttributionChip(onTap: _openAttribution),
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: <Widget>[
+                          _FollowTrainButton(
+                            following: _followTrain,
+                            onPressed: _followMyTrain,
+                          ),
+                          _AttributionChip(onTap: _openAttribution),
+                        ],
                       ),
                     ),
                     const SizedBox(width: 8),
@@ -751,14 +821,50 @@ class _PointsHostState extends ConsumerState<_PointsHost> {
     super.dispose();
   }
 
+  /// A train without its own heading points from the station it left to the
+  /// one it is heading for, so its direction shows on the map.
+  VehiclePosition _withBearing(VehiclePosition v) {
+    if (v.bearing != null) return v;
+    final from = v.previousStationId;
+    final to = v.nextStationId;
+    if (from == null || to == null) return v;
+    Station? find(String code) {
+      for (final p in widget.points) {
+        if (p.station.code == code || p.station.id == code) return p.station;
+      }
+      return null;
+    }
+
+    final a = find(from);
+    final b = find(to);
+    if (a == null || b == null) return v;
+    final dx =
+        (b.longitude - a.longitude) * math.cos(a.latitude * math.pi / 180);
+    final dy = b.latitude - a.latitude;
+    final degrees = (math.atan2(dx, dy) * 180 / math.pi + 360) % 360;
+    return v.copyWith(bearing: degrees);
+  }
+
   @override
   Widget build(BuildContext context) {
-    final vehicles = freshVehicles(
-      ref.watch(vehiclePositionsProvider).asData?.value ??
-          const <VehiclePosition>[],
-      DateTime.now(),
-    );
-    final trip = ref.watch(liveTripPositionControllerProvider);
+    final mine = ref.watch(liveTripPositionControllerProvider)?.point;
+    final vehicles = <VehiclePosition>[
+      for (final v in freshVehicles(
+        ref.watch(vehiclePositionsProvider).asData?.value ??
+            const <VehiclePosition>[],
+        DateTime.now(),
+      ))
+        // The rider's own train is already drawn by TripTrainLayer; the
+        // crowd position it helps produce would only be a second dot on it.
+        if (mine == null ||
+            const Distance().as(
+                  LengthUnit.Meter,
+                  mine,
+                  LatLng(v.latitude, v.longitude),
+                ) >
+                400)
+          _withBearing(v),
+    ];
     return ListenableBuilder(
       listenable: Listenable.merge(<Listenable>[
         widget.lineFilter,
@@ -772,9 +878,43 @@ class _PointsHostState extends ConsumerState<_PointsHost> {
         lineFilter: widget.lineFilter.value,
         selection: widget.selection.value,
         myLocation: widget.myLocation.value,
-        tripPosition: trip,
         colors: widget.colors,
       ),
+    );
+  }
+}
+
+/// "Ikuti keretaku": shown only during an active trip, while the map is not
+/// already following the rider's train.
+class _FollowTrainButton extends ConsumerWidget {
+  const _FollowTrainButton({required this.following, required this.onPressed});
+
+  final ValueNotifier<bool> following;
+  final VoidCallback onPressed;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final hasTrip = ref.watch(
+      activeTripRouteProvider.select((route) => route != null),
+    );
+    if (!hasTrip) return const SizedBox.shrink();
+    return ValueListenableBuilder<bool>(
+      valueListenable: following,
+      builder: (context, isFollowing, _) => isFollowing
+          ? const SizedBox.shrink()
+          : Padding(
+              padding: const EdgeInsets.only(bottom: 8),
+              child: FilledButton.icon(
+                onPressed: onPressed,
+                icon: const Icon(Icons.train_rounded, size: 20),
+                label: const Text('Ikuti keretaku'),
+                style: FilledButton.styleFrom(
+                  backgroundColor: context.tk.accent,
+                  foregroundColor: context.tk.onPrimary,
+                  minimumSize: const Size(0, 48),
+                ),
+              ),
+            ),
     );
   }
 }

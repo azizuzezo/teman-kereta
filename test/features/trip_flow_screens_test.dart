@@ -398,7 +398,7 @@ void main() {
     expect(find.text('Dari'), findsOneWidget);
     expect(find.text('Ke'), findsOneWidget);
     expect(find.text('1 alternatif'), findsOneWidget);
-    expect(find.text('Pilihan tercepat'), findsOneWidget);
+    expect(find.text('Pilihan terbaik'), findsOneWidget);
     expect(find.text('Berangkat'), findsOneWidget);
   });
 

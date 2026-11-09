@@ -45,6 +45,8 @@ class CrowdPositionReporter {
   Future<Position?> reportOnce({
     required String externalTripId,
     required DateTime serviceDate,
+    String? headsign,
+    String? relation,
   }) async {
     if (!AppEnvironment.supabaseEnabled) {
       return null;
@@ -83,6 +85,8 @@ class CrowdPositionReporter {
           'longitude': position.longitude,
           'reported_at': DateTime.now().toUtc().toIso8601String(),
           'device_session_id': sessionId,
+          'headsign': ?_clip(headsign),
+          'relation': ?_clip(relation),
         },
       );
     } on Object {
@@ -90,6 +94,41 @@ class CrowdPositionReporter {
       // interrupt their trip.
     }
     return position;
+  }
+
+  /// Reports that the rider's train has just reached [stationCode], heading
+  /// to [nextStationCode] (or, at the last stop, coming from
+  /// [prevStationCode]). The server matches it to the official timetable and
+  /// keeps the delay, so other riders see how late trains are running. Only
+  /// for a GPS-detected arrival, never a manual "Lanjut" tap.
+  Future<void> reportStationPassage({
+    required String stationCode,
+    required DateTime passedAt,
+    String? nextStationCode,
+    String? prevStationCode,
+  }) async {
+    if (!AppEnvironment.supabaseEnabled) return;
+    if (nextStationCode == null && prevStationCode == null) return;
+    try {
+      final sessionId = await _deviceSessionId();
+      await Supabase.instance.client.from('crowd_station_passages').insert(
+        <String, Object?>{
+          'station_code': stationCode,
+          'next_station_code': ?nextStationCode,
+          'prev_station_code': ?prevStationCode,
+          'passed_at': passedAt.toUtc().toIso8601String(),
+          'device_session_id': sessionId,
+        },
+      );
+    } on Object {
+      // Best-effort, same as position reports.
+    }
+  }
+
+  static String? _clip(String? value) {
+    if (value == null || value.trim().isEmpty) return null;
+    final v = value.trim();
+    return v.length > 80 ? v.substring(0, 80) : v;
   }
 
   String _isoDate(DateTime date) {

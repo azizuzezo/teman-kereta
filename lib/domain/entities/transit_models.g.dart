@@ -97,6 +97,7 @@ _TripLeg _$TripLegFromJson(Map<String, dynamic> json) => _TripLeg(
   serviceDate: json['serviceDate'] == null
       ? null
       : DateTime.parse(json['serviceDate'] as String),
+  relation: json['relation'] as String?,
 );
 
 Map<String, dynamic> _$TripLegToJson(_TripLeg instance) => <String, dynamic>{
@@ -113,6 +114,7 @@ Map<String, dynamic> _$TripLegToJson(_TripLeg instance) => <String, dynamic>{
   'transferInstruction': instance.transferInstruction,
   'externalTripId': instance.externalTripId,
   'serviceDate': instance.serviceDate?.toIso8601String(),
+  'relation': instance.relation,
 };
 
 const _$TransportModeEnumMap = {
@@ -144,6 +146,7 @@ _TransitTrip _$TransitTripFromJson(Map<String, dynamic> json) => _TransitTrip(
   serviceStatus:
       $enumDecodeNullable(_$ServiceStatusEnumMap, json['serviceStatus']) ??
       ServiceStatus.normal,
+  routeVia: json['routeVia'] as String?,
 );
 
 Map<String, dynamic> _$TransitTripToJson(_TransitTrip instance) =>
@@ -162,6 +165,7 @@ Map<String, dynamic> _$TransitTripToJson(_TransitTrip instance) =>
       'estimatedFare': instance.estimatedFare,
       'isDemo': instance.isDemo,
       'serviceStatus': _$ServiceStatusEnumMap[instance.serviceStatus]!,
+      'routeVia': instance.routeVia,
     };
 
 const _$ServiceStatusEnumMap = {
@@ -186,6 +190,8 @@ _VehiclePosition _$VehiclePositionFromJson(Map<String, dynamic> json) =>
       bearing: (json['bearing'] as num?)?.toDouble(),
       speedMetersPerSecond: (json['speedMetersPerSecond'] as num?)?.toDouble(),
       isDemo: json['isDemo'] as bool? ?? false,
+      headsign: json['headsign'] as String?,
+      relation: json['relation'] as String?,
     );
 
 Map<String, dynamic> _$VehiclePositionToJson(_VehiclePosition instance) =>
@@ -202,6 +208,8 @@ Map<String, dynamic> _$VehiclePositionToJson(_VehiclePosition instance) =>
       'bearing': instance.bearing,
       'speedMetersPerSecond': instance.speedMetersPerSecond,
       'isDemo': instance.isDemo,
+      'headsign': instance.headsign,
+      'relation': instance.relation,
     };
 
 _ServiceAlert _$ServiceAlertFromJson(Map<String, dynamic> json) =>

@@ -6,10 +6,10 @@ import 'package:latlong2/latlong.dart';
 import '../../../core/utils/geo.dart';
 import '../../../data/providers/provider_registry.dart';
 import '../../../domain/entities/active_trip.dart';
-import '../../../domain/entities/transit_models.dart';
 import '../../active_trip/presentation/active_trip_controller.dart';
-import '../../active_trip/presentation/active_trip_stations.dart';
+import 'active_trip_route.dart';
 import 'native_gps_fix.dart';
+import 'trip_route_geometry.dart';
 
 /// GPS fixes older than this are treated stale enough to switch from
 /// "project the raw fix onto the track" to dead reckoning (extrapolate from
@@ -25,7 +25,7 @@ const _deadReckoningStaleAfter = Duration(seconds: 90);
 /// Purely local recompute tick (never a GPS call) so the schedule-based
 /// fallback keeps cosmetically advancing between GPS fixes instead of
 /// sitting frozen at the last confirmed station until the next tick.
-const _fallbackRefreshInterval = Duration(seconds: 10);
+const _fallbackRefreshInterval = Duration(seconds: 2);
 
 class _GpsFix {
   const _GpsFix(
@@ -38,6 +38,27 @@ class _GpsFix {
   final DateTime at;
   final double? speedMetersPerSecond;
   final double? bearingDegrees;
+}
+
+/// Where the rider's train is drawn: a point on the real track, the direction
+/// it is heading, and how far along the trip it is (for splitting the route
+/// line into ridden and still-to-go).
+class TripMapMarker {
+  const TripMapMarker({
+    required this.point,
+    required this.bearing,
+    required this.hopIndex,
+    required this.hopFraction,
+  });
+
+  final LatLng point;
+
+  /// Degrees clockwise from north.
+  final double bearing;
+
+  /// Which hop (station i to i+1) the train is on, and how far through it.
+  final int hopIndex;
+  final double hopFraction;
 }
 
 /// Drives the "you are here" marker on the live map while an Active Trip is
@@ -57,14 +78,14 @@ class _GpsFix {
 /// `latestNativeGpsFixProvider`'s doc comment for the concrete crash that
 /// shipped before this was caught live on-device. A monotonic-timestamp
 /// guard drops any out-of-order emission.
-class LiveTripPositionController extends Notifier<LatLng?> {
+class LiveTripPositionController extends Notifier<TripMapMarker?> {
   Timer? _fallbackTimer;
   _GpsFix? _lastGpsFix;
 
   @override
-  LatLng? build() {
+  TripMapMarker? build() {
     final session = ref.watch(activeTripControllerProvider);
-    final stationsAsync = ref.watch(activeTripStationsProvider);
+    final route = ref.watch(activeTripRouteProvider);
     final nativeFix = ref.watch(latestNativeGpsFixProvider);
     ref.onDispose(() {
       _fallbackTimer?.cancel();
@@ -94,10 +115,10 @@ class LiveTripPositionController extends Notifier<LatLng?> {
       if (current == null || !_isOnBoardPhase(current.state)) {
         return;
       }
-      state = _computePosition(current, ref.read(activeTripStationsProvider).value);
+      state = _computePosition(current, ref.read(activeTripRouteProvider));
     });
 
-    return _computePosition(session, stationsAsync.value);
+    return _computePosition(session, route);
   }
 
   bool _isOnBoardPhase(ActiveTripState state) => switch (state) {
@@ -108,36 +129,44 @@ class LiveTripPositionController extends Notifier<LatLng?> {
     _ => false,
   };
 
-  LatLng? _computePosition(ActiveTripSession session, List<Station>? stations) {
-    if (stations == null || stations.isEmpty) {
+  TripMapMarker? _computePosition(
+    ActiveTripSession session,
+    ActiveTripRoute? route,
+  ) {
+    if (route == null || route.tripId != session.trip.id) {
       return null;
     }
-    final currentId = session.currentStationId;
-    final nextId = session.nextStationId;
-    if (currentId == null || nextId == null) {
+    final hopCount = route.hops.length;
+    final index = session.currentStationIndex;
+    if (session.nextStationId == null || index >= hopCount) {
       // Last station on the route (e.g. about to arrive) — nothing to
-      // project onto, just show the last confirmed station itself.
-      final byId = {for (final s in stations) s.id: s};
-      final current = currentId != null ? byId[currentId] : null;
-      return current == null
-          ? null
-          : LatLng(current.latitude, current.longitude);
+      // move along, just show the train at the last stop.
+      final last = route.hops.last;
+      return TripMapMarker(
+        point: last.last,
+        bearing: pointAlongPath(last, 1).bearing,
+        hopIndex: hopCount - 1,
+        hopFraction: 1,
+      );
     }
-    final byId = {for (final s in stations) s.id: s};
-    final current = byId[currentId];
-    final next = byId[nextId];
-    if (current == null || next == null) {
-      return null;
+    final hop = route.hops[index.clamp(0, hopCount - 1)];
+
+    TripMapMarker at(double fraction) {
+      final p = pointAlongPath(hop, fraction);
+      return TripMapMarker(
+        point: p.point,
+        bearing: p.bearing,
+        hopIndex: index,
+        hopFraction: fraction,
+      );
     }
-    final a = LatLng(current.latitude, current.longitude);
-    final b = LatLng(next.latitude, next.longitude);
 
     final now = ref.read(clockProvider).now();
     final fix = _lastGpsFix;
     if (fix != null) {
       final age = now.difference(fix.at);
       if (age <= _gpsStaleAfter) {
-        return _projectOntoSegment(fix.point, a, b);
+        return at(fractionNearest(hop, fix.point));
       }
       if (age <= _deadReckoningStaleAfter &&
           fix.speedMetersPerSecond != null &&
@@ -150,7 +179,7 @@ class LiveTripPositionController extends Notifier<LatLng?> {
           fix.bearingDegrees!,
           extrapolatedMeters,
         );
-        return _projectOntoSegment(LatLng(projected.$1, projected.$2), a, b);
+        return at(fractionNearest(hop, LatLng(projected.$1, projected.$2)));
       }
     }
 
@@ -160,11 +189,11 @@ class LiveTripPositionController extends Notifier<LatLng?> {
     final hopDuration = _scheduledHopDuration(session);
     final fraction = hopDuration.inMilliseconds <= 0
         ? 0.0
-        : (elapsed.inMilliseconds / hopDuration.inMilliseconds).clamp(0.0, 1.0);
-    return LatLng(
-      a.latitude + (b.latitude - a.latitude) * fraction,
-      a.longitude + (b.longitude - a.longitude) * fraction,
-    );
+        : (elapsed.inMilliseconds / hopDuration.inMilliseconds).clamp(
+            0.0,
+            0.95,
+          );
+    return at(fraction);
   }
 
   /// Approximates the scheduled travel time for the current station→next
@@ -184,27 +213,9 @@ class LiveTripPositionController extends Notifier<LatLng?> {
     }
     return Duration(milliseconds: totalDuration.inMilliseconds ~/ hops);
   }
-
-  /// Simple point-to-segment linear projection in lat/lng space, clamped to
-  /// the segment (0-1) — a documented flat-plane approximation, adequate at
-  /// the scale of adjacent-station distances on this network.
-  LatLng _projectOntoSegment(LatLng point, LatLng a, LatLng b) {
-    final dx = b.longitude - a.longitude;
-    final dy = b.latitude - a.latitude;
-    final lengthSquared = dx * dx + dy * dy;
-    if (lengthSquared == 0) {
-      return a;
-    }
-    final t =
-        (((point.longitude - a.longitude) * dx) +
-            ((point.latitude - a.latitude) * dy)) /
-        lengthSquared;
-    final clamped = t.clamp(0.0, 1.0);
-    return LatLng(a.latitude + clamped * dy, a.longitude + clamped * dx);
-  }
 }
 
 final liveTripPositionControllerProvider =
-    NotifierProvider<LiveTripPositionController, LatLng?>(
+    NotifierProvider<LiveTripPositionController, TripMapMarker?>(
       LiveTripPositionController.new,
     );

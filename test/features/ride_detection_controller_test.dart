@@ -64,6 +64,10 @@ void main() {
   tearDown(() => container.dispose());
 
   test('checkNow does nothing while the feature is disabled', () async {
+    // On by default now: switch it off for this case.
+    await container
+        .read(settingsControllerProvider.notifier)
+        .setRideDetectionEnabled(false);
     geolocator.position = fakePosition(_booLat, _booLng);
 
     await container.read(rideDetectionControllerProvider.notifier).checkNow();

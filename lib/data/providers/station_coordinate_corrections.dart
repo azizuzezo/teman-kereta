@@ -82,7 +82,10 @@ const stationCoordinateCorrections = <String, (double, double)>{
   'MGB': (-6.149804, 106.826983), // Mangga Besar
   'MJ': (-6.332503, 106.396479), // Maja
   'MRI': (-6.210170, 106.849935), // Manggarai
-  'MTR': (-6.197309, 106.858939), // Matraman (snapped to track)
+  // Matraman sits on the Manggarai–Jatinegara track. An earlier match took a
+  // second, unrelated OSM node near Kramat (on the Pasar Senen track, ~1.7 km
+  // north), so the dot showed up on the wrong line.
+  'MTR': (-6.212567, 106.859753), // Matraman
   'NMO': (-6.466282, 106.906269), // Nambo
   'PDJ': (-6.276683, 106.744693), // Pondok Ranji
   'PDRG': (-6.460783, 106.824296), // Pondok Rajeg

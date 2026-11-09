@@ -75,6 +75,10 @@ abstract class TripLeg with _$TripLeg {
     // reports key off. Null for mock legs, which never report a position.
     String? externalTripId,
     DateTime? serviceDate,
+    // The service the train runs, e.g. "Cikarang – Kampung Bandan via Pasar
+    // Senen". Shown on the map to other riders when this leg's position is
+    // shared. Null when unknown.
+    String? relation,
   }) = _TripLeg;
 
   factory TripLeg.fromJson(Map<String, Object?> json) =>
@@ -98,6 +102,10 @@ abstract class TransitTrip with _$TransitTrip {
     @Default(0) int estimatedFare,
     @Default(false) bool isDemo,
     @Default(ServiceStatus.normal) ServiceStatus serviceStatus,
+    // Station the route is named after when the same pair has more than one
+    // real way round (Cikarang loop: "Manggarai" or "Pasar Senen"). Null for
+    // a route with only one sensible way.
+    String? routeVia,
   }) = _TransitTrip;
   const TransitTrip._();
 
@@ -191,6 +199,10 @@ abstract class VehiclePosition with _$VehiclePosition {
     double? bearing,
     double? speedMetersPerSecond,
     @Default(false) bool isDemo,
+    // Where the train is heading (its terminus) and the service it runs,
+    // when the source knows them (rider reports carry both).
+    String? headsign,
+    String? relation,
   }) = _VehiclePosition;
 
   factory VehiclePosition.fromJson(Map<String, Object?> json) =>

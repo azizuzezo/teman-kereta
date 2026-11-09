@@ -56,7 +56,9 @@ class HelpPage extends StatelessWidget {
                 'Pilihan di Profil yang mengenali kamu sedang naik kereta dan menawarkan memulai perjalanan. '
                 'Kalau aktif, posisimu dikirim sesekali selama perjalanan supaya penumpang lain bisa melihat posisi kereta. '
                 'Posisi itu digabung dengan laporan penumpang lain dan tidak pernah ditampilkan sebagai posisimu. '
-                'Pilihan ini mati secara bawaan.',
+                'Jam keretamu tiba di tiap stasiun (terdeteksi GPS) juga dicocokkan dengan jadwal resmi, '
+                'supaya penumpang lain tahu kereta arah itu sedang telat berapa menit. Laporan tanpa nama dan dihapus setelah 3 jam. '
+                'Pilihan ini menyala secara bawaan dan bisa dimatikan kapan saja di Profil, Lokasi.',
           ),
           const SupportSectionLabel('Jadwal dan peta'),
           const SupportFaqTile(
@@ -70,6 +72,7 @@ class HelpPage extends StatelessWidget {
             question: 'Dari mana posisi kereta di peta?',
             answer:
                 'Perkiraan dari jadwal, ditambah posisi penumpang lain yang mengaktifkan Deteksi otomatis naik KRL. '
+                'Keretamu sendiri selama perjalanan aktif tampil sebagai gambar kereta di jalurnya. '
                 'Itu bukan data langsung dari operator, jadi bisa meleset beberapa menit.',
           ),
           const SupportSectionLabel('Akun dan forum'),
@@ -162,7 +165,7 @@ class PrivacyPage extends StatelessWidget {
                 title: 'Lokasi',
                 body:
                     'Dipakai untuk mencari stasiun terdekat dan memandu perjalanan aktif, termasuk saat layar mati. '
-                    'Posisimu hanya dikirim ke server kalau Deteksi otomatis naik KRL aktif, dan itu mati secara bawaan.',
+                    'Posisimu hanya dikirim ke server selama perjalanan aktif kalau Deteksi otomatis naik KRL aktif. Pilihan itu menyala secara bawaan dan bisa dimatikan di Profil, Lokasi.',
               ),
               SupportInfoBlock(
                 icon: Icons.account_circle_outlined,

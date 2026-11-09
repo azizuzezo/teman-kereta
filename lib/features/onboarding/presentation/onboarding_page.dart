@@ -11,6 +11,7 @@ import '../../../core/widgets/tk_components.dart';
 import '../../../core/widgets/tk_logo.dart';
 import '../../../data/providers/provider_registry.dart';
 import '../../../domain/entities/transit_models.dart';
+import '../../ride_detection/presentation/ride_detection_controller.dart';
 import '../../schedule/presentation/widgets/station_picker_sheet.dart';
 import '../../settings/presentation/settings_controller.dart';
 
@@ -165,6 +166,11 @@ class _OnboardingPageState extends ConsumerState<OnboardingPage> {
         _showMessage(
           'Lokasi belum diizinkan. Jadwal tetap dapat digunakan tanpa lokasi.',
         );
+      } else {
+        // "Deteksi otomatis naik KRL" is on by default: ask for the
+        // physical-activity permission it needs right after location.
+        await ref.read(rideDetectionControllerProvider.notifier).enable();
+        if (!mounted) return;
       }
       _next();
     } on Object {

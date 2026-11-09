@@ -49,6 +49,11 @@ abstract class ActiveTripSession with _$ActiveTripSession {
     // `launchMapDirectionsToQuery` — Google Maps' own geocoder resolves it,
     // this app never geocodes addresses itself.
     String? finalDestinationQuery,
+    // False while the rider has not said which way round their train goes
+    // (Cikarang loop: via Manggarai or via Pasar Senen) — a trip started
+    // without picking a route. The trip page asks, and GPS settles it on its
+    // own once the train passes the point where the two routes split.
+    @Default(true) bool routeConfirmed,
   }) = _ActiveTripSession;
   const ActiveTripSession._();
 

@@ -2971,3 +2971,55 @@ Direction lives in `DESIGN.md` (navy + KRL red, dials ENERGY 2 / RHYTHM 2 / MOTI
 
 ### Verification state
 - `flutter analyze`: no errors. `flutter test`: 549 pass; `test/widget_test.dart` fails unless run with `--dart-define=SUPABASE_ENABLED=false` (router touches `Supabase.instance`), it was failing before this round. `npm run build` for admin passes.
+
+## Cikarang loop routing, Matraman fix, rider GPS contributions, trip on the map (2026-11-09)
+
+**Why routing always said "via Manggarai"**: the hosted KRL timetable only
+covers 2026-08-07..13, so `search_direct_trips` returns nothing for today and
+every KRL search falls into the estimated-route branch. That branch used
+`station_lines.stop_order` as a straight line (Cikarang … Jatinegara, Matraman,
+Manggarai … Kampung Bandan … Pasar Senen … Pondok Jati), so the Pasar Senen
+side was only reachable by going all the way round.
+
+- `routeOptionsBetweenStations` (`line_transfer_router.dart`) models the loop
+  as branch (CKR..KLD) + ring (JNG..POK, POK next to JNG). Both ways round are
+  returned, best first; a way round worse than `1.7 × best + 4` (stops +
+  4 per change) is pruned. Changes are placed where real trains end (from the
+  GTFS stop patterns): at Kampung Bandan when riding past it, at Jatinegara
+  when riding the ring through it. `routeBetweenStations` still returns the
+  best one for older callers.
+- `buildEstimatedTrips` (`estimated_trip_builder.dart`): 3.5 min per stop
+  (measured from the timetable), 8 min per change, `TransitTrip.routeVia`
+  ("Manggarai"/"Pasar Senen") when a pair has more than one route. The search
+  page shows "via …" chips to filter; detail page shows "Lewat".
+
+**Matraman**: `station_coordinate_corrections.dart` had matched a second,
+unrelated OSM node near Kramat (Pasar Senen track). Now -6.212567,
+106.859753 (OSM, 7 m from the Manggarai–Jatinegara track). The hosted
+`stations` row is also wrong (-6.199, 106.855) but the app correction
+overrides it.
+
+**Rider GPS as a contribution** (migration
+`20261109090000_crowd_train_contributions.sql`, **not yet applied to hosted**):
+- Estimated trips now report positions under `seg:<from>><to>`;
+  `refresh_crowd_vehicle_positions()` fills current/next station from it and
+  averages only each phone's latest ping (last 2 min).
+- `crowd_station_passages`: on a GPS (native) advance of exactly one station,
+  the app reports station/next(or prev)/time. A trigger matches the latest
+  official stop at that station towards that next station on the same
+  weekday (≤ T+1 min, ≥ T−30 min) and stores the delay. Matching query
+  checked read-only against hosted data (~0.3 s). Retention 3 h.
+- `get_crowd_delays(code)` (median per direction, distinct phones, 45 min)
+  feeds `CrowdDelayCard` on station detail and the active trip page;
+  `get_crowd_network_status()` exists but has no UI yet.
+- Same consent as before (Deteksi Otomatis Naik KRL); copy updated in
+  location settings, FAQ and `landing_page/privacy.html`.
+
+**Trip on the map**: `activeTripRouteProvider` cuts the real track per hop
+(`TripRouteBuilder`, picks the shortest slice so the Cikarang shape's
+doubled branch is handled); `LiveTripPositionController` now yields a
+`TripMapMarker` (point + bearing + hop progress) along that track.
+`TripRouteLayer` draws ridden (dashed, muted) vs remaining (accent);
+`TripTrainLayer` draws a top-view train turned to its bearing, gliding
+between updates. The map frames the route once per trip and offers
+"Ikuti keretaku". Not yet verified on a device.

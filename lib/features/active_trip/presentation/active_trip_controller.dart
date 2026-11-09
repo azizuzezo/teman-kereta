@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:math' as math;
 
 import 'package:drift/drift.dart' show Value;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -16,6 +17,7 @@ import '../../../data/providers/demo_data.dart';
 import '../../../data/providers/provider_registry.dart';
 import '../../../domain/entities/active_trip.dart';
 import '../../../domain/entities/transit_models.dart';
+import '../../../domain/usecases/estimated_trip_builder.dart';
 import '../../intercity/data/intercity_repository.dart';
 import '../../intercity/domain/intercity_trip.dart';
 import '../../live_map/presentation/native_gps_fix.dart';
@@ -44,6 +46,10 @@ class ActiveTripController extends Notifier<ActiveTripSession?> {
   late final PreferencesStore _store;
   Timer? _crowdReportTimer;
   Timer? _nativeSyncTimer;
+
+  /// The other way(s) round for the current trip, built once per trip.
+  (String, List<TransitTrip>)? _alternativeRoutes;
+  bool _switchingRoute = false;
 
   /// Session the rider already answered "Ya, masih di kereta" for. Later
   /// outages on the same trip (every tunnel, every dead zone) are cleared
@@ -105,8 +111,10 @@ class ActiveTripController extends Notifier<ActiveTripSession?> {
   /// has stops tens of minutes apart and is announced by time instead (see
   /// `IntercityRideController`), so the station-count alerts are switched off
   /// for it, on this side and, through the value sent to native, there too.
-  int _stopAlertThresholdFor(ActiveTripSession? session, AppSettings settings) =>
-      session != null && isIntercityTrip(session.trip)
+  int _stopAlertThresholdFor(
+    ActiveTripSession? session,
+    AppSettings settings,
+  ) => session != null && isIntercityTrip(session.trip)
       ? 0
       : settings.stopAlertThreshold;
 
@@ -197,6 +205,18 @@ class ActiveTripController extends Notifier<ActiveTripSession?> {
                 .firstOrNull;
       if (nativeIndex != latest.currentStationIndex ||
           parsedState != latest.state) {
+        // GPS moved the trip exactly one station on: a trustworthy arrival
+        // time for the timetable-accuracy contribution. A jump of several
+        // stations (catching up after a signal gap) has no such time.
+        if (nativeIndex == latest.currentStationIndex + 1) {
+          _reportStationPassage(
+            latest,
+            nativeIndex,
+            nativeUpdatedAtMs != null && nativeUpdatedAtMs > 0
+                ? DateTime.fromMillisecondsSinceEpoch(nativeUpdatedAtMs)
+                : ref.read(clockProvider).now(),
+          );
+        }
         updated = updated.copyWith(
           currentStationIndex: nativeIndex,
           state: parsedState ?? updated.state,
@@ -236,8 +256,7 @@ class ActiveTripController extends Notifier<ActiveTripSession?> {
     if (gap != null && updated.id == _gapConfirmedSessionId) {
       await ref.read(nativeTripServiceProvider).acknowledgeLocationGap();
       if (!ref.mounted) return;
-    } else if (gap != null &&
-        ref.read(tripSignalGapProvider)?.key != gap.key) {
+    } else if (gap != null && ref.read(tripSignalGapProvider)?.key != gap.key) {
       ref.read(tripSignalGapProvider.notifier).set(gap);
     }
 
@@ -267,6 +286,155 @@ class ActiveTripController extends Notifier<ActiveTripSession?> {
               bearingDegrees: (native['bearingDegrees'] as num?)?.toDouble(),
             ),
           );
+      await _switchRouteIfGpsDisagrees(lat, lng);
+    }
+  }
+
+  /// Metres from (lat, lng) to the straight segment between two stations.
+  static double _distanceToSegment(
+    double lat,
+    double lng,
+    Station a,
+    Station b,
+  ) {
+    const ky = 110574.0;
+    const kx = 110700.0;
+    final ax = a.longitude * kx, ay = a.latitude * ky;
+    final dx = b.longitude * kx - ax, dy = b.latitude * ky - ay;
+    final px = lng * kx - ax, py = lat * ky - ay;
+    final len = dx * dx + dy * dy;
+    final t = len == 0 ? 0.0 : ((px * dx + py * dy) / len).clamp(0.0, 1.0);
+    final cx = px - t * dx, cy = py - t * dy;
+    return math.sqrt(cx * cx + cy * cy);
+  }
+
+  /// The rider says which way round their train goes. Switches the trip to
+  /// that route (keeping progress) when it differs, and stops asking.
+  Future<void> chooseRoute(String viaName) async {
+    final current = state;
+    if (current == null) return;
+    if (current.trip.routeVia == viaName) {
+      final updated = current.copyWith(routeConfirmed: true);
+      state = updated;
+      await _store.setActiveTripSnapshot(jsonEncode(updated.toJson()));
+      return;
+    }
+    final alternative = (await _alternativesFor(
+      current,
+    )).where((t) => t.routeVia == viaName).firstOrNull;
+    if (alternative == null || !ref.mounted) return;
+    await _switchToRoute(alternative);
+  }
+
+  Future<List<TransitTrip>> _alternativesFor(ActiveTripSession session) async {
+    final cached = _alternativeRoutes;
+    if (cached != null && cached.$1 == session.trip.id) return cached.$2;
+    if (session.trip.routeVia == null) return const <TransitTrip>[];
+    final stations = await _stationsFor(session);
+    final trips = <TransitTrip>[
+      for (final via in otherRouteVias(session.trip, stations))
+        ?alternativeEstimatedTrip(
+          trip: session.trip,
+          allStations: stations,
+          viaName: via,
+        ),
+    ];
+    _alternativeRoutes = (session.trip.id, trips);
+    return trips;
+  }
+
+  /// Replaces the trip with [route], keeping the rider at the same station:
+  /// both routes share every stop up to where they split.
+  Future<void> _switchToRoute(TransitTrip route) async {
+    final current = state;
+    if (current == null) return;
+    final here = current.currentStationId;
+    final index = here == null ? -1 : route.stationIds.indexOf(here);
+    final updated = current.copyWith(
+      trip: route,
+      currentStationIndex: index < 0 ? current.currentStationIndex : index,
+      routeConfirmed: true,
+      updatedAt: ref.read(clockProvider).now(),
+    );
+    _alternativeRoutes = null;
+    state = updated;
+    await _persistAndSync(updated);
+  }
+
+  /// Once the train passes the point where the two ways round split (e.g.
+  /// Jatinegara: on to Matraman, or on to Pondok Jati), GPS shows which one
+  /// it took. When it is clearly near the other route's next stop and not
+  /// ours, the trip follows the train.
+  Future<void> _switchRouteIfGpsDisagrees(double lat, double lng) async {
+    final current = state;
+    if (current == null ||
+        _switchingRoute ||
+        current.trip.routeVia == null ||
+        !_isTrackedState(current.state)) {
+      return;
+    }
+    _switchingRoute = true;
+    try {
+      final alternatives = await _alternativesFor(current);
+      if (alternatives.isEmpty || !ref.mounted) return;
+      final stations = await _stationsFor(current);
+      final byId = {for (final s in stations) s.id: s};
+      final ours = current.trip.stationIds;
+      double? distanceTo(String id) {
+        final s = byId[id];
+        return s == null
+            ? null
+            : haversineMeters(lat, lng, s.latitude, s.longitude);
+      }
+
+      for (final alternative in alternatives) {
+        final theirs = alternative.stationIds;
+        var split = 0;
+        while (split < ours.length &&
+            split < theirs.length &&
+            ours[split] == theirs[split]) {
+          split++;
+        }
+        // Only around the split: the rider is at, or just past, the last
+        // shared stop.
+        if (split == 0 ||
+            split >= ours.length ||
+            split >= theirs.length ||
+            current.currentStationIndex < split - 2 ||
+            current.currentStationIndex > split) {
+          continue;
+        }
+        // Distance from the rider to each route's track just past the
+        // split (stop before, the next stop, the one after), as straight
+        // segments between stations. Right after Jatinegara the two lines
+        // are only a few hundred metres apart, so compare lines, not stops.
+        double? toLine(List<String> ids) {
+          final pts = <Station>[
+            for (var i = split - 1; i <= split + 1 && i < ids.length; i++)
+              ?byId[ids[i]],
+          ];
+          if (pts.length < 2) return null;
+          var best = double.infinity;
+          for (var i = 1; i < pts.length; i++) {
+            final d = _distanceToSegment(lat, lng, pts[i - 1], pts[i]);
+            if (d < best) best = d;
+          }
+          return best;
+        }
+
+        final toTheirs = toLine(theirs);
+        final toOurs = toLine(ours);
+        if (toTheirs == null || toOurs == null) continue;
+        final splitStop = distanceTo(ours[split - 1]) ?? 0;
+        if (splitStop > 300 && toTheirs < 150 && toOurs > toTheirs + 150) {
+          await _switchToRoute(alternative);
+          return;
+        }
+      }
+    } on Object {
+      // Never let a route check disturb the trip.
+    } finally {
+      _switchingRoute = false;
     }
   }
 
@@ -284,15 +452,59 @@ class ActiveTripController extends Notifier<ActiveTripSession?> {
     if (current == null || !_isTrackedState(current.state)) {
       return;
     }
+    if (current.trip.isDemo ||
+        current.trip.id.startsWith(IntercityTripRef.prefix)) {
+      return; // Demo data never reports; intercity trains are not on the map.
+    }
     final leg = current.currentRailLeg;
-    final externalTripId = leg?.externalTripId;
-    final serviceDate = leg?.serviceDate;
+    var externalTripId = leg?.externalTripId;
+    var serviceDate = leg?.serviceDate;
     if (externalTripId == null || serviceDate == null) {
-      return; // Mock/demo data, or a provider that never populated these.
+      // An estimated trip (no timetable id): report under the hop the train
+      // is on, so riders of the same train still add up to one position.
+      final from = current.currentStationId;
+      final to = current.nextStationId;
+      if (from == null || to == null) return;
+      externalTripId = 'seg:$from>$to';
+      final now = ref.read(clockProvider).now();
+      serviceDate = DateTime(now.year, now.month, now.day);
     }
     await ref
         .read(crowdPositionReporterProvider)
-        .reportOnce(externalTripId: externalTripId, serviceDate: serviceDate);
+        .reportOnce(
+          externalTripId: externalTripId,
+          serviceDate: serviceDate,
+          headsign: leg?.headsign,
+          relation: leg?.relation,
+        );
+  }
+
+  /// Tells the server the train has just reached the station at [index], so
+  /// it can compare against the timetable (see
+  /// [CrowdPositionReporter.reportStationPassage]). Same consent gate as the
+  /// position reports.
+  void _reportStationPassage(
+    ActiveTripSession session,
+    int index,
+    DateTime at,
+  ) {
+    if (!ref.read(settingsControllerProvider).rideDetectionEnabled) return;
+    if (session.trip.isDemo ||
+        session.trip.id.startsWith(IntercityTripRef.prefix)) {
+      return;
+    }
+    final ids = session.trip.stationIds;
+    if (index <= 0 || index >= ids.length) return;
+    unawaited(
+      ref
+          .read(crowdPositionReporterProvider)
+          .reportStationPassage(
+            stationCode: ids[index],
+            passedAt: at,
+            nextStationCode: ids.elementAtOrNull(index + 1),
+            prevStationCode: index + 1 < ids.length ? null : ids[index - 1],
+          ),
+    );
   }
 
   /// Manual "Lanjut" fallback for when automatic (native, GPS-proximity)
@@ -543,9 +755,18 @@ class ActiveTripController extends Notifier<ActiveTripSession?> {
     }
   }
 
-  Future<void> start(TransitTrip trip, {String? finalDestinationQuery}) async {
+  /// [routeConfirmed] false: the trip was started without the rider picking
+  /// which way round it goes (quick start, automatic ride detection), so the
+  /// trip page asks and GPS can still switch it (see [chooseRoute]).
+  Future<void> start(
+    TransitTrip trip, {
+    String? finalDestinationQuery,
+    bool routeConfirmed = true,
+  }) async {
     final now = ref.read(clockProvider).now();
+    _alternativeRoutes = null;
     final session = ActiveTripSession(
+      routeConfirmed: routeConfirmed || trip.routeVia == null,
       id: const Uuid().v4(),
       trip: trip,
       state: ActiveTripState.onBoard,

@@ -126,8 +126,10 @@ class LocationSettingsPage extends ConsumerWidget {
                     child: Text(
                       'Saat perjalanan aktif berjalan, posisi GPS-mu juga '
                       'dikirim berkala ke server untuk membantu menampilkan '
-                      'posisi kereta ke pengguna lain. Rinciannya ada di '
-                      'Kebijakan privasi.',
+                      'posisi kereta ke pengguna lain, dan jam keretamu tiba '
+                      'di tiap stasiun dipakai untuk mengukur keterlambatan '
+                      'terhadap jadwal resmi. Tanpa nama dan dihapus '
+                      'otomatis. Rinciannya ada di Kebijakan privasi.',
                       style: Theme.of(context).textTheme.bodySmall,
                     ),
                   ),

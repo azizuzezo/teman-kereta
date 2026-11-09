@@ -96,48 +96,10 @@ class TripSearchPage extends ConsumerWidget {
               const TkListSkeleton(count: 3),
             ] else if (search.results.isNotEmpty) ...<Widget>[
               const SizedBox(height: 28),
-              Row(
-                children: <Widget>[
-                  Expanded(
-                    child: Semantics(
-                      header: true,
-                      child: Text(
-                        '${search.results.length} alternatif',
-                        style: Theme.of(context).textTheme.titleLarge,
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  DataFreshnessBadge(
-                    freshness: search.results.first.freshness,
-                    compact: true,
-                  ),
-                ],
+              _TripResults(
+                results: search.results,
+                stationName: (id) => _stationName(id, stationList),
               ),
-              const SizedBox(height: 12),
-              for (var index = 0; index < search.results.length; index += 1)
-                Padding(
-                  padding: const EdgeInsets.only(bottom: 12),
-                  child: _TripResultCard(
-                    trip: search.results[index],
-                    originName: _stationName(
-                      search.results[index].originStationId,
-                      stationList,
-                    ),
-                    destinationName: _stationName(
-                      search.results[index].destinationStationId,
-                      stationList,
-                    ),
-                    label: switch (index) {
-                      0 => 'Pilihan tercepat',
-                      1 => 'Jalan kaki lebih sedikit',
-                      _ => 'Berangkat berikutnya',
-                    },
-                    emphasized: index == 0,
-                    onTap: () =>
-                        context.push('/trip/${search.results[index].id}'),
-                  ),
-                ),
             ] else if (search.hasSearched &&
                 search.errorMessage == null) ...<Widget>[
               const SizedBox(height: 24),
@@ -598,6 +560,116 @@ class _SearchHint extends StatelessWidget {
   }
 }
 
+/// The result list. When the routes go different ways round (Cikarang loop:
+/// via Manggarai or via Pasar Senen), chips let the rider keep just one.
+class _TripResults extends StatefulWidget {
+  const _TripResults({required this.results, required this.stationName});
+
+  final List<TransitTrip> results;
+  final String Function(String id) stationName;
+
+  @override
+  State<_TripResults> createState() => _TripResultsState();
+}
+
+class _TripResultsState extends State<_TripResults> {
+  String? _via;
+
+  @override
+  void didUpdateWidget(_TripResults oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (!identical(oldWidget.results, widget.results)) {
+      _via = null;
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final vias = <String>{
+      for (final trip in widget.results)
+        if (trip.routeVia != null) trip.routeVia!,
+    }.toList(growable: false);
+    final via = vias.contains(_via) ? _via : null;
+    final shown = via == null
+        ? widget.results
+        : widget.results
+              .where((t) => t.routeVia == via)
+              .toList(growable: false);
+    final fastestArrival = shown
+        .map((t) => t.arrivalAt)
+        .reduce((a, b) => a.isBefore(b) ? a : b);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: <Widget>[
+        Row(
+          children: <Widget>[
+            Expanded(
+              child: Semantics(
+                header: true,
+                child: Text(
+                  '${shown.length} alternatif',
+                  style: Theme.of(context).textTheme.titleLarge,
+                ),
+              ),
+            ),
+            const SizedBox(width: 8),
+            DataFreshnessBadge(
+              freshness: widget.results.first.freshness,
+              compact: true,
+            ),
+          ],
+        ),
+        if (vias.length > 1) ...<Widget>[
+          const SizedBox(height: 10),
+          Text(
+            'Kereta bisa lewat dua arah. Pilih jalurnya:',
+            style: Theme.of(
+              context,
+            ).textTheme.bodyMedium?.copyWith(color: context.tk.textMuted),
+          ),
+          const SizedBox(height: 8),
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: <Widget>[
+              ChoiceChip(
+                label: const Text('Semua'),
+                selected: via == null,
+                onSelected: (_) => setState(() => _via = null),
+              ),
+              for (final option in vias)
+                ChoiceChip(
+                  label: Text('via $option'),
+                  selected: via == option,
+                  onSelected: (_) => setState(() => _via = option),
+                ),
+            ],
+          ),
+        ],
+        const SizedBox(height: 12),
+        for (var index = 0; index < shown.length; index += 1)
+          Padding(
+            padding: const EdgeInsets.only(bottom: 12),
+            child: _TripResultCard(
+              trip: shown[index],
+              originName: widget.stationName(shown[index].originStationId),
+              destinationName: widget.stationName(
+                shown[index].destinationStationId,
+              ),
+              label: index == 0
+                  ? 'Pilihan terbaik'
+                  : shown[index].arrivalAt == fastestArrival
+                  ? 'Tiba paling cepat'
+                  : 'Alternatif',
+              emphasized: index == 0,
+              onTap: () => context.push('/trip/${shown[index].id}'),
+            ),
+          ),
+      ],
+    );
+  }
+}
+
 class _TripResultCard extends StatelessWidget {
   const _TripResultCard({
     required this.trip,
@@ -635,7 +707,8 @@ class _TripResultCard extends StatelessWidget {
       semanticLabel:
           '$label. Berangkat ${formatter.format(trip.departureAt)} dari '
           '$originName, tiba ${formatter.format(trip.arrivalAt)} di '
-          '$destinationName. ${trip.durationMinutes} menit, $transfersLabel.',
+          '$destinationName. ${trip.durationMinutes} menit, $transfersLabel'
+          '${trip.routeVia == null ? '' : ', lewat ${trip.routeVia}'}.',
       child: ExcludeSemantics(
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -701,6 +774,12 @@ class _TripResultCard extends StatelessWidget {
                   transfersLabel,
                   style: textTheme.bodyMedium?.copyWith(color: tk.textMuted),
                 ),
+                if (trip.routeVia != null)
+                  TkPill(
+                    label: 'via ${trip.routeVia}',
+                    tone: TkPillTone.neutral,
+                    dense: true,
+                  ),
                 if (trip.walkingMeters > 0)
                   _Metric(
                     icon: Icons.directions_walk_rounded,

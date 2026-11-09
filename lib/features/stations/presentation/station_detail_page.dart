@@ -15,6 +15,7 @@ import '../../../data/providers/provider_registry.dart';
 import '../../../domain/entities/transit_models.dart';
 import '../../../domain/usecases/travel_estimate.dart';
 import '../../home/domain/next_train_logic.dart';
+import '../../live_map/presentation/crowd_delays.dart';
 import '../../schedule/presentation/trip_search_controller.dart';
 import 'nearest_station_controller.dart';
 
@@ -225,6 +226,8 @@ class _StationContent extends ConsumerWidget {
             label: const Text('Arah ke stasiun'),
           ),
         ),
+        const SizedBox(height: 12),
+        CrowdDelayCard(stationCode: station.code),
         const SizedBox(height: 16),
         TkSectionLabel(
           'Keberangkatan berikutnya',

@@ -695,9 +695,9 @@ class _VehiclePanel extends StatelessWidget {
     final basis = switch (vehicle.freshness) {
       DataFreshness.realtime => 'Posisi dari data kereta langsung.',
       DataFreshness.nearRealtime =>
-        'Posisi dari laporan penumpang di kereta ini, tertunda beberapa saat.',
-      DataFreshness.scheduled ||
-      DataFreshness.estimated =>
+        'Posisi kereta dari GPS penumpang di dalamnya (tanpa identitas), '
+            'tertunda beberapa saat.',
+      DataFreshness.scheduled || DataFreshness.estimated =>
         'Posisi ini dihitung dari jadwal, bukan dari GPS kereta.',
       DataFreshness.unavailable => 'Sumber posisi belum jelas.',
     };
@@ -706,7 +706,11 @@ class _VehiclePanel extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: <Widget>[
         _PanelHeader(
-          title: next == null ? 'Posisi kereta' : 'Menuju ${next.name}',
+          title: vehicle.headsign != null
+              ? 'KRL arah ${vehicle.headsign}'
+              : next == null
+              ? 'Posisi kereta'
+              : 'Menuju ${next.name}',
           onClose: onClose,
           subtitle: Wrap(
             spacing: 8,
@@ -721,6 +725,31 @@ class _VehiclePanel extends StatelessWidget {
             ],
           ),
         ),
+        if (vehicle.relation != null) ...<Widget>[
+          const SizedBox(height: 10),
+          Row(
+            children: <Widget>[
+              Icon(Icons.route_rounded, size: 18, color: tk.textMuted),
+              const SizedBox(width: 6),
+              Expanded(child: Text(vehicle.relation!, style: text.titleSmall)),
+            ],
+          ),
+        ],
+        if (vehicle.headsign != null && next != null) ...<Widget>[
+          const SizedBox(height: 6),
+          Row(
+            children: <Widget>[
+              Icon(Icons.arrow_forward_rounded, size: 18, color: tk.textMuted),
+              const SizedBox(width: 6),
+              Expanded(
+                child: Text(
+                  'Stasiun berikutnya: ${next.name}',
+                  style: text.bodyMedium,
+                ),
+              ),
+            ],
+          ),
+        ],
         const SizedBox(height: 10),
         Padding(
           padding: const EdgeInsets.only(right: 12),

@@ -338,7 +338,9 @@ class RideDetectionController extends Notifier<RideDetectionPhase?> {
       final best = const RouteRanker().rank(trips, exitedAt).firstOrNull;
       if (best == null) return;
       if (!ref.mounted) return;
-      await ref.read(activeTripControllerProvider.notifier).start(best);
+      await ref
+          .read(activeTripControllerProvider.notifier)
+          .start(best, routeConfirmed: false);
       if (!ref.mounted) return;
       state = null;
     } on Object {
@@ -400,7 +402,9 @@ class RideDetectionController extends Notifier<RideDetectionPhase?> {
         chooseAnother();
         return;
       }
-      await ref.read(activeTripControllerProvider.notifier).start(best);
+      await ref
+          .read(activeTripControllerProvider.notifier)
+          .start(best, routeConfirmed: false);
       state = null;
     } on Object {
       chooseAnother();

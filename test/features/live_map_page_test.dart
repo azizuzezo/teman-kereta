@@ -8,6 +8,7 @@ import 'package:latlong2/latlong.dart';
 import 'package:teman_kereta/app/theme/app_theme.dart';
 import 'package:teman_kereta/data/providers/provider_registry.dart';
 import 'package:teman_kereta/domain/entities/transit_models.dart';
+import 'package:teman_kereta/features/live_map/presentation/active_trip_route.dart';
 import 'package:teman_kereta/features/live_map/presentation/live_map_page.dart';
 import 'package:teman_kereta/features/live_map/presentation/live_trip_position_controller.dart';
 import 'package:teman_kereta/features/live_map/presentation/map_points_layer.dart';
@@ -44,7 +45,7 @@ class _ThrowingImage extends ImageProvider<_ThrowingImage> {
 
 class _NoTrip extends LiveTripPositionController {
   @override
-  LatLng? build() => null;
+  TripMapMarker? build() => null;
 }
 
 const _stations = <Station>[
@@ -109,6 +110,7 @@ Widget _app({
         (ref) => vehicles ?? Stream.value(const <VehiclePosition>[]),
       ),
       liveTripPositionControllerProvider.overrideWith(_NoTrip.new),
+      activeTripRouteProvider.overrideWithValue(null),
       mapTileProviderProvider.overrideWithValue(tiles),
       departuresProvider.overrideWith((ref, stationId) async {
         final now = ref.read(clockProvider).now();
@@ -306,6 +308,7 @@ void main() {
             (ref) => Stream.value(const <VehiclePosition>[]),
           ),
           liveTripPositionControllerProvider.overrideWith(_NoTrip.new),
+          activeTripRouteProvider.overrideWithValue(null),
           mapTileProviderProvider.overrideWithValue(_FakeTileProvider()),
         ],
         child: MaterialApp(
