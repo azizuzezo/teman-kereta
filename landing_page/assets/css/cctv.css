@@ -1,0 +1,197 @@
+/*
+ * Halaman CCTV stasiun (/cctv/). Dipakai bersama legal.css dan artikel.css.
+ * Merah live #dc2626 hanya untuk titik indikator; teks tombol tetap biru situs.
+ */
+.cc-hero { padding: 2rem 0 1.25rem; }
+.cc-hero h1 {
+  font-size: clamp(1.75rem, 5.5vw, 2.5rem);
+  line-height: 1.15;
+  letter-spacing: -0.02em;
+  font-weight: 800;
+  margin: 0 0 0.75rem;
+}
+.cc-live {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  margin: 0.75rem 0 0.5rem;
+  padding: 0.2rem 0.65rem;
+  border-radius: 999px;
+  background: #fef2f2;
+  border: 1px solid #fecaca;
+  color: #991b1b;
+  font-size: 0.75rem;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+.cc-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #dc2626;
+  flex: none;
+  box-shadow: 0 0 0 0 rgba(220, 38, 38, 0.5);
+  animation: cc-pulse 1.8s ease-out infinite;
+}
+@keyframes cc-pulse {
+  0% { box-shadow: 0 0 0 0 rgba(220, 38, 38, 0.5); }
+  70% { box-shadow: 0 0 0 6px rgba(220, 38, 38, 0); }
+  100% { box-shadow: 0 0 0 0 rgba(220, 38, 38, 0); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .cc-dot { animation: none; }
+}
+
+.cc-source { max-width: none; }
+
+/* Pencarian dan filter */
+.cc-tools {
+  position: sticky;
+  top: 0;
+  z-index: 5;
+  background: var(--lg-bg);
+  padding: 0.75rem 0;
+  margin: 0 0 0.5rem;
+  border-bottom: 1px solid var(--lg-border);
+}
+.cc-search {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  min-height: 48px;
+  padding: 0 0.9rem;
+  background: var(--lg-surface);
+  border: 1px solid #cbd5e1;
+  border-radius: 12px;
+  color: var(--lg-muted);
+}
+.cc-search:focus-within { border-color: var(--lg-link); box-shadow: 0 0 0 3px #bfdbfe; }
+.cc-search input {
+  flex: 1;
+  min-width: 0;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  font: inherit;
+  font-size: 1rem;
+  color: var(--lg-text);
+  min-height: 46px;
+}
+.cc-sr {
+  position: absolute;
+  width: 1px; height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+.cc-chips {
+  display: flex;
+  gap: 0.5rem;
+  margin-top: 0.65rem;
+  overflow-x: auto;
+  scrollbar-width: none;
+  -webkit-overflow-scrolling: touch;
+}
+.cc-chips::-webkit-scrollbar { display: none; }
+.cc-chip {
+  flex: none;
+  min-height: 40px;
+  padding: 0 0.9rem;
+  border-radius: 999px;
+  border: 1px solid var(--lg-border);
+  background: var(--lg-surface);
+  color: var(--lg-muted);
+  font: inherit;
+  font-size: 0.875rem;
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.cc-chip span { font-weight: 500; opacity: 0.75; margin-left: 0.2rem; }
+.cc-chip:hover { border-color: #93c5fd; color: var(--lg-link); }
+.cc-chip[aria-pressed="true"] {
+  background: var(--lg-link);
+  border-color: var(--lg-link);
+  color: #fff;
+}
+
+/* Daftar stasiun */
+.cc-region { padding: 1.5rem 0 0.5rem; scroll-margin-top: 8rem; }
+.cc-region h2 {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 0.25rem 0.6rem;
+  font-size: clamp(1.15rem, 3.5vw, 1.35rem);
+  font-weight: 800;
+  letter-spacing: -0.01em;
+  margin: 0 0 0.85rem;
+}
+.cc-count { font-size: 0.85rem; font-weight: 600; color: var(--lg-muted); }
+.cc-grid {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 0.75rem;
+  grid-template-columns: minmax(0, 1fr);
+}
+@media (min-width: 640px) { .cc-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (min-width: 960px) { .cc-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+@media (min-width: 1200px) { .cc-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); } }
+
+.cc-card {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+  background: var(--lg-surface);
+  border: 1px solid var(--lg-border);
+  border-radius: 16px;
+  padding: 1rem 1.1rem;
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+.cc-card:hover { border-color: #93c5fd; box-shadow: 0 4px 14px rgba(15, 23, 42, 0.06); }
+.cc-card[hidden], .cc-region[hidden] { display: none; }
+.cc-card h3 { margin: 0; font-size: 1.05rem; font-weight: 800; line-height: 1.3; }
+.cc-city { margin: 0.1rem 0 0; font-size: 0.85rem; color: var(--lg-muted); line-height: 1.4; }
+.cc-tags { display: flex; flex-wrap: wrap; gap: 0.35rem; }
+.cc-tag {
+  font-size: 0.75rem;
+  font-weight: 600;
+  line-height: 1;
+  padding: 0.35rem 0.55rem;
+  border-radius: 8px;
+  background: #f1f5f9;
+  color: #334155;
+}
+.cc-tag--jpl { background: #fffbeb; color: #92400e; }
+
+.lg-body a.cc-watch {
+  margin-top: auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  min-height: 44px;
+  border-radius: 12px;
+  background: var(--lg-soft);
+  border: 1px solid #bfdbfe;
+  color: var(--lg-link);
+  font-weight: 700;
+  font-size: 0.9rem;
+  text-decoration: none;
+}
+.lg-body a.cc-watch:hover { background: var(--lg-link); border-color: var(--lg-link); color: #fff; }
+
+.cc-empty {
+  margin: 1.5rem 0;
+  padding: 1rem 1.1rem;
+  border: 1px dashed #cbd5e1;
+  border-radius: 14px;
+  color: var(--lg-muted);
+  text-align: center;
+}
+.cc-empty[hidden] { display: none; }
+.cc-cta { margin-top: 2.5rem; }
+
