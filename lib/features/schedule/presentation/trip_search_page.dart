@@ -665,6 +665,12 @@ class _TripResultsState extends State<_TripResults> {
               onTap: () => context.push('/trip/${shown[index].id}'),
             ),
           ),
+        TimetableNotes(
+          showEstimated: shown.any(
+            (t) => t.departureEstimated || t.arrivalEstimated,
+          ),
+          showFakultatif: shown.any((t) => t.isFakultatif),
+        ),
       ],
     );
   }
@@ -701,14 +707,18 @@ class _TripResultCard extends StatelessWidget {
     final transfersLabel = trip.transfers == 0
         ? 'Langsung'
         : '${trip.transfers} transit';
+    String about(bool estimated) => estimated ? 'sekitar ' : '';
     return TkCard(
       tone: emphasized ? TkCardTone.soft : TkCardTone.surface,
       onTap: onTap,
       semanticLabel:
-          '$label. Berangkat ${formatter.format(trip.departureAt)} dari '
-          '$originName, tiba ${formatter.format(trip.arrivalAt)} di '
+          '$label. Berangkat ${about(trip.departureEstimated)}'
+          '${formatter.format(trip.departureAt)} dari '
+          '$originName, tiba ${about(trip.arrivalEstimated)}'
+          '${formatter.format(trip.arrivalAt)} di '
           '$destinationName. ${trip.durationMinutes} menit, $transfersLabel'
-          '${trip.routeVia == null ? '' : ', lewat ${trip.routeVia}'}.',
+          '${trip.routeVia == null ? '' : ', lewat ${trip.routeVia}'}'
+          '${trip.isFakultatif ? ', KA fakultatif' : ''}.',
       child: ExcludeSemantics(
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -748,12 +758,18 @@ class _TripResultCard extends StatelessWidget {
             RouteEndpoints(
               highlighted: emphasized,
               top: _EndpointRow(
-                time: formatter.format(trip.departureAt),
+                time: approxTime(
+                  formatter.format(trip.departureAt),
+                  estimated: trip.departureEstimated,
+                ),
                 name: originName,
                 timeStyle: timeStyle,
               ),
               bottom: _EndpointRow(
-                time: formatter.format(trip.arrivalAt),
+                time: approxTime(
+                  formatter.format(trip.arrivalAt),
+                  estimated: trip.arrivalEstimated,
+                ),
                 name: destinationName,
                 timeStyle: timeStyle,
               ),
@@ -785,6 +801,7 @@ class _TripResultCard extends StatelessWidget {
                     icon: Icons.directions_walk_rounded,
                     label: 'Jalan ${trip.walkingMeters} m',
                   ),
+                if (trip.isFakultatif) const FakultatifBadge(),
                 DataFreshnessBadge(freshness: trip.freshness, compact: true),
               ],
             ),

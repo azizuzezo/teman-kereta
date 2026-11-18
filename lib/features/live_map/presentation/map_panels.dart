@@ -65,8 +65,9 @@ class MapSearchField extends StatelessWidget {
   }
 }
 
-/// Two-way switch between the rail networks on the map (Jabodetabek /
-/// Yogyakarta). The selected one is what the map shows highlighted.
+/// Switch between the rail networks on the map that have stations (e.g.
+/// Jabodetabek / Yogyakarta). The selected one is what the map shows
+/// highlighted.
 class MapNetworkTabs extends StatelessWidget {
   const MapNetworkTabs({
     required this.networks,
@@ -79,10 +80,19 @@ class MapNetworkTabs extends StatelessWidget {
   final TransitNetwork selected;
   final ValueChanged<TransitNetwork> onSelected;
 
+  /// Up to this many tabs share the width equally; more scroll sideways.
+  static const _maxEqualTabs = 3;
+
   @override
   Widget build(BuildContext context) {
     final tk = context.tk;
-    final textTheme = Theme.of(context).textTheme;
+    final scroll = networks.length > _maxEqualTabs;
+    final tabs = <Widget>[
+      for (final network in networks)
+        scroll
+            ? _tab(context, network, scroll: true)
+            : Expanded(child: _tab(context, network, scroll: false)),
+    ];
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
       child: Container(
@@ -92,42 +102,51 @@ class MapNetworkTabs extends StatelessWidget {
           borderRadius: BorderRadius.circular(TkRadius.control + 4),
           border: Border.all(color: tk.border),
         ),
-        child: Row(
-          children: <Widget>[
-            for (final network in networks)
-              Expanded(
-                child: Semantics(
-                  button: true,
-                  selected: network == selected,
-                  label: 'Peta ${networkLabel(network)}',
-                  excludeSemantics: true,
-                  child: Material(
-                    color: network == selected
-                        ? tk.primary
-                        : Colors.transparent,
-                    borderRadius: BorderRadius.circular(TkRadius.control),
-                    child: InkWell(
-                      borderRadius: BorderRadius.circular(TkRadius.control),
-                      onTap: () => onSelected(network),
-                      child: ConstrainedBox(
-                        constraints: const BoxConstraints(minHeight: 40),
-                        child: Center(
-                          child: Text(
-                            networkLabel(network),
-                            style: textTheme.labelLarge?.copyWith(
-                              color: network == selected
-                                  ? tk.onPrimary
-                                  : tk.textMuted,
-                              fontWeight: FontWeight.w700,
-                            ),
-                          ),
-                        ),
-                      ),
-                    ),
+        child: scroll
+            ? SingleChildScrollView(
+                scrollDirection: Axis.horizontal,
+                child: Row(children: tabs),
+              )
+            : Row(children: tabs),
+      ),
+    );
+  }
+
+  Widget _tab(
+    BuildContext context,
+    TransitNetwork network, {
+    required bool scroll,
+  }) {
+    final tk = context.tk;
+    final textTheme = Theme.of(context).textTheme;
+    final isSelected = network == selected;
+    return Semantics(
+      button: true,
+      selected: isSelected,
+      label: 'Peta ${networkLabel(network)}',
+      excludeSemantics: true,
+      child: Material(
+        color: isSelected ? tk.primary : Colors.transparent,
+        borderRadius: BorderRadius.circular(TkRadius.control),
+        child: InkWell(
+          borderRadius: BorderRadius.circular(TkRadius.control),
+          onTap: () => onSelected(network),
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(minHeight: 40),
+            child: Padding(
+              padding: EdgeInsets.symmetric(horizontal: scroll ? 14 : 0),
+              child: Center(
+                widthFactor: scroll ? 1 : null,
+                child: Text(
+                  networkLabel(network),
+                  style: textTheme.labelLarge?.copyWith(
+                    color: isSelected ? tk.onPrimary : tk.textMuted,
+                    fontWeight: FontWeight.w700,
                   ),
                 ),
               ),
-          ],
+            ),
+          ),
         ),
       ),
     );
@@ -581,10 +600,18 @@ class _StationPanel extends ConsumerWidget {
                 ),
               );
             }
+            final shown = upcoming.take(3).toList(growable: false);
             return Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: <Widget>[
-                for (final d in upcoming.take(3))
-                  _DepartureRow(departure: d, now: now),
+                for (final d in shown) _DepartureRow(departure: d, now: now),
+                TimetableNotes(
+                  showEstimated: shown.any((d) => d.isEstimated),
+                  showFakultatif: shown.any(
+                    (d) => isFakultatifService(d.serviceId),
+                  ),
+                  padding: const EdgeInsets.only(top: 4, right: 12),
+                ),
               ],
             );
           },
@@ -632,10 +659,19 @@ class _DepartureRow extends StatelessWidget {
         children: <Widget>[
           SizedBox(
             width: 58,
-            child: Text(
-              formatClock(departure.expectedAt.toLocal()),
-              style: text.titleMedium?.copyWith(
-                fontFeatures: AppTheme.timeFeatures,
+            // "~07:05" (estimated) shrinks to fit instead of wrapping.
+            child: FittedBox(
+              fit: BoxFit.scaleDown,
+              alignment: Alignment.centerLeft,
+              child: Text(
+                approxTime(
+                  formatClock(departure.expectedAt.toLocal()),
+                  estimated: departure.isEstimated,
+                ),
+                maxLines: 1,
+                style: text.titleMedium?.copyWith(
+                  fontFeatures: AppTheme.timeFeatures,
+                ),
               ),
             ),
           ),
@@ -643,11 +679,23 @@ class _DepartureRow extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: <Widget>[
-                Text(
-                  'Ke ${departure.destination}',
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: text.bodyMedium?.copyWith(fontWeight: FontWeight.w600),
+                Row(
+                  children: <Widget>[
+                    Flexible(
+                      child: Text(
+                        'Ke ${departure.destination}',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: text.bodyMedium?.copyWith(
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ),
+                    if (isFakultatifService(departure.serviceId)) ...<Widget>[
+                      const SizedBox(width: 6),
+                      const FakultatifBadge(),
+                    ],
+                  ],
                 ),
                 if (departure.lineName.isNotEmpty)
                   Text(

@@ -1,7 +1,19 @@
 import 'package:flutter/material.dart';
 
+import '../../app/theme/app_theme.dart';
 import '../../domain/entities/transit_models.dart';
 import 'tk_components.dart';
+
+/// Explanation of the "~" before a time (see [approxTime]).
+const estimatedTimeNote = 'perkiraan, jam tidak tercantum di GAPEKA';
+
+/// Explanation of the [FakultatifBadge].
+const fakultatifNote = 'KA fakultatif: dijalankan sesuai kebutuhan';
+
+/// [formatted] (e.g. `08:13`) with a leading `~` when the time is
+/// [estimated]: interpolated because GAPEKA prints no time at that stop.
+String approxTime(String formatted, {required bool estimated}) =>
+    estimated ? '~$formatted' : formatted;
 
 class DataFreshnessBadge extends StatelessWidget {
   const DataFreshnessBadge({
@@ -89,6 +101,66 @@ class ServiceStatusBadge extends StatelessWidget {
       label: 'Status layanan $label',
       excludeSemantics: true,
       child: TkPill(label: label, icon: icon, tone: tone),
+    );
+  }
+}
+
+/// Small "Fakultatif" chip for a train with `service_id` [fakultatifServiceId]:
+/// it only runs when needed. Long-press/hover shows [fakultatifNote].
+class FakultatifBadge extends StatelessWidget {
+  const FakultatifBadge({super.key, this.compact = true});
+
+  final bool compact;
+
+  @override
+  Widget build(BuildContext context) {
+    return Tooltip(
+      message: fakultatifNote,
+      child: Semantics(
+        label: fakultatifNote,
+        excludeSemantics: true,
+        child: TkPill(
+          label: 'Fakultatif',
+          icon: Icons.event_busy_outlined,
+          tone: TkPillTone.warning,
+          dense: compact,
+        ),
+      ),
+    );
+  }
+}
+
+/// One-line legend under a list of times: what "~" means and, when
+/// [showFakultatif], what the "Fakultatif" chip means. Shows nothing when
+/// neither applies, so it can be placed unconditionally.
+class TimetableNotes extends StatelessWidget {
+  const TimetableNotes({
+    required this.showEstimated,
+    super.key,
+    this.showFakultatif = false,
+    this.padding = EdgeInsets.zero,
+  });
+
+  final bool showEstimated;
+  final bool showFakultatif;
+  final EdgeInsetsGeometry padding;
+
+  @override
+  Widget build(BuildContext context) {
+    if (!showEstimated && !showFakultatif) return const SizedBox.shrink();
+    final style = Theme.of(
+      context,
+    ).textTheme.bodySmall?.copyWith(color: context.tk.textMuted);
+    return Padding(
+      padding: padding,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
+        children: <Widget>[
+          if (showEstimated) Text('~ = $estimatedTimeNote', style: style),
+          if (showFakultatif) Text(fakultatifNote, style: style),
+        ],
+      ),
     );
   }
 }

@@ -293,6 +293,13 @@ class _DepartureList extends StatelessWidget {
             if (i > 0) Divider(height: 1, indent: 16, endIndent: 16, color: tk.border),
             _DepartureRow(departure: departures[i], now: now),
           ],
+          TimetableNotes(
+            showEstimated: departures.any((d) => d.isEstimated),
+            showFakultatif: departures.any(
+              (d) => isFakultatifService(d.serviceId),
+            ),
+            padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+          ),
         ],
       ),
     );
@@ -308,7 +315,9 @@ class _DepartureRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final textTheme = Theme.of(context).textTheme;
-    final time = DateFormat.Hm('id_ID').format(departure.expectedAt);
+    final clock = DateFormat.Hm('id_ID').format(departure.expectedAt);
+    final time = approxTime(clock, estimated: departure.isEstimated);
+    final fakultatif = isFakultatifService(departure.serviceId);
     final countdown = countdownLabel(departure.expectedAt.difference(now));
     final detail = <String>[
       departure.lineName,
@@ -316,7 +325,10 @@ class _DepartureRow extends StatelessWidget {
     ].join(' · ');
 
     return Semantics(
-      label: 'Ke ${departure.destination}, berangkat $time, $countdown. $detail',
+      label:
+          'Ke ${departure.destination}, berangkat '
+          '${departure.isEstimated ? 'sekitar ' : ''}$clock, $countdown. '
+          '$detail${fakultatif ? '. $fakultatifNote' : ''}',
       excludeSemantics: true,
       child: Padding(
         padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
@@ -340,11 +352,21 @@ class _DepartureRow extends StatelessWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: <Widget>[
-                  Text(
-                    departure.destination,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: textTheme.titleSmall,
+                  Row(
+                    children: <Widget>[
+                      Flexible(
+                        child: Text(
+                          departure.destination,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: textTheme.titleSmall,
+                        ),
+                      ),
+                      if (fakultatif) ...<Widget>[
+                        const SizedBox(width: 6),
+                        const FakultatifBadge(),
+                      ],
+                    ],
                   ),
                   Text(
                     '$countdown · $detail',

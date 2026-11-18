@@ -338,7 +338,7 @@ as Map<String, int>,
 /// @nodoc
 mixin _$Departure {
 
- String get id; String get stationId; String get destination; String get lineName; DateTime get scheduledAt; DateTime get expectedAt; DataFreshness get freshness; String get sourceLabel; String? get platform; String? get tripNumber; bool get isDemo;
+ String get id; String get stationId; String get destination; String get lineName; DateTime get scheduledAt; DateTime get expectedAt; DataFreshness get freshness; String get sourceLabel; String? get platform; String? get tripNumber; bool get isDemo; bool get isEstimated; String? get serviceId;
 /// Create a copy of Departure
 /// with the given fields replaced by the non-null parameter values.
 @JsonKey(includeFromJson: false, includeToJson: false)
@@ -351,16 +351,16 @@ $DepartureCopyWith<Departure> get copyWith => _$DepartureCopyWithImpl<Departure>
 
 @override
 bool operator ==(Object other) {
-  return identical(this, other) || (other.runtimeType == runtimeType&&other is Departure&&(identical(other.id, id) || other.id == id)&&(identical(other.stationId, stationId) || other.stationId == stationId)&&(identical(other.destination, destination) || other.destination == destination)&&(identical(other.lineName, lineName) || other.lineName == lineName)&&(identical(other.scheduledAt, scheduledAt) || other.scheduledAt == scheduledAt)&&(identical(other.expectedAt, expectedAt) || other.expectedAt == expectedAt)&&(identical(other.freshness, freshness) || other.freshness == freshness)&&(identical(other.sourceLabel, sourceLabel) || other.sourceLabel == sourceLabel)&&(identical(other.platform, platform) || other.platform == platform)&&(identical(other.tripNumber, tripNumber) || other.tripNumber == tripNumber)&&(identical(other.isDemo, isDemo) || other.isDemo == isDemo));
+  return identical(this, other) || (other.runtimeType == runtimeType&&other is Departure&&(identical(other.id, id) || other.id == id)&&(identical(other.stationId, stationId) || other.stationId == stationId)&&(identical(other.destination, destination) || other.destination == destination)&&(identical(other.lineName, lineName) || other.lineName == lineName)&&(identical(other.scheduledAt, scheduledAt) || other.scheduledAt == scheduledAt)&&(identical(other.expectedAt, expectedAt) || other.expectedAt == expectedAt)&&(identical(other.freshness, freshness) || other.freshness == freshness)&&(identical(other.sourceLabel, sourceLabel) || other.sourceLabel == sourceLabel)&&(identical(other.platform, platform) || other.platform == platform)&&(identical(other.tripNumber, tripNumber) || other.tripNumber == tripNumber)&&(identical(other.isDemo, isDemo) || other.isDemo == isDemo)&&(identical(other.isEstimated, isEstimated) || other.isEstimated == isEstimated)&&(identical(other.serviceId, serviceId) || other.serviceId == serviceId));
 }
 
 @JsonKey(includeFromJson: false, includeToJson: false)
 @override
-int get hashCode => Object.hash(runtimeType,id,stationId,destination,lineName,scheduledAt,expectedAt,freshness,sourceLabel,platform,tripNumber,isDemo);
+int get hashCode => Object.hash(runtimeType,id,stationId,destination,lineName,scheduledAt,expectedAt,freshness,sourceLabel,platform,tripNumber,isDemo,isEstimated,serviceId);
 
 @override
 String toString() {
-  return 'Departure(id: $id, stationId: $stationId, destination: $destination, lineName: $lineName, scheduledAt: $scheduledAt, expectedAt: $expectedAt, freshness: $freshness, sourceLabel: $sourceLabel, platform: $platform, tripNumber: $tripNumber, isDemo: $isDemo)';
+  return 'Departure(id: $id, stationId: $stationId, destination: $destination, lineName: $lineName, scheduledAt: $scheduledAt, expectedAt: $expectedAt, freshness: $freshness, sourceLabel: $sourceLabel, platform: $platform, tripNumber: $tripNumber, isDemo: $isDemo, isEstimated: $isEstimated, serviceId: $serviceId)';
 }
 
 
@@ -371,7 +371,7 @@ abstract mixin class $DepartureCopyWith<$Res>  {
   factory $DepartureCopyWith(Departure value, $Res Function(Departure) _then) = _$DepartureCopyWithImpl;
 @useResult
 $Res call({
- String id, String stationId, String destination, String lineName, DateTime scheduledAt, DateTime expectedAt, DataFreshness freshness, String sourceLabel, String? platform, String? tripNumber, bool isDemo
+ String id, String stationId, String destination, String lineName, DateTime scheduledAt, DateTime expectedAt, DataFreshness freshness, String sourceLabel, String? platform, String? tripNumber, bool isDemo, bool isEstimated, String? serviceId
 });
 
 
@@ -388,7 +388,7 @@ class _$DepartureCopyWithImpl<$Res>
 
 /// Create a copy of Departure
 /// with the given fields replaced by the non-null parameter values.
-@pragma('vm:prefer-inline') @override $Res call({Object? id = null,Object? stationId = null,Object? destination = null,Object? lineName = null,Object? scheduledAt = null,Object? expectedAt = null,Object? freshness = null,Object? sourceLabel = null,Object? platform = freezed,Object? tripNumber = freezed,Object? isDemo = null,}) {
+@pragma('vm:prefer-inline') @override $Res call({Object? id = null,Object? stationId = null,Object? destination = null,Object? lineName = null,Object? scheduledAt = null,Object? expectedAt = null,Object? freshness = null,Object? sourceLabel = null,Object? platform = freezed,Object? tripNumber = freezed,Object? isDemo = null,Object? isEstimated = null,Object? serviceId = freezed,}) {
   return _then(_self.copyWith(
 id: null == id ? _self.id : id // ignore: cast_nullable_to_non_nullable
 as String,stationId: null == stationId ? _self.stationId : stationId // ignore: cast_nullable_to_non_nullable
@@ -401,7 +401,9 @@ as DataFreshness,sourceLabel: null == sourceLabel ? _self.sourceLabel : sourceLa
 as String,platform: freezed == platform ? _self.platform : platform // ignore: cast_nullable_to_non_nullable
 as String?,tripNumber: freezed == tripNumber ? _self.tripNumber : tripNumber // ignore: cast_nullable_to_non_nullable
 as String?,isDemo: null == isDemo ? _self.isDemo : isDemo // ignore: cast_nullable_to_non_nullable
-as bool,
+as bool,isEstimated: null == isEstimated ? _self.isEstimated : isEstimated // ignore: cast_nullable_to_non_nullable
+as bool,serviceId: freezed == serviceId ? _self.serviceId : serviceId // ignore: cast_nullable_to_non_nullable
+as String?,
   ));
 }
 
@@ -486,10 +488,10 @@ return $default(_that);case _:
 /// }
 /// ```
 
-@optionalTypeArgs TResult maybeWhen<TResult extends Object?>(TResult Function( String id,  String stationId,  String destination,  String lineName,  DateTime scheduledAt,  DateTime expectedAt,  DataFreshness freshness,  String sourceLabel,  String? platform,  String? tripNumber,  bool isDemo)?  $default,{required TResult orElse(),}) {final _that = this;
+@optionalTypeArgs TResult maybeWhen<TResult extends Object?>(TResult Function( String id,  String stationId,  String destination,  String lineName,  DateTime scheduledAt,  DateTime expectedAt,  DataFreshness freshness,  String sourceLabel,  String? platform,  String? tripNumber,  bool isDemo,  bool isEstimated,  String? serviceId)?  $default,{required TResult orElse(),}) {final _that = this;
 switch (_that) {
 case _Departure() when $default != null:
-return $default(_that.id,_that.stationId,_that.destination,_that.lineName,_that.scheduledAt,_that.expectedAt,_that.freshness,_that.sourceLabel,_that.platform,_that.tripNumber,_that.isDemo);case _:
+return $default(_that.id,_that.stationId,_that.destination,_that.lineName,_that.scheduledAt,_that.expectedAt,_that.freshness,_that.sourceLabel,_that.platform,_that.tripNumber,_that.isDemo,_that.isEstimated,_that.serviceId);case _:
   return orElse();
 
 }
@@ -507,10 +509,10 @@ return $default(_that.id,_that.stationId,_that.destination,_that.lineName,_that.
 /// }
 /// ```
 
-@optionalTypeArgs TResult when<TResult extends Object?>(TResult Function( String id,  String stationId,  String destination,  String lineName,  DateTime scheduledAt,  DateTime expectedAt,  DataFreshness freshness,  String sourceLabel,  String? platform,  String? tripNumber,  bool isDemo)  $default,) {final _that = this;
+@optionalTypeArgs TResult when<TResult extends Object?>(TResult Function( String id,  String stationId,  String destination,  String lineName,  DateTime scheduledAt,  DateTime expectedAt,  DataFreshness freshness,  String sourceLabel,  String? platform,  String? tripNumber,  bool isDemo,  bool isEstimated,  String? serviceId)  $default,) {final _that = this;
 switch (_that) {
 case _Departure():
-return $default(_that.id,_that.stationId,_that.destination,_that.lineName,_that.scheduledAt,_that.expectedAt,_that.freshness,_that.sourceLabel,_that.platform,_that.tripNumber,_that.isDemo);case _:
+return $default(_that.id,_that.stationId,_that.destination,_that.lineName,_that.scheduledAt,_that.expectedAt,_that.freshness,_that.sourceLabel,_that.platform,_that.tripNumber,_that.isDemo,_that.isEstimated,_that.serviceId);case _:
   throw StateError('Unexpected subclass');
 
 }
@@ -527,10 +529,10 @@ return $default(_that.id,_that.stationId,_that.destination,_that.lineName,_that.
 /// }
 /// ```
 
-@optionalTypeArgs TResult? whenOrNull<TResult extends Object?>(TResult? Function( String id,  String stationId,  String destination,  String lineName,  DateTime scheduledAt,  DateTime expectedAt,  DataFreshness freshness,  String sourceLabel,  String? platform,  String? tripNumber,  bool isDemo)?  $default,) {final _that = this;
+@optionalTypeArgs TResult? whenOrNull<TResult extends Object?>(TResult? Function( String id,  String stationId,  String destination,  String lineName,  DateTime scheduledAt,  DateTime expectedAt,  DataFreshness freshness,  String sourceLabel,  String? platform,  String? tripNumber,  bool isDemo,  bool isEstimated,  String? serviceId)?  $default,) {final _that = this;
 switch (_that) {
 case _Departure() when $default != null:
-return $default(_that.id,_that.stationId,_that.destination,_that.lineName,_that.scheduledAt,_that.expectedAt,_that.freshness,_that.sourceLabel,_that.platform,_that.tripNumber,_that.isDemo);case _:
+return $default(_that.id,_that.stationId,_that.destination,_that.lineName,_that.scheduledAt,_that.expectedAt,_that.freshness,_that.sourceLabel,_that.platform,_that.tripNumber,_that.isDemo,_that.isEstimated,_that.serviceId);case _:
   return null;
 
 }
@@ -542,7 +544,7 @@ return $default(_that.id,_that.stationId,_that.destination,_that.lineName,_that.
 @JsonSerializable()
 
 class _Departure implements Departure {
-  const _Departure({required this.id, required this.stationId, required this.destination, required this.lineName, required this.scheduledAt, required this.expectedAt, required this.freshness, required this.sourceLabel, this.platform, this.tripNumber, this.isDemo = false});
+  const _Departure({required this.id, required this.stationId, required this.destination, required this.lineName, required this.scheduledAt, required this.expectedAt, required this.freshness, required this.sourceLabel, this.platform, this.tripNumber, this.isDemo = false, this.isEstimated = false, this.serviceId});
   factory _Departure.fromJson(Map<String, dynamic> json) => _$DepartureFromJson(json);
 
 @override final  String id;
@@ -556,6 +558,12 @@ class _Departure implements Departure {
 @override final  String? platform;
 @override final  String? tripNumber;
 @override@JsonKey() final  bool isDemo;
+// True when the timetable has no printed time for this stop (GAPEKA leaves
+// it blank) and the time was interpolated. Shown with a "~" marker.
+@override@JsonKey() final  bool isEstimated;
+// `trips.service_id`, e.g. `GJ26_FAKULTATIF` for a train that only runs
+// when needed. Null when the source does not say.
+@override final  String? serviceId;
 
 /// Create a copy of Departure
 /// with the given fields replaced by the non-null parameter values.
@@ -570,16 +578,16 @@ Map<String, dynamic> toJson() {
 
 @override
 bool operator ==(Object other) {
-  return identical(this, other) || (other.runtimeType == runtimeType&&other is _Departure&&(identical(other.id, id) || other.id == id)&&(identical(other.stationId, stationId) || other.stationId == stationId)&&(identical(other.destination, destination) || other.destination == destination)&&(identical(other.lineName, lineName) || other.lineName == lineName)&&(identical(other.scheduledAt, scheduledAt) || other.scheduledAt == scheduledAt)&&(identical(other.expectedAt, expectedAt) || other.expectedAt == expectedAt)&&(identical(other.freshness, freshness) || other.freshness == freshness)&&(identical(other.sourceLabel, sourceLabel) || other.sourceLabel == sourceLabel)&&(identical(other.platform, platform) || other.platform == platform)&&(identical(other.tripNumber, tripNumber) || other.tripNumber == tripNumber)&&(identical(other.isDemo, isDemo) || other.isDemo == isDemo));
+  return identical(this, other) || (other.runtimeType == runtimeType&&other is _Departure&&(identical(other.id, id) || other.id == id)&&(identical(other.stationId, stationId) || other.stationId == stationId)&&(identical(other.destination, destination) || other.destination == destination)&&(identical(other.lineName, lineName) || other.lineName == lineName)&&(identical(other.scheduledAt, scheduledAt) || other.scheduledAt == scheduledAt)&&(identical(other.expectedAt, expectedAt) || other.expectedAt == expectedAt)&&(identical(other.freshness, freshness) || other.freshness == freshness)&&(identical(other.sourceLabel, sourceLabel) || other.sourceLabel == sourceLabel)&&(identical(other.platform, platform) || other.platform == platform)&&(identical(other.tripNumber, tripNumber) || other.tripNumber == tripNumber)&&(identical(other.isDemo, isDemo) || other.isDemo == isDemo)&&(identical(other.isEstimated, isEstimated) || other.isEstimated == isEstimated)&&(identical(other.serviceId, serviceId) || other.serviceId == serviceId));
 }
 
 @JsonKey(includeFromJson: false, includeToJson: false)
 @override
-int get hashCode => Object.hash(runtimeType,id,stationId,destination,lineName,scheduledAt,expectedAt,freshness,sourceLabel,platform,tripNumber,isDemo);
+int get hashCode => Object.hash(runtimeType,id,stationId,destination,lineName,scheduledAt,expectedAt,freshness,sourceLabel,platform,tripNumber,isDemo,isEstimated,serviceId);
 
 @override
 String toString() {
-  return 'Departure(id: $id, stationId: $stationId, destination: $destination, lineName: $lineName, scheduledAt: $scheduledAt, expectedAt: $expectedAt, freshness: $freshness, sourceLabel: $sourceLabel, platform: $platform, tripNumber: $tripNumber, isDemo: $isDemo)';
+  return 'Departure(id: $id, stationId: $stationId, destination: $destination, lineName: $lineName, scheduledAt: $scheduledAt, expectedAt: $expectedAt, freshness: $freshness, sourceLabel: $sourceLabel, platform: $platform, tripNumber: $tripNumber, isDemo: $isDemo, isEstimated: $isEstimated, serviceId: $serviceId)';
 }
 
 
@@ -590,7 +598,7 @@ abstract mixin class _$DepartureCopyWith<$Res> implements $DepartureCopyWith<$Re
   factory _$DepartureCopyWith(_Departure value, $Res Function(_Departure) _then) = __$DepartureCopyWithImpl;
 @override @useResult
 $Res call({
- String id, String stationId, String destination, String lineName, DateTime scheduledAt, DateTime expectedAt, DataFreshness freshness, String sourceLabel, String? platform, String? tripNumber, bool isDemo
+ String id, String stationId, String destination, String lineName, DateTime scheduledAt, DateTime expectedAt, DataFreshness freshness, String sourceLabel, String? platform, String? tripNumber, bool isDemo, bool isEstimated, String? serviceId
 });
 
 
@@ -607,7 +615,7 @@ class __$DepartureCopyWithImpl<$Res>
 
 /// Create a copy of Departure
 /// with the given fields replaced by the non-null parameter values.
-@override @pragma('vm:prefer-inline') $Res call({Object? id = null,Object? stationId = null,Object? destination = null,Object? lineName = null,Object? scheduledAt = null,Object? expectedAt = null,Object? freshness = null,Object? sourceLabel = null,Object? platform = freezed,Object? tripNumber = freezed,Object? isDemo = null,}) {
+@override @pragma('vm:prefer-inline') $Res call({Object? id = null,Object? stationId = null,Object? destination = null,Object? lineName = null,Object? scheduledAt = null,Object? expectedAt = null,Object? freshness = null,Object? sourceLabel = null,Object? platform = freezed,Object? tripNumber = freezed,Object? isDemo = null,Object? isEstimated = null,Object? serviceId = freezed,}) {
   return _then(_Departure(
 id: null == id ? _self.id : id // ignore: cast_nullable_to_non_nullable
 as String,stationId: null == stationId ? _self.stationId : stationId // ignore: cast_nullable_to_non_nullable
@@ -620,7 +628,9 @@ as DataFreshness,sourceLabel: null == sourceLabel ? _self.sourceLabel : sourceLa
 as String,platform: freezed == platform ? _self.platform : platform // ignore: cast_nullable_to_non_nullable
 as String?,tripNumber: freezed == tripNumber ? _self.tripNumber : tripNumber // ignore: cast_nullable_to_non_nullable
 as String?,isDemo: null == isDemo ? _self.isDemo : isDemo // ignore: cast_nullable_to_non_nullable
-as bool,
+as bool,isEstimated: null == isEstimated ? _self.isEstimated : isEstimated // ignore: cast_nullable_to_non_nullable
+as bool,serviceId: freezed == serviceId ? _self.serviceId : serviceId // ignore: cast_nullable_to_non_nullable
+as String?,
   ));
 }
 
@@ -638,7 +648,7 @@ mixin _$TripLeg {
  String? get externalTripId; DateTime? get serviceDate;// The service the train runs, e.g. "Cikarang – Kampung Bandan via Pasar
 // Senen". Shown on the map to other riders when this leg's position is
 // shared. Null when unknown.
- String? get relation;
+ String? get relation; bool get departureEstimated; bool get arrivalEstimated; String? get serviceId;
 /// Create a copy of TripLeg
 /// with the given fields replaced by the non-null parameter values.
 @JsonKey(includeFromJson: false, includeToJson: false)
@@ -651,16 +661,16 @@ $TripLegCopyWith<TripLeg> get copyWith => _$TripLegCopyWithImpl<TripLeg>(this as
 
 @override
 bool operator ==(Object other) {
-  return identical(this, other) || (other.runtimeType == runtimeType&&other is TripLeg&&(identical(other.id, id) || other.id == id)&&(identical(other.mode, mode) || other.mode == mode)&&(identical(other.originName, originName) || other.originName == originName)&&(identical(other.destinationName, destinationName) || other.destinationName == destinationName)&&(identical(other.departureAt, departureAt) || other.departureAt == departureAt)&&(identical(other.arrivalAt, arrivalAt) || other.arrivalAt == arrivalAt)&&(identical(other.lineName, lineName) || other.lineName == lineName)&&(identical(other.headsign, headsign) || other.headsign == headsign)&&const DeepCollectionEquality().equals(other.stationIds, stationIds)&&(identical(other.walkingMeters, walkingMeters) || other.walkingMeters == walkingMeters)&&(identical(other.transferInstruction, transferInstruction) || other.transferInstruction == transferInstruction)&&(identical(other.externalTripId, externalTripId) || other.externalTripId == externalTripId)&&(identical(other.serviceDate, serviceDate) || other.serviceDate == serviceDate)&&(identical(other.relation, relation) || other.relation == relation));
+  return identical(this, other) || (other.runtimeType == runtimeType&&other is TripLeg&&(identical(other.id, id) || other.id == id)&&(identical(other.mode, mode) || other.mode == mode)&&(identical(other.originName, originName) || other.originName == originName)&&(identical(other.destinationName, destinationName) || other.destinationName == destinationName)&&(identical(other.departureAt, departureAt) || other.departureAt == departureAt)&&(identical(other.arrivalAt, arrivalAt) || other.arrivalAt == arrivalAt)&&(identical(other.lineName, lineName) || other.lineName == lineName)&&(identical(other.headsign, headsign) || other.headsign == headsign)&&const DeepCollectionEquality().equals(other.stationIds, stationIds)&&(identical(other.walkingMeters, walkingMeters) || other.walkingMeters == walkingMeters)&&(identical(other.transferInstruction, transferInstruction) || other.transferInstruction == transferInstruction)&&(identical(other.externalTripId, externalTripId) || other.externalTripId == externalTripId)&&(identical(other.serviceDate, serviceDate) || other.serviceDate == serviceDate)&&(identical(other.relation, relation) || other.relation == relation)&&(identical(other.departureEstimated, departureEstimated) || other.departureEstimated == departureEstimated)&&(identical(other.arrivalEstimated, arrivalEstimated) || other.arrivalEstimated == arrivalEstimated)&&(identical(other.serviceId, serviceId) || other.serviceId == serviceId));
 }
 
 @JsonKey(includeFromJson: false, includeToJson: false)
 @override
-int get hashCode => Object.hash(runtimeType,id,mode,originName,destinationName,departureAt,arrivalAt,lineName,headsign,const DeepCollectionEquality().hash(stationIds),walkingMeters,transferInstruction,externalTripId,serviceDate,relation);
+int get hashCode => Object.hash(runtimeType,id,mode,originName,destinationName,departureAt,arrivalAt,lineName,headsign,const DeepCollectionEquality().hash(stationIds),walkingMeters,transferInstruction,externalTripId,serviceDate,relation,departureEstimated,arrivalEstimated,serviceId);
 
 @override
 String toString() {
-  return 'TripLeg(id: $id, mode: $mode, originName: $originName, destinationName: $destinationName, departureAt: $departureAt, arrivalAt: $arrivalAt, lineName: $lineName, headsign: $headsign, stationIds: $stationIds, walkingMeters: $walkingMeters, transferInstruction: $transferInstruction, externalTripId: $externalTripId, serviceDate: $serviceDate, relation: $relation)';
+  return 'TripLeg(id: $id, mode: $mode, originName: $originName, destinationName: $destinationName, departureAt: $departureAt, arrivalAt: $arrivalAt, lineName: $lineName, headsign: $headsign, stationIds: $stationIds, walkingMeters: $walkingMeters, transferInstruction: $transferInstruction, externalTripId: $externalTripId, serviceDate: $serviceDate, relation: $relation, departureEstimated: $departureEstimated, arrivalEstimated: $arrivalEstimated, serviceId: $serviceId)';
 }
 
 
@@ -671,7 +681,7 @@ abstract mixin class $TripLegCopyWith<$Res>  {
   factory $TripLegCopyWith(TripLeg value, $Res Function(TripLeg) _then) = _$TripLegCopyWithImpl;
 @useResult
 $Res call({
- String id, TransportMode mode, String originName, String destinationName, DateTime departureAt, DateTime arrivalAt, String? lineName, String? headsign, List<String> stationIds, int walkingMeters, String? transferInstruction, String? externalTripId, DateTime? serviceDate, String? relation
+ String id, TransportMode mode, String originName, String destinationName, DateTime departureAt, DateTime arrivalAt, String? lineName, String? headsign, List<String> stationIds, int walkingMeters, String? transferInstruction, String? externalTripId, DateTime? serviceDate, String? relation, bool departureEstimated, bool arrivalEstimated, String? serviceId
 });
 
 
@@ -688,7 +698,7 @@ class _$TripLegCopyWithImpl<$Res>
 
 /// Create a copy of TripLeg
 /// with the given fields replaced by the non-null parameter values.
-@pragma('vm:prefer-inline') @override $Res call({Object? id = null,Object? mode = null,Object? originName = null,Object? destinationName = null,Object? departureAt = null,Object? arrivalAt = null,Object? lineName = freezed,Object? headsign = freezed,Object? stationIds = null,Object? walkingMeters = null,Object? transferInstruction = freezed,Object? externalTripId = freezed,Object? serviceDate = freezed,Object? relation = freezed,}) {
+@pragma('vm:prefer-inline') @override $Res call({Object? id = null,Object? mode = null,Object? originName = null,Object? destinationName = null,Object? departureAt = null,Object? arrivalAt = null,Object? lineName = freezed,Object? headsign = freezed,Object? stationIds = null,Object? walkingMeters = null,Object? transferInstruction = freezed,Object? externalTripId = freezed,Object? serviceDate = freezed,Object? relation = freezed,Object? departureEstimated = null,Object? arrivalEstimated = null,Object? serviceId = freezed,}) {
   return _then(_self.copyWith(
 id: null == id ? _self.id : id // ignore: cast_nullable_to_non_nullable
 as String,mode: null == mode ? _self.mode : mode // ignore: cast_nullable_to_non_nullable
@@ -704,6 +714,9 @@ as int,transferInstruction: freezed == transferInstruction ? _self.transferInstr
 as String?,externalTripId: freezed == externalTripId ? _self.externalTripId : externalTripId // ignore: cast_nullable_to_non_nullable
 as String?,serviceDate: freezed == serviceDate ? _self.serviceDate : serviceDate // ignore: cast_nullable_to_non_nullable
 as DateTime?,relation: freezed == relation ? _self.relation : relation // ignore: cast_nullable_to_non_nullable
+as String?,departureEstimated: null == departureEstimated ? _self.departureEstimated : departureEstimated // ignore: cast_nullable_to_non_nullable
+as bool,arrivalEstimated: null == arrivalEstimated ? _self.arrivalEstimated : arrivalEstimated // ignore: cast_nullable_to_non_nullable
+as bool,serviceId: freezed == serviceId ? _self.serviceId : serviceId // ignore: cast_nullable_to_non_nullable
 as String?,
   ));
 }
@@ -789,10 +802,10 @@ return $default(_that);case _:
 /// }
 /// ```
 
-@optionalTypeArgs TResult maybeWhen<TResult extends Object?>(TResult Function( String id,  TransportMode mode,  String originName,  String destinationName,  DateTime departureAt,  DateTime arrivalAt,  String? lineName,  String? headsign,  List<String> stationIds,  int walkingMeters,  String? transferInstruction,  String? externalTripId,  DateTime? serviceDate,  String? relation)?  $default,{required TResult orElse(),}) {final _that = this;
+@optionalTypeArgs TResult maybeWhen<TResult extends Object?>(TResult Function( String id,  TransportMode mode,  String originName,  String destinationName,  DateTime departureAt,  DateTime arrivalAt,  String? lineName,  String? headsign,  List<String> stationIds,  int walkingMeters,  String? transferInstruction,  String? externalTripId,  DateTime? serviceDate,  String? relation,  bool departureEstimated,  bool arrivalEstimated,  String? serviceId)?  $default,{required TResult orElse(),}) {final _that = this;
 switch (_that) {
 case _TripLeg() when $default != null:
-return $default(_that.id,_that.mode,_that.originName,_that.destinationName,_that.departureAt,_that.arrivalAt,_that.lineName,_that.headsign,_that.stationIds,_that.walkingMeters,_that.transferInstruction,_that.externalTripId,_that.serviceDate,_that.relation);case _:
+return $default(_that.id,_that.mode,_that.originName,_that.destinationName,_that.departureAt,_that.arrivalAt,_that.lineName,_that.headsign,_that.stationIds,_that.walkingMeters,_that.transferInstruction,_that.externalTripId,_that.serviceDate,_that.relation,_that.departureEstimated,_that.arrivalEstimated,_that.serviceId);case _:
   return orElse();
 
 }
@@ -810,10 +823,10 @@ return $default(_that.id,_that.mode,_that.originName,_that.destinationName,_that
 /// }
 /// ```
 
-@optionalTypeArgs TResult when<TResult extends Object?>(TResult Function( String id,  TransportMode mode,  String originName,  String destinationName,  DateTime departureAt,  DateTime arrivalAt,  String? lineName,  String? headsign,  List<String> stationIds,  int walkingMeters,  String? transferInstruction,  String? externalTripId,  DateTime? serviceDate,  String? relation)  $default,) {final _that = this;
+@optionalTypeArgs TResult when<TResult extends Object?>(TResult Function( String id,  TransportMode mode,  String originName,  String destinationName,  DateTime departureAt,  DateTime arrivalAt,  String? lineName,  String? headsign,  List<String> stationIds,  int walkingMeters,  String? transferInstruction,  String? externalTripId,  DateTime? serviceDate,  String? relation,  bool departureEstimated,  bool arrivalEstimated,  String? serviceId)  $default,) {final _that = this;
 switch (_that) {
 case _TripLeg():
-return $default(_that.id,_that.mode,_that.originName,_that.destinationName,_that.departureAt,_that.arrivalAt,_that.lineName,_that.headsign,_that.stationIds,_that.walkingMeters,_that.transferInstruction,_that.externalTripId,_that.serviceDate,_that.relation);case _:
+return $default(_that.id,_that.mode,_that.originName,_that.destinationName,_that.departureAt,_that.arrivalAt,_that.lineName,_that.headsign,_that.stationIds,_that.walkingMeters,_that.transferInstruction,_that.externalTripId,_that.serviceDate,_that.relation,_that.departureEstimated,_that.arrivalEstimated,_that.serviceId);case _:
   throw StateError('Unexpected subclass');
 
 }
@@ -830,10 +843,10 @@ return $default(_that.id,_that.mode,_that.originName,_that.destinationName,_that
 /// }
 /// ```
 
-@optionalTypeArgs TResult? whenOrNull<TResult extends Object?>(TResult? Function( String id,  TransportMode mode,  String originName,  String destinationName,  DateTime departureAt,  DateTime arrivalAt,  String? lineName,  String? headsign,  List<String> stationIds,  int walkingMeters,  String? transferInstruction,  String? externalTripId,  DateTime? serviceDate,  String? relation)?  $default,) {final _that = this;
+@optionalTypeArgs TResult? whenOrNull<TResult extends Object?>(TResult? Function( String id,  TransportMode mode,  String originName,  String destinationName,  DateTime departureAt,  DateTime arrivalAt,  String? lineName,  String? headsign,  List<String> stationIds,  int walkingMeters,  String? transferInstruction,  String? externalTripId,  DateTime? serviceDate,  String? relation,  bool departureEstimated,  bool arrivalEstimated,  String? serviceId)?  $default,) {final _that = this;
 switch (_that) {
 case _TripLeg() when $default != null:
-return $default(_that.id,_that.mode,_that.originName,_that.destinationName,_that.departureAt,_that.arrivalAt,_that.lineName,_that.headsign,_that.stationIds,_that.walkingMeters,_that.transferInstruction,_that.externalTripId,_that.serviceDate,_that.relation);case _:
+return $default(_that.id,_that.mode,_that.originName,_that.destinationName,_that.departureAt,_that.arrivalAt,_that.lineName,_that.headsign,_that.stationIds,_that.walkingMeters,_that.transferInstruction,_that.externalTripId,_that.serviceDate,_that.relation,_that.departureEstimated,_that.arrivalEstimated,_that.serviceId);case _:
   return null;
 
 }
@@ -845,7 +858,7 @@ return $default(_that.id,_that.mode,_that.originName,_that.destinationName,_that
 @JsonSerializable()
 
 class _TripLeg implements TripLeg {
-  const _TripLeg({required this.id, required this.mode, required this.originName, required this.destinationName, required this.departureAt, required this.arrivalAt, this.lineName, this.headsign, final  List<String> stationIds = const <String>[], this.walkingMeters = 0, this.transferInstruction, this.externalTripId, this.serviceDate, this.relation}): _stationIds = stationIds;
+  const _TripLeg({required this.id, required this.mode, required this.originName, required this.destinationName, required this.departureAt, required this.arrivalAt, this.lineName, this.headsign, final  List<String> stationIds = const <String>[], this.walkingMeters = 0, this.transferInstruction, this.externalTripId, this.serviceDate, this.relation, this.departureEstimated = false, this.arrivalEstimated = false, this.serviceId}): _stationIds = stationIds;
   factory _TripLeg.fromJson(Map<String, dynamic> json) => _$TripLegFromJson(json);
 
 @override final  String id;
@@ -875,6 +888,13 @@ class _TripLeg implements TripLeg {
 // Senen". Shown on the map to other riders when this leg's position is
 // shared. Null when unknown.
 @override final  String? relation;
+// True when the boarding / alighting time of this leg is not printed in
+// the timetable (GAPEKA) and was interpolated. Shown with a "~" marker.
+@override@JsonKey() final  bool departureEstimated;
+@override@JsonKey() final  bool arrivalEstimated;
+// `trips.service_id` of the train on this leg, e.g. `GJ26_FAKULTATIF`.
+// Null when the source does not say.
+@override final  String? serviceId;
 
 /// Create a copy of TripLeg
 /// with the given fields replaced by the non-null parameter values.
@@ -889,16 +909,16 @@ Map<String, dynamic> toJson() {
 
 @override
 bool operator ==(Object other) {
-  return identical(this, other) || (other.runtimeType == runtimeType&&other is _TripLeg&&(identical(other.id, id) || other.id == id)&&(identical(other.mode, mode) || other.mode == mode)&&(identical(other.originName, originName) || other.originName == originName)&&(identical(other.destinationName, destinationName) || other.destinationName == destinationName)&&(identical(other.departureAt, departureAt) || other.departureAt == departureAt)&&(identical(other.arrivalAt, arrivalAt) || other.arrivalAt == arrivalAt)&&(identical(other.lineName, lineName) || other.lineName == lineName)&&(identical(other.headsign, headsign) || other.headsign == headsign)&&const DeepCollectionEquality().equals(other._stationIds, _stationIds)&&(identical(other.walkingMeters, walkingMeters) || other.walkingMeters == walkingMeters)&&(identical(other.transferInstruction, transferInstruction) || other.transferInstruction == transferInstruction)&&(identical(other.externalTripId, externalTripId) || other.externalTripId == externalTripId)&&(identical(other.serviceDate, serviceDate) || other.serviceDate == serviceDate)&&(identical(other.relation, relation) || other.relation == relation));
+  return identical(this, other) || (other.runtimeType == runtimeType&&other is _TripLeg&&(identical(other.id, id) || other.id == id)&&(identical(other.mode, mode) || other.mode == mode)&&(identical(other.originName, originName) || other.originName == originName)&&(identical(other.destinationName, destinationName) || other.destinationName == destinationName)&&(identical(other.departureAt, departureAt) || other.departureAt == departureAt)&&(identical(other.arrivalAt, arrivalAt) || other.arrivalAt == arrivalAt)&&(identical(other.lineName, lineName) || other.lineName == lineName)&&(identical(other.headsign, headsign) || other.headsign == headsign)&&const DeepCollectionEquality().equals(other._stationIds, _stationIds)&&(identical(other.walkingMeters, walkingMeters) || other.walkingMeters == walkingMeters)&&(identical(other.transferInstruction, transferInstruction) || other.transferInstruction == transferInstruction)&&(identical(other.externalTripId, externalTripId) || other.externalTripId == externalTripId)&&(identical(other.serviceDate, serviceDate) || other.serviceDate == serviceDate)&&(identical(other.relation, relation) || other.relation == relation)&&(identical(other.departureEstimated, departureEstimated) || other.departureEstimated == departureEstimated)&&(identical(other.arrivalEstimated, arrivalEstimated) || other.arrivalEstimated == arrivalEstimated)&&(identical(other.serviceId, serviceId) || other.serviceId == serviceId));
 }
 
 @JsonKey(includeFromJson: false, includeToJson: false)
 @override
-int get hashCode => Object.hash(runtimeType,id,mode,originName,destinationName,departureAt,arrivalAt,lineName,headsign,const DeepCollectionEquality().hash(_stationIds),walkingMeters,transferInstruction,externalTripId,serviceDate,relation);
+int get hashCode => Object.hash(runtimeType,id,mode,originName,destinationName,departureAt,arrivalAt,lineName,headsign,const DeepCollectionEquality().hash(_stationIds),walkingMeters,transferInstruction,externalTripId,serviceDate,relation,departureEstimated,arrivalEstimated,serviceId);
 
 @override
 String toString() {
-  return 'TripLeg(id: $id, mode: $mode, originName: $originName, destinationName: $destinationName, departureAt: $departureAt, arrivalAt: $arrivalAt, lineName: $lineName, headsign: $headsign, stationIds: $stationIds, walkingMeters: $walkingMeters, transferInstruction: $transferInstruction, externalTripId: $externalTripId, serviceDate: $serviceDate, relation: $relation)';
+  return 'TripLeg(id: $id, mode: $mode, originName: $originName, destinationName: $destinationName, departureAt: $departureAt, arrivalAt: $arrivalAt, lineName: $lineName, headsign: $headsign, stationIds: $stationIds, walkingMeters: $walkingMeters, transferInstruction: $transferInstruction, externalTripId: $externalTripId, serviceDate: $serviceDate, relation: $relation, departureEstimated: $departureEstimated, arrivalEstimated: $arrivalEstimated, serviceId: $serviceId)';
 }
 
 
@@ -909,7 +929,7 @@ abstract mixin class _$TripLegCopyWith<$Res> implements $TripLegCopyWith<$Res> {
   factory _$TripLegCopyWith(_TripLeg value, $Res Function(_TripLeg) _then) = __$TripLegCopyWithImpl;
 @override @useResult
 $Res call({
- String id, TransportMode mode, String originName, String destinationName, DateTime departureAt, DateTime arrivalAt, String? lineName, String? headsign, List<String> stationIds, int walkingMeters, String? transferInstruction, String? externalTripId, DateTime? serviceDate, String? relation
+ String id, TransportMode mode, String originName, String destinationName, DateTime departureAt, DateTime arrivalAt, String? lineName, String? headsign, List<String> stationIds, int walkingMeters, String? transferInstruction, String? externalTripId, DateTime? serviceDate, String? relation, bool departureEstimated, bool arrivalEstimated, String? serviceId
 });
 
 
@@ -926,7 +946,7 @@ class __$TripLegCopyWithImpl<$Res>
 
 /// Create a copy of TripLeg
 /// with the given fields replaced by the non-null parameter values.
-@override @pragma('vm:prefer-inline') $Res call({Object? id = null,Object? mode = null,Object? originName = null,Object? destinationName = null,Object? departureAt = null,Object? arrivalAt = null,Object? lineName = freezed,Object? headsign = freezed,Object? stationIds = null,Object? walkingMeters = null,Object? transferInstruction = freezed,Object? externalTripId = freezed,Object? serviceDate = freezed,Object? relation = freezed,}) {
+@override @pragma('vm:prefer-inline') $Res call({Object? id = null,Object? mode = null,Object? originName = null,Object? destinationName = null,Object? departureAt = null,Object? arrivalAt = null,Object? lineName = freezed,Object? headsign = freezed,Object? stationIds = null,Object? walkingMeters = null,Object? transferInstruction = freezed,Object? externalTripId = freezed,Object? serviceDate = freezed,Object? relation = freezed,Object? departureEstimated = null,Object? arrivalEstimated = null,Object? serviceId = freezed,}) {
   return _then(_TripLeg(
 id: null == id ? _self.id : id // ignore: cast_nullable_to_non_nullable
 as String,mode: null == mode ? _self.mode : mode // ignore: cast_nullable_to_non_nullable
@@ -942,6 +962,9 @@ as int,transferInstruction: freezed == transferInstruction ? _self.transferInstr
 as String?,externalTripId: freezed == externalTripId ? _self.externalTripId : externalTripId // ignore: cast_nullable_to_non_nullable
 as String?,serviceDate: freezed == serviceDate ? _self.serviceDate : serviceDate // ignore: cast_nullable_to_non_nullable
 as DateTime?,relation: freezed == relation ? _self.relation : relation // ignore: cast_nullable_to_non_nullable
+as String?,departureEstimated: null == departureEstimated ? _self.departureEstimated : departureEstimated // ignore: cast_nullable_to_non_nullable
+as bool,arrivalEstimated: null == arrivalEstimated ? _self.arrivalEstimated : arrivalEstimated // ignore: cast_nullable_to_non_nullable
+as bool,serviceId: freezed == serviceId ? _self.serviceId : serviceId // ignore: cast_nullable_to_non_nullable
 as String?,
   ));
 }

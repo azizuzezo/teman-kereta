@@ -52,6 +52,8 @@ _Departure _$DepartureFromJson(Map<String, dynamic> json) => _Departure(
   platform: json['platform'] as String?,
   tripNumber: json['tripNumber'] as String?,
   isDemo: json['isDemo'] as bool? ?? false,
+  isEstimated: json['isEstimated'] as bool? ?? false,
+  serviceId: json['serviceId'] as String?,
 );
 
 Map<String, dynamic> _$DepartureToJson(_Departure instance) =>
@@ -67,6 +69,8 @@ Map<String, dynamic> _$DepartureToJson(_Departure instance) =>
       'platform': instance.platform,
       'tripNumber': instance.tripNumber,
       'isDemo': instance.isDemo,
+      'isEstimated': instance.isEstimated,
+      'serviceId': instance.serviceId,
     };
 
 const _$DataFreshnessEnumMap = {
@@ -98,6 +102,9 @@ _TripLeg _$TripLegFromJson(Map<String, dynamic> json) => _TripLeg(
       ? null
       : DateTime.parse(json['serviceDate'] as String),
   relation: json['relation'] as String?,
+  departureEstimated: json['departureEstimated'] as bool? ?? false,
+  arrivalEstimated: json['arrivalEstimated'] as bool? ?? false,
+  serviceId: json['serviceId'] as String?,
 );
 
 Map<String, dynamic> _$TripLegToJson(_TripLeg instance) => <String, dynamic>{
@@ -115,6 +122,9 @@ Map<String, dynamic> _$TripLegToJson(_TripLeg instance) => <String, dynamic>{
   'externalTripId': instance.externalTripId,
   'serviceDate': instance.serviceDate?.toIso8601String(),
   'relation': instance.relation,
+  'departureEstimated': instance.departureEstimated,
+  'arrivalEstimated': instance.arrivalEstimated,
+  'serviceId': instance.serviceId,
 };
 
 const _$TransportModeEnumMap = {

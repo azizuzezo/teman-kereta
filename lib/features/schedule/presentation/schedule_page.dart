@@ -267,6 +267,13 @@ class _DeparturesBoard extends ConsumerWidget {
                       showFreshness: items[i].freshness != headerFreshness,
                     ),
                   ),
+                TimetableNotes(
+                  showEstimated: items.any((d) => d.isEstimated),
+                  showFakultatif: items.any(
+                    (d) => isFakultatifService(d.serviceId),
+                  ),
+                  padding: const EdgeInsets.only(top: 2),
+                ),
               ],
             );
           },
@@ -337,7 +344,9 @@ class _DepartureCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final tk = context.tk;
     final textTheme = Theme.of(context).textTheme;
-    final time = DateFormat.Hm('id_ID').format(departure.expectedAt);
+    final clock = DateFormat.Hm('id_ID').format(departure.expectedAt);
+    final time = approxTime(clock, estimated: departure.isEstimated);
+    final fakultatif = isFakultatifService(departure.serviceId);
     final countdown = formatCountdown(
       departure.expectedAt.difference(DateTime.now()),
     );
@@ -349,7 +358,9 @@ class _DepartureCard extends StatelessWidget {
     return TkCard(
       tone: isNext ? TkCardTone.soft : TkCardTone.surface,
       semanticLabel:
-          'Berangkat $time dari $originName ke ${departure.destination}, '
+          'Berangkat ${departure.isEstimated ? 'sekitar ' : ''}$clock '
+          'dari $originName ke ${departure.destination}, '
+          '${fakultatif ? 'KA fakultatif, ' : ''}'
           '${countdown == 'Sekarang' ? 'sekarang' : '$countdown lagi'}',
       child: ExcludeSemantics(
         child: Row(
@@ -411,7 +422,7 @@ class _DepartureCard extends StatelessWidget {
                       style: textTheme.bodySmall?.copyWith(color: tk.textMuted),
                     ),
                   ],
-                  if (isNext || showFreshness) ...<Widget>[
+                  if (isNext || showFreshness || fakultatif) ...<Widget>[
                     const SizedBox(height: 8),
                     Wrap(
                       spacing: 6,
@@ -428,6 +439,7 @@ class _DepartureCard extends StatelessWidget {
                             freshness: departure.freshness,
                             compact: true,
                           ),
+                        if (fakultatif) const FakultatifBadge(),
                       ],
                     ),
                   ],

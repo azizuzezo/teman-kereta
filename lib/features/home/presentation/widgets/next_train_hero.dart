@@ -261,6 +261,10 @@ class _Body extends StatelessWidget {
                   ),
                   const SizedBox(width: 6),
                 ],
+                if (isFakultatifService(first.serviceId)) ...<Widget>[
+                  const FakultatifBadge(),
+                  const SizedBox(width: 6),
+                ],
                 DataFreshnessBadge(freshness: first.freshness, compact: true),
               ],
             ),
@@ -278,6 +282,13 @@ class _Body extends StatelessWidget {
               const SizedBox(height: 4),
               for (final d in rest) _FollowUpRow(departure: d, now: now),
             ],
+            TimetableNotes(
+              showEstimated: upcoming.any((d) => d.isEstimated),
+              showFakultatif: upcoming.any(
+                (d) => isFakultatifService(d.serviceId),
+              ),
+              padding: const EdgeInsets.only(top: 8),
+            ),
           ],
         );
       },
@@ -305,14 +316,16 @@ class _FirstDeparture extends StatelessWidget {
     final row2 = scaler.scale(24);
     const gap = 8.0;
     final dotsHeight = row1 / 2 + gap + row2 / 2 + 10;
-    final time = DateFormat.Hm('id_ID').format(departure.expectedAt);
+    final clock = DateFormat.Hm('id_ID').format(departure.expectedAt);
+    final time = approxTime(clock, estimated: departure.isEstimated);
     final countdown = countdownLabel(departure.expectedAt.difference(now));
     final platform = platformLabel(departure.platform);
     final detail = <String>[departure.lineName, ?platform].join(' · ');
 
     return Semantics(
       label:
-          'Kereta berikutnya ke ${departure.destination}, berangkat $time, '
+          'Kereta berikutnya ke ${departure.destination}, berangkat '
+          '${departure.isEstimated ? 'sekitar ' : ''}$clock, '
           '$countdown',
       excludeSemantics: true,
       child: Column(
@@ -513,10 +526,15 @@ class _FollowUpRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final textTheme = Theme.of(context).textTheme;
-    final time = DateFormat.Hm('id_ID').format(departure.expectedAt);
+    final clock = DateFormat.Hm('id_ID').format(departure.expectedAt);
+    final time = approxTime(clock, estimated: departure.isEstimated);
+    final fakultatif = isFakultatifService(departure.serviceId);
     final countdown = countdownLabel(departure.expectedAt.difference(now));
     return Semantics(
-      label: 'Berikutnya ke ${departure.destination}, $time, $countdown',
+      label:
+          'Berikutnya ke ${departure.destination}, '
+          '${departure.isEstimated ? 'sekitar ' : ''}$clock, $countdown'
+          '${fakultatif ? ', KA fakultatif' : ''}',
       excludeSemantics: true,
       child: ConstrainedBox(
         constraints: const BoxConstraints(minHeight: 48),
@@ -540,11 +558,21 @@ class _FollowUpRow extends StatelessWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: <Widget>[
-                  Text(
-                    departure.destination,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: textTheme.bodyMedium,
+                  Row(
+                    children: <Widget>[
+                      Flexible(
+                        child: Text(
+                          departure.destination,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: textTheme.bodyMedium,
+                        ),
+                      ),
+                      if (fakultatif) ...<Widget>[
+                        const SizedBox(width: 6),
+                        const FakultatifBadge(),
+                      ],
+                    ],
                   ),
                   Text(
                     countdown,

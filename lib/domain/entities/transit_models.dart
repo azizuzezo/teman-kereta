@@ -11,6 +11,12 @@ enum TransportMode { walk, commuterRail, mrt, lrt, bus, bicycle, rideHailing }
 
 enum ServiceStatus { normal, delayed, limited, disrupted, unavailable }
 
+/// `trips.service_id` of a KA fakultatif in GAPEKA 2026 (Lampiran IV): a train
+/// that is only run when needed, so it may not run on a given day.
+const fakultatifServiceId = 'GJ26_FAKULTATIF';
+
+bool isFakultatifService(String? serviceId) => serviceId == fakultatifServiceId;
+
 @freezed
 abstract class Station with _$Station {
   const factory Station({
@@ -49,6 +55,12 @@ abstract class Departure with _$Departure {
     String? platform,
     String? tripNumber,
     @Default(false) bool isDemo,
+    // True when the timetable has no printed time for this stop (GAPEKA leaves
+    // it blank) and the time was interpolated. Shown with a "~" marker.
+    @Default(false) bool isEstimated,
+    // `trips.service_id`, e.g. `GJ26_FAKULTATIF` for a train that only runs
+    // when needed. Null when the source does not say.
+    String? serviceId,
   }) = _Departure;
 
   factory Departure.fromJson(Map<String, Object?> json) =>
@@ -79,6 +91,13 @@ abstract class TripLeg with _$TripLeg {
     // Senen". Shown on the map to other riders when this leg's position is
     // shared. Null when unknown.
     String? relation,
+    // True when the boarding / alighting time of this leg is not printed in
+    // the timetable (GAPEKA) and was interpolated. Shown with a "~" marker.
+    @Default(false) bool departureEstimated,
+    @Default(false) bool arrivalEstimated,
+    // `trips.service_id` of the train on this leg, e.g. `GJ26_FAKULTATIF`.
+    // Null when the source does not say.
+    String? serviceId,
   }) = _TripLeg;
 
   factory TripLeg.fromJson(Map<String, Object?> json) =>
@@ -113,6 +132,21 @@ abstract class TransitTrip with _$TransitTrip {
       _$TransitTripFromJson(json);
 
   int get durationMinutes => arrivalAt.difference(departureAt).inMinutes;
+
+  List<TripLeg> get _railLegs => legs
+      .where((leg) => leg.mode == TransportMode.commuterRail)
+      .toList(growable: false);
+
+  /// The trip's first departure time is interpolated, not printed in GAPEKA.
+  bool get departureEstimated =>
+      _railLegs.firstOrNull?.departureEstimated ?? false;
+
+  /// The trip's final arrival time is interpolated, not printed in GAPEKA.
+  bool get arrivalEstimated => _railLegs.lastOrNull?.arrivalEstimated ?? false;
+
+  /// At least one train of this trip is a KA fakultatif (runs only when needed).
+  bool get isFakultatif =>
+      legs.any((leg) => isFakultatifService(leg.serviceId));
 
   /// Flattened station sequence across all rail legs. Consecutive duplicate
   /// ids at a transfer junction (the alighting stop of one rail leg is the

@@ -46,7 +46,7 @@ final _all = <Station>[
 
 void main() {
   group('networkOfStation', () {
-    test('Yogyakarta line stations are Jogja, everything else Jabodetabek', () {
+    test('Yogyakarta line stations are Jogja, Jabodetabek lines Jabodetabek', () {
       expect(networkOfStation(_yogya), TransitNetwork.jogja);
       expect(networkOfStation(_palur), TransitNetwork.jogja);
       expect(networkOfStation(_bogor), TransitNetwork.jabodetabek);
@@ -70,6 +70,99 @@ void main() {
       );
       expect(networkOfStation(klaten), TransitNetwork.jogja);
       expect(networkOfStation(bogor), TransitNetwork.jabodetabek);
+    });
+  });
+
+  group('network map (networks.json)', () {
+    test('every line hosted today keeps its network', () {
+      for (final code in <String>[
+        'BOGOR',
+        'CIKARANG',
+        'RANGKAS',
+        'TANGERANG',
+        'PRIOK',
+        'NAMBO',
+        'RANGKASBITUNG',
+        'TANJUNG_PRIOK',
+      ]) {
+        expect(networkOfLineCode(code), TransitNetwork.jabodetabek, reason: code);
+      }
+      expect(networkOfLineCode('YKPL'), TransitNetwork.jogja);
+    });
+
+    test('new GAPEKA 2026 lines map to their own networks', () {
+      expect(networkOfLineCode('BST'), TransitNetwork.jabodetabek);
+      expect(networkOfLineCode('WALAHAR'), TransitNetwork.jabodetabek);
+      expect(networkOfLineCode('YIA'), TransitNetwork.jogja);
+      expect(networkOfLineCode('PRAMEKS'), TransitNetwork.jogja);
+      expect(networkOfLineCode('BDR'), TransitNetwork.bandung);
+      expect(networkOfLineCode('GARUT'), TransitNetwork.bandung);
+      expect(networkOfLineCode('DHOHO'), TransitNetwork.jatim);
+      expect(networkOfLineCode('KEDUNGSEPUR'), TransitNetwork.semarang);
+      expect(networkOfLineCode('SILIWANGI'), TransitNetwork.sukabumi);
+      expect(networkOfLineCode('PANDANWANGI'), TransitNetwork.banyuwangi);
+    });
+
+    test('ids and labels follow networks.json', () {
+      expect(TransitNetwork.jabodetabek.id, 'jabodetabek');
+      expect(TransitNetwork.jogja.id, 'jogja');
+      expect(networkLabel(TransitNetwork.jabodetabek), 'Jabodetabek');
+      expect(networkLabel(TransitNetwork.jogja), 'Yogyakarta');
+      expect(networkLabel(TransitNetwork.bandung), 'Bandung Raya');
+    });
+  });
+
+  group('unknown line codes', () {
+    final mystery = _station('XX', 'Misteri', ['NOT_A_LINE'], 1);
+    final mystery2 = _station('YY', 'Misteri Dua', ['NOT_A_LINE'], 2);
+
+    test('are never assumed to be Jabodetabek', () {
+      expect(networkOfLineCode('NOT_A_LINE'), isNull);
+      expect(networkOfStation(mystery), isNull);
+      expect(networksOfStation(mystery), isEmpty);
+    });
+
+    test('a station on no known network matches nothing, not even itself', () {
+      expect(sameNetwork(mystery, _bogor), isFalse);
+      expect(sameNetwork(_bogor, mystery), isFalse);
+      expect(sameNetwork(mystery, mystery2), isFalse);
+      expect(destinationsFor(mystery, <Station>[..._all, mystery2]), isEmpty);
+      expect(defaultDestinationFor(mystery, _all), isNull);
+    });
+
+    test('a known line next to an unknown one still decides the network', () {
+      final mixed = _station('MX', 'Campur', ['NOT_A_LINE', 'BOGOR'], 3);
+      expect(networkOfStation(mixed), TransitNetwork.jabodetabek);
+      expect(sameNetwork(mixed, _bogor), isTrue);
+    });
+
+    test('the message says the network is not recognised', () {
+      expect(crossNetworkMessageFor(mystery, _bogor), unknownNetworkMessage);
+      expect(crossNetworkMessageFor(_bogor, _palur), crossNetworkMessage);
+    });
+  });
+
+  group('a station on two networks (Purwakarta)', () {
+    final purwakarta = _station('PWK', 'Purwakarta', [
+      'WALAHAR',
+      'BDR',
+      'GARUT',
+    ], 1);
+    final cikarang = _station('CKR', 'Cikarang', ['CIKARANG', 'WALAHAR'], 2);
+    final bandung = _station('BD', 'Bandung', ['BDR'], 5);
+
+    test('belongs to both networks', () {
+      expect(networksOfStation(purwakarta), <TransitNetwork>{
+        TransitNetwork.jabodetabek,
+        TransitNetwork.bandung,
+      });
+    });
+
+    test('connects to either side, but the two sides stay separate', () {
+      expect(sameNetwork(purwakarta, cikarang), isTrue);
+      expect(sameNetwork(purwakarta, bandung), isTrue);
+      expect(sameNetwork(cikarang, bandung), isFalse);
+      expect(sharedNetworks(purwakarta, bandung), {TransitNetwork.bandung});
     });
   });
 
@@ -201,6 +294,35 @@ void main() {
       final state = c.read(tripSearchControllerProvider);
       expect(state.errorMessage, crossNetworkMessage);
       expect(state.isLoading, isFalse);
+      expect(state.results, isEmpty);
+    });
+  });
+
+  group('TripSearchController with an unknown line', () {
+    final mystery = _station('XX', 'Misteri', ['NOT_A_LINE'], 1);
+
+    test('searching from it says the network is not recognised', () async {
+      final c = ProviderContainer(
+        overrides: [
+          stationListProvider.overrideWith((ref) async => <Station>[
+            ..._all,
+            mystery,
+          ]),
+          fixReaderProvider.overrideWithValue(
+            () async => const FixReading.ok(-6.5950, 106.7906),
+          ),
+        ],
+      );
+      addTearDown(c.dispose);
+      await c.read(stationListProvider.future);
+      final controller = c.read(tripSearchControllerProvider.notifier)
+        ..setOrigin('XX')
+        ..setDestination('BOO');
+
+      await controller.search();
+
+      final state = c.read(tripSearchControllerProvider);
+      expect(state.errorMessage, unknownNetworkMessage);
       expect(state.results, isEmpty);
     });
   });

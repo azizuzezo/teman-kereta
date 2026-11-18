@@ -3,6 +3,7 @@ import 'package:intl/intl.dart';
 
 import '../../app/theme/app_theme.dart';
 import '../../domain/entities/transit_models.dart';
+import 'data_badges.dart';
 import 'tk_components.dart';
 
 /// One step of a trip (walk, rail, ...) on the vertical route line shared by
@@ -71,9 +72,22 @@ class TripLegTimelineTile extends StatelessWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: <Widget>[
-                  Text(title, style: textTheme.titleSmall),
+                  if (isFakultatifService(leg.serviceId))
+                    Wrap(
+                      spacing: 6,
+                      runSpacing: 4,
+                      crossAxisAlignment: WrapCrossAlignment.center,
+                      children: <Widget>[
+                        Text(title, style: textTheme.titleSmall),
+                        const FakultatifBadge(),
+                      ],
+                    )
+                  else
+                    Text(title, style: textTheme.titleSmall),
                   Text(
-                    '${time.format(leg.departureAt)} – ${time.format(leg.arrivalAt)}',
+                    '${approxTime(time.format(leg.departureAt), estimated: leg.departureEstimated)}'
+                    ' – '
+                    '${approxTime(time.format(leg.arrivalAt), estimated: leg.arrivalEstimated)}',
                     style: textTheme.labelLarge?.copyWith(
                       color: tk.textMuted,
                       fontFeatures: AppTheme.timeFeatures,

@@ -102,7 +102,9 @@ class TripDetailPage extends ConsumerWidget {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: <Widget>[
                   Text(
-                    '${time.format(trip.departureAt)} – ${time.format(trip.arrivalAt)}',
+                    '${approxTime(time.format(trip.departureAt), estimated: trip.departureEstimated)}'
+                    ' – '
+                    '${approxTime(time.format(trip.arrivalAt), estimated: trip.arrivalEstimated)}',
                     style: textTheme.displayLarge?.copyWith(
                       fontFeatures: AppTheme.timeFeatures,
                     ),
@@ -177,6 +179,7 @@ class TripDetailPage extends ConsumerWidget {
                     crossAxisAlignment: WrapCrossAlignment.center,
                     children: <Widget>[
                       DataFreshnessBadge(freshness: trip.freshness),
+                      if (trip.isFakultatif) const FakultatifBadge(compact: false),
                       Text(
                         '${trip.sourceLabel} • diperbarui '
                         '${DateFormat('dd MMM, HH:mm', 'id_ID').format(trip.updatedAt)}',
@@ -197,6 +200,13 @@ class TripDetailPage extends ConsumerWidget {
                 leg: trip.legs[index],
                 isLast: index == trip.legs.length - 1,
               ),
+            TimetableNotes(
+              showEstimated: trip.legs.any(
+                (leg) => leg.departureEstimated || leg.arrivalEstimated,
+              ),
+              showFakultatif: trip.isFakultatif,
+              padding: const EdgeInsets.only(top: 4),
+            ),
             if (trip.stationIds.length >= 2) ...<Widget>[
               const SizedBox(height: 24),
               const _Heading('Stasiun yang dilewati'),

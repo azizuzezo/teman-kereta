@@ -40,6 +40,197 @@ Duration? weekdayAlignedShift(
   return Duration(days: weeks * 7);
 }
 
+/// An optional boolean RPC column (added by the GAPEKA 2026 migration, see
+/// `supabase/data/gapeka-2026/CONTRACT.md` section A). Absent or null, as
+/// before that migration is applied, reads as false.
+@visibleForTesting
+bool optionalFlag(Map<String, dynamic> row, String column) =>
+    row[column] == true;
+
+/// An optional text RPC column; absent, null or blank reads as null.
+@visibleForTesting
+String? optionalText(Map<String, dynamic> row, String column) {
+  final value = row[column];
+  return value is String && value.trim().isNotEmpty ? value : null;
+}
+
+/// One `get_station_departures` row as a [Departure], its time moved forward
+/// by [shift] (whole weeks, see [weekdayAlignedShift]).
+@visibleForTesting
+Departure departureFromRow(
+  Map<String, dynamic> row, {
+  required String stationId,
+  Duration shift = Duration.zero,
+}) {
+  final scheduled = DateTime.parse(
+    row['scheduled_departure'] as String,
+  ).toLocal().add(shift);
+  return Departure(
+    id: shift == Duration.zero
+        ? row['trip_id'] as String
+        : '${row['trip_id']}@${scheduled.millisecondsSinceEpoch}',
+    stationId: stationId,
+    destination: row['headsign'] as String,
+    lineName: (row['line_name'] as String?) ?? 'Commuter Line',
+    scheduledAt: scheduled,
+    expectedAt: scheduled,
+    freshness: DataFreshness.scheduled,
+    sourceLabel: shift == Duration.zero
+        ? 'Basis data KRL • jadwal GTFS'
+        : 'Basis data KRL • pola jadwal GTFS mingguan',
+    tripNumber: row['trip_number'] as String?,
+    isDemo: row['data_source'] == 'demo',
+    isEstimated: optionalFlag(row, 'is_estimated'),
+    serviceId: optionalText(row, 'service_id'),
+  );
+}
+
+/// One `search_direct_trips` row as a [TransitTrip]. Its times are the real
+/// timetable times exactly as returned (never moved to "now").
+@visibleForTesting
+TransitTrip directTripFromRow(
+  Map<String, dynamic> row, {
+  required TripSearchQuery query,
+  required String originName,
+  required String destinationName,
+  required List<String> stationCodes,
+  int? shiftTag,
+}) {
+  final tripId = row['trip_id'] as String;
+  // A trip re-dated by whole weeks keeps one database id for every date, so
+  // the result id carries the shifted time to stay unique in a result list.
+  final resultId = shiftTag == null ? tripId : '$tripId@$shiftTag';
+  final departure = DateTime.parse(row['origin_departure'] as String).toLocal();
+  final arrival = DateTime.parse(
+    row['destination_arrival'] as String,
+  ).toLocal();
+
+  return TransitTrip(
+    id: resultId,
+    originStationId: query.originStationId,
+    destinationStationId: query.destinationStationId,
+    departureAt: departure,
+    arrivalAt: arrival,
+    legs: <TripLeg>[
+      TripLeg(
+        id: '$resultId-rail',
+        mode: TransportMode.commuterRail,
+        originName: originName,
+        destinationName: destinationName,
+        departureAt: departure,
+        arrivalAt: arrival,
+        lineName: row['line_name'] as String?,
+        headsign: row['headsign'] as String?,
+        stationIds: stationCodes,
+        externalTripId: row['external_trip_id'] as String?,
+        serviceDate: DateTime.tryParse(row['service_date'] as String? ?? ''),
+        departureEstimated: optionalFlag(row, 'origin_is_estimated'),
+        arrivalEstimated: optionalFlag(row, 'destination_is_estimated'),
+        serviceId: optionalText(row, 'service_id'),
+      ),
+    ],
+    freshness: DataFreshness.scheduled,
+    sourceLabel: 'Basis data KRL • jadwal statis, hanya perjalanan langsung',
+    updatedAt: DateTime.now(),
+    isDemo: row['data_source'] == 'demo',
+  );
+}
+
+/// One `search_one_transfer_trips` row as a two-leg [TransitTrip], with the
+/// real timetable times exactly as returned. Station lookups (names, stop
+/// codes, platform guidance) are done by the caller.
+@visibleForTesting
+TransitTrip transferTripFromRow(
+  Map<String, dynamic> row, {
+  required TripSearchQuery query,
+  required String originName,
+  required String destinationName,
+  required String transferName,
+  required List<String> outboundStationCodes,
+  required List<String> inboundStationCodes,
+  required String transferInstruction,
+}) {
+  final outboundTripId = row['outbound_trip_id'] as String;
+  final inboundTripId = row['inbound_trip_id'] as String;
+  final departure = DateTime.parse(
+    row['outbound_origin_departure'] as String,
+  ).toLocal();
+  final transferArrival = DateTime.parse(
+    row['outbound_transfer_arrival'] as String,
+  ).toLocal();
+  final transferDeparture = DateTime.parse(
+    row['inbound_transfer_departure'] as String,
+  ).toLocal();
+  final arrival = DateTime.parse(
+    row['inbound_destination_arrival'] as String,
+  ).toLocal();
+  final isDemo =
+      row['outbound_data_source'] == 'demo' ||
+      row['inbound_data_source'] == 'demo';
+
+  return TransitTrip(
+    id: '$outboundTripId-$inboundTripId',
+    originStationId: query.originStationId,
+    destinationStationId: query.destinationStationId,
+    departureAt: departure,
+    arrivalAt: arrival,
+    transfers: 1,
+    legs: <TripLeg>[
+      TripLeg(
+        id: '$outboundTripId-rail',
+        mode: TransportMode.commuterRail,
+        originName: originName,
+        destinationName: transferName,
+        departureAt: departure,
+        arrivalAt: transferArrival,
+        lineName: row['outbound_line_name'] as String?,
+        headsign: row['outbound_headsign'] as String?,
+        stationIds: outboundStationCodes,
+        transferInstruction: transferInstruction,
+        externalTripId: row['outbound_external_trip_id'] as String?,
+        serviceDate: DateTime.tryParse(
+          row['outbound_service_date'] as String? ?? '',
+        ),
+        departureEstimated: optionalFlag(row, 'origin_is_estimated'),
+        arrivalEstimated: optionalFlag(row, 'transfer_arrival_is_estimated'),
+        serviceId: optionalText(row, 'first_service_id'),
+      ),
+      TripLeg(
+        id: '$inboundTripId-rail',
+        mode: TransportMode.commuterRail,
+        originName: transferName,
+        destinationName: destinationName,
+        departureAt: transferDeparture,
+        arrivalAt: arrival,
+        lineName: row['inbound_line_name'] as String?,
+        headsign: row['inbound_headsign'] as String?,
+        stationIds: inboundStationCodes,
+        externalTripId: row['inbound_external_trip_id'] as String?,
+        serviceDate: DateTime.tryParse(
+          row['inbound_service_date'] as String? ?? '',
+        ),
+        departureEstimated: optionalFlag(
+          row,
+          'transfer_departure_is_estimated',
+        ),
+        arrivalEstimated: optionalFlag(row, 'destination_is_estimated'),
+        serviceId: optionalText(row, 'second_service_id'),
+      ),
+    ],
+    freshness: DataFreshness.scheduled,
+    sourceLabel: 'Basis data KRL • jadwal statis, satu kali transit',
+    updatedAt: DateTime.now(),
+    isDemo: isDemo,
+  );
+}
+
+/// Trips from `search_direct_trips` / `search_one_transfer_trips`, earliest
+/// first. Their departure and arrival times are the scheduled times from the
+/// timetable and are kept exactly as returned.
+@visibleForTesting
+List<TransitTrip> orderTimetableTrips(Iterable<TransitTrip> trips) =>
+    trips.toList()..sort((a, b) => a.departureAt.compareTo(b.departureAt));
+
 /// Backs `TRANSIT_PROVIDER=local_supabase` against the schema in
 /// `supabase/migrations/`. Schedule search only resolves **direct** trips —
 /// a single `trip_id` that serves both stations in the right stop order, via
@@ -256,27 +447,10 @@ class SupabaseTransitProvider
                 !_sameName(row['headsign'] as String?, stationName),
           )
           .take(_departuresLimit)
-          .map((row) {
-            final scheduled = DateTime.parse(
-              row['scheduled_departure'] as String,
-            ).toLocal().add(shift);
-            return Departure(
-              id: shift == Duration.zero
-                  ? row['trip_id'] as String
-                  : '${row['trip_id']}@${scheduled.millisecondsSinceEpoch}',
-              stationId: stationId,
-              destination: row['headsign'] as String,
-              lineName: (row['line_name'] as String?) ?? 'Commuter Line',
-              scheduledAt: scheduled,
-              expectedAt: scheduled,
-              freshness: DataFreshness.scheduled,
-              sourceLabel: shift == Duration.zero
-                  ? 'Basis data KRL • jadwal GTFS'
-                  : 'Basis data KRL • pola jadwal GTFS mingguan',
-              tripNumber: row['trip_number'] as String?,
-              isDemo: row['data_source'] == 'demo',
-            );
-          })
+          .map(
+            (row) =>
+                departureFromRow(row, stationId: stationId, shift: shift),
+          )
           .toList(growable: false);
       if (departures.isNotEmpty) {
         return departures;
@@ -389,14 +563,16 @@ class SupabaseTransitProvider
     final destinationName = destination?.name ?? query.destinationStationId;
 
     if (origin != null && destination != null) {
-      // Jabodetabek and Yogyakarta are separate rail networks. Never join them
+      // Separate rail networks (Jabodetabek, Yogyakarta, ...) are never joined
       // into one journey, not even through the estimated-route fallback below.
-      if (!sameNetwork(origin, destination)) {
+      // A station on a line with no known network matches nothing.
+      final shared = sharedNetworks(origin, destination);
+      if (shared.isEmpty) {
         return const <TransitTrip>[];
       }
       // Yogyakarta has a complete published timetable (every station time of
       // every trip), so answer from it directly instead of the estimator.
-      if (networkOfStation(origin) == TransitNetwork.jogja) {
+      if (shared.contains(TransitNetwork.jogja)) {
         return _searchJogjaTrips(query, originName, destinationName);
       }
     }
@@ -420,7 +596,7 @@ class SupabaseTransitProvider
       },
     );
 
-    var trips = <TransitTrip>[
+    final timetableTrips = <TransitTrip>[
       ...await Future.wait(
         directRows.cast<Map<String, dynamic>>().map(
           (row) => _directTripFromRow(row, query, originName, destinationName),
@@ -434,56 +610,40 @@ class SupabaseTransitProvider
       ),
     ];
 
-    if (trips.isEmpty) {
-      // Fallback generator for realistic schedules when the trip-schedule
-      // tables are sparse for this station pair. Built entirely from the
-      // real station/line topology (via _fallbackLegStations, a BFS over
-      // however many transfers the real network actually needs) so "next
-      // station" walks the actual stop sequence instead of jumping straight
-      // from origin to destination — see mock_transit_provider.dart's
-      // analogous fix for the bug this caused. When the topology can't
-      // connect the two stations at all, this must produce NO trips rather
-      // than fabricate a fake direct `[origin, destination]` one — a wrong
-      // route is worse than an honest "no results" (confirmed live: this
-      // fallback used to claim e.g. Bogor→Jurang Mangu, a real two-transfer
-      // trip, was a single direct hop).
-      final options = await _fallbackRouteOptions(
-        query.originStationId,
-        query.destinationStationId,
-      );
-      final allStations = await getStations();
-      trips = <TransitTrip>[
-        for (var o = 0; o < options.length; o++)
-          ...buildEstimatedTrips(
-            option: options[o],
-            optionIndex: o,
-            query: query,
-            originName: originName,
-            destinationName: destinationName,
-            labelRouteVia: options.length > 1,
-            allStations: allStations,
-          ),
-      ];
-    } else {
-      // Stagger departure times for alternative options so they don't share identical departure minutes
-      final staggered = <TransitTrip>[];
-      for (var i = 0; i < trips.length; i++) {
-        final t = trips[i];
-        final offsetMins = i * 12;
-        final newDeparture = query.departureAt.add(
-          Duration(minutes: 6 + offsetMins),
-        );
-        final duration = t.arrivalAt.difference(t.departureAt);
-        final durationMins = duration.inMinutes > 0 ? duration.inMinutes : 40;
-        final newArrival = newDeparture.add(Duration(minutes: durationMins));
-        staggered.add(
-          t.copyWith(departureAt: newDeparture, arrivalAt: newArrival),
-        );
-      }
-      trips = staggered;
+    if (timetableTrips.isNotEmpty) {
+      // Real scheduled times from the timetable, shown exactly as returned.
+      return orderTimetableTrips(timetableTrips);
     }
 
-    trips.sort((a, b) => a.departureAt.compareTo(b.departureAt));
+    // Fallback generator for realistic schedules when the trip-schedule
+    // tables are sparse for this station pair. Built entirely from the
+    // real station/line topology (via _fallbackLegStations, a BFS over
+    // however many transfers the real network actually needs) so "next
+    // station" walks the actual stop sequence instead of jumping straight
+    // from origin to destination — see mock_transit_provider.dart's
+    // analogous fix for the bug this caused. When the topology can't
+    // connect the two stations at all, this must produce NO trips rather
+    // than fabricate a fake direct `[origin, destination]` one — a wrong
+    // route is worse than an honest "no results" (confirmed live: this
+    // fallback used to claim e.g. Bogor→Jurang Mangu, a real two-transfer
+    // trip, was a single direct hop).
+    final options = await _fallbackRouteOptions(
+      query.originStationId,
+      query.destinationStationId,
+    );
+    final allStations = await getStations();
+    final trips = <TransitTrip>[
+      for (var o = 0; o < options.length; o++)
+        ...buildEstimatedTrips(
+          option: options[o],
+          optionIndex: o,
+          query: query,
+          originName: originName,
+          destinationName: destinationName,
+          labelRouteVia: options.length > 1,
+          allStations: allStations,
+        ),
+    ]..sort((a, b) => a.departureAt.compareTo(b.departureAt));
     return trips;
   }
 
@@ -596,47 +756,18 @@ class SupabaseTransitProvider
     String destinationName, {
     int? shiftTag,
   }) async {
-    final tripId = row['trip_id'] as String;
-    // A trip re-dated by whole weeks keeps one database id for every date, so
-    // the result id carries the shifted time to stay unique in a result list.
-    final resultId = shiftTag == null ? tripId : '$tripId@$shiftTag';
     final stationCodes = await _tripStopCodes(
-      tripId,
+      row['trip_id'] as String,
       row['origin_sequence'] as int,
       row['destination_sequence'] as int,
     );
-    final departure = DateTime.parse(
-      row['origin_departure'] as String,
-    ).toLocal();
-    final arrival = DateTime.parse(
-      row['destination_arrival'] as String,
-    ).toLocal();
-
-    return TransitTrip(
-      id: resultId,
-      originStationId: query.originStationId,
-      destinationStationId: query.destinationStationId,
-      departureAt: departure,
-      arrivalAt: arrival,
-      legs: <TripLeg>[
-        TripLeg(
-          id: '$resultId-rail',
-          mode: TransportMode.commuterRail,
-          originName: originName,
-          destinationName: destinationName,
-          departureAt: departure,
-          arrivalAt: arrival,
-          lineName: row['line_name'] as String?,
-          headsign: row['headsign'] as String?,
-          stationIds: stationCodes,
-          externalTripId: row['external_trip_id'] as String?,
-          serviceDate: DateTime.tryParse(row['service_date'] as String? ?? ''),
-        ),
-      ],
-      freshness: DataFreshness.estimated,
-      sourceLabel: 'Basis data KRL • jadwal statis, hanya perjalanan langsung',
-      updatedAt: DateTime.now(),
-      isDemo: row['data_source'] == 'demo',
+    return directTripFromRow(
+      row,
+      query: query,
+      originName: originName,
+      destinationName: destinationName,
+      stationCodes: stationCodes,
+      shiftTag: shiftTag,
     );
   }
 
@@ -690,66 +821,15 @@ class SupabaseTransitProvider
         ) ??
         'Transit di $transferName ke arah ${row['inbound_line_name']}.';
 
-    final departure = DateTime.parse(
-      row['outbound_origin_departure'] as String,
-    ).toLocal();
-    final transferArrival = DateTime.parse(
-      row['outbound_transfer_arrival'] as String,
-    ).toLocal();
-    final transferDeparture = DateTime.parse(
-      row['inbound_transfer_departure'] as String,
-    ).toLocal();
-    final arrival = DateTime.parse(
-      row['inbound_destination_arrival'] as String,
-    ).toLocal();
-    final isDemo =
-        row['outbound_data_source'] == 'demo' ||
-        row['inbound_data_source'] == 'demo';
-
-    return TransitTrip(
-      id: '$outboundTripId-$inboundTripId',
-      originStationId: query.originStationId,
-      destinationStationId: query.destinationStationId,
-      departureAt: departure,
-      arrivalAt: arrival,
-      transfers: 1,
-      legs: <TripLeg>[
-        TripLeg(
-          id: '$outboundTripId-rail',
-          mode: TransportMode.commuterRail,
-          originName: originName,
-          destinationName: transferName,
-          departureAt: departure,
-          arrivalAt: transferArrival,
-          lineName: row['outbound_line_name'] as String?,
-          headsign: row['outbound_headsign'] as String?,
-          stationIds: outboundStationCodes,
-          transferInstruction: transferInstruction,
-          externalTripId: row['outbound_external_trip_id'] as String?,
-          serviceDate: DateTime.tryParse(
-            row['outbound_service_date'] as String? ?? '',
-          ),
-        ),
-        TripLeg(
-          id: '$inboundTripId-rail',
-          mode: TransportMode.commuterRail,
-          originName: transferName,
-          destinationName: destinationName,
-          departureAt: transferDeparture,
-          arrivalAt: arrival,
-          lineName: row['inbound_line_name'] as String?,
-          headsign: row['inbound_headsign'] as String?,
-          stationIds: inboundStationCodes,
-          externalTripId: row['inbound_external_trip_id'] as String?,
-          serviceDate: DateTime.tryParse(
-            row['inbound_service_date'] as String? ?? '',
-          ),
-        ),
-      ],
-      freshness: DataFreshness.estimated,
-      sourceLabel: 'Basis data KRL • jadwal statis, satu kali transit',
-      updatedAt: DateTime.now(),
-      isDemo: isDemo,
+    return transferTripFromRow(
+      row,
+      query: query,
+      originName: originName,
+      destinationName: destinationName,
+      transferName: transferName,
+      outboundStationCodes: outboundStationCodes,
+      inboundStationCodes: inboundStationCodes,
+      transferInstruction: transferInstruction,
     );
   }
 

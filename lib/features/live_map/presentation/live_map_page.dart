@@ -190,10 +190,12 @@ class _MapBodyState extends ConsumerState<_MapBody> {
       (previous, next) => _frameTrip(next),
       fireImmediately: true,
     );
+    // No known network at all (every station on an unmapped line) leaves the
+    // tabs hidden; the value is then only a key and the whole map is shown.
     _network = ValueNotifier<TransitNetwork>(
       _networks.contains(TransitNetwork.jabodetabek)
           ? TransitNetwork.jabodetabek
-          : _networks.first,
+          : (_networks.firstOrNull ?? TransitNetwork.jabodetabek),
     );
   }
 
@@ -218,11 +220,16 @@ class _MapBodyState extends ConsumerState<_MapBody> {
     _stationBounds = LatLngBounds.fromPoints(<LatLng>[
       for (final p in _points) p.point,
     ]);
+    // A station on two networks (Purwakarta) is in both tabs; one on lines
+    // with no known network is in none, see networkOfLineCode.
+    final networksOfPoint = <MapStationPoint, Set<TransitNetwork>>{
+      for (final p in _points) p: networksOfStation(p.station),
+    };
     _pointsByNetwork = <TransitNetwork, List<MapStationPoint>>{
       for (final network in TransitNetwork.values)
         network: <MapStationPoint>[
           for (final p in _points)
-            if (networkOfStation(p.station) == network) p,
+            if (networksOfPoint[p]!.contains(network)) p,
         ],
     }..removeWhere((_, points) => points.isEmpty);
     _networks = <TransitNetwork>[
@@ -240,10 +247,11 @@ class _MapBodyState extends ConsumerState<_MapBody> {
   /// The stations drawn and tappable for [network]; the whole list when the
   /// map has no network split (a single network, or a provider without lines).
   List<MapStationPoint> _pointsOf(TransitNetwork network) =>
-      _pointsByNetwork[network] ?? _points;
+      _networks.length < 2 ? _points : (_pointsByNetwork[network] ?? _points);
 
-  LatLngBounds _boundsOf(TransitNetwork network) =>
-      _boundsByNetwork[network] ?? _stationBounds;
+  LatLngBounds _boundsOf(TransitNetwork network) => _networks.length < 2
+      ? _stationBounds
+      : (_boundsByNetwork[network] ?? _stationBounds);
 
   List<String> _lineIdsOf(TransitNetwork network) {
     if (_networks.length < 2) return _lineIds;
@@ -453,9 +461,14 @@ class _MapBodyState extends ConsumerState<_MapBody> {
     if (picked == null || !mounted) {
       return;
     }
-    // A station from the other network: switch tab first so it is drawn.
-    if (_networks.length >= 2) {
-      _selectNetwork(networkOfStation(picked));
+    // A station from another network: switch tab first so it is drawn. A
+    // station that is also on the current tab's network stays on that tab.
+    final pickedNetworks = networksOfStation(picked);
+    if (_networks.length >= 2 &&
+        pickedNetworks.isNotEmpty &&
+        !pickedNetworks.contains(_network.value)) {
+      final target = networkOfStation(picked);
+      if (target != null) _selectNetwork(target);
     }
     final camera = _mapController.camera;
     _mapController.move(

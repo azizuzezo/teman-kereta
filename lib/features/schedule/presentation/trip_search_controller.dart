@@ -137,18 +137,24 @@ class TripSearchController extends Notifier<TripSearchState> {
     );
   }
 
-  bool _crossesNetworks() {
+  /// Why the current pair cannot be searched because of the rail networks
+  /// (different networks, or a station on a line with no known network), or
+  /// null when it can.
+  String? _networkProblem() {
     final stations = ref.read(stationListProvider).asData?.value;
-    if (stations == null) return false;
+    if (stations == null) return null;
     final origin = stations
         .where((s) => s.id == state.originStationId)
         .firstOrNull;
     final destination = stations
         .where((s) => s.id == state.destinationStationId)
         .firstOrNull;
-    return origin != null &&
-        destination != null &&
-        !sameNetwork(origin, destination);
+    if (origin == null ||
+        destination == null ||
+        sameNetwork(origin, destination)) {
+      return null;
+    }
+    return crossNetworkMessageFor(origin, destination);
   }
 
   /// Picks a specific departure time of day. A time that already passed
@@ -198,8 +204,9 @@ class TripSearchController extends Notifier<TripSearchState> {
       );
       return;
     }
-    if (_crossesNetworks()) {
-      state = state.copyWith(errorMessage: crossNetworkMessage);
+    final networkProblem = _networkProblem();
+    if (networkProblem != null) {
+      state = state.copyWith(errorMessage: networkProblem);
       return;
     }
 
