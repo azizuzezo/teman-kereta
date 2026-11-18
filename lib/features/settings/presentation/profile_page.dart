@@ -6,6 +6,7 @@ import 'package:geolocator/geolocator.dart';
 import 'package:go_router/go_router.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../../../app/config/app_environment.dart';
 import '../../../app/theme/app_theme.dart';
@@ -88,6 +89,29 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
                 label: 'Buka',
                 onPressed: () => unawaited(Geolocator.openAppSettings()),
               ),
+      ),
+    );
+  }
+
+  /// Developer support page (patungan.gifts), opened in the browser.
+  static final Uri _supportUri = Uri.parse('https://patungan.gifts/dev');
+
+  Future<void> _openSupportPage() async {
+    var opened = false;
+    try {
+      opened = await launchUrl(
+        _supportUri,
+        mode: LaunchMode.externalApplication,
+      );
+    } on Object {
+      opened = false;
+    }
+    if (opened || !mounted) return;
+    final messenger = ScaffoldMessenger.of(context);
+    messenger.hideCurrentSnackBar();
+    messenger.showSnackBar(
+      const SnackBar(
+        content: Text('Tidak bisa membuka patungan.gifts/dev. Coba lagi nanti.'),
       ),
     );
   }
@@ -290,6 +314,12 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
                     icon: Icons.flag_outlined,
                     title: 'Laporkan masalah',
                     onTap: () => context.push('/report'),
+                  ),
+                  TkRow(
+                    icon: Icons.volunteer_activism_outlined,
+                    title: 'Dukung pengembang',
+                    subtitle: 'Bantu Teman Kereta tetap gratis di patungan.gifts/dev',
+                    onTap: _openSupportPage,
                   ),
                   TkRow(
                     icon: Icons.privacy_tip_outlined,
