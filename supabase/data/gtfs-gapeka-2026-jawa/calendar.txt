@@ -1,0 +1,3 @@
+service_id,monday,tuesday,wednesday,thursday,friday,saturday,sunday,start_date,end_date
+GJ26_FAKULTATIF,1,1,1,1,1,1,1,20261201,20271231
+GJ26_HARIAN,1,1,1,1,1,1,1,20261201,20271231

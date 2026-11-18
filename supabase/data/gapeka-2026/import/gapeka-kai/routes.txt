@@ -1,0 +1,7 @@
+route_id,agency_id,route_short_name,route_long_name,route_desc,route_type,route_color,route_text_color
+SMO,KAI,Bandara Adi Soemarmo,KA Bandara Adi Soemarmo,Kelas GAPEKA: BANDARA SMO,2,,
+FEEDER,KAI,Feeder,KA Feeder Padalarang - Bandung,Kelas GAPEKA: EKONOMI LOKAL (FEEDER),2,,
+BATARAKRESNA,KAI,Batara Kresna,KA Batara Kresna,Kelas GAPEKA: LOKAL EKONOMI,2,,
+KEDUNGSEPUR,KAI,Kedung Sepur,KA Kedung Sepur,Kelas GAPEKA: LOKAL EKONOMI,2,,
+PANDANWANGI,KAI,Pandanwangi,KA Pandanwangi,Kelas GAPEKA: LOKAL EKONOMI,2,,
+SILIWANGI,KAI,Siliwangi,KA Siliwangi,Kelas GAPEKA: LOKAL EKONOMI,2,,

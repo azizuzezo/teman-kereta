@@ -1,0 +1,2 @@
+feed_publisher_name,feed_publisher_url,feed_lang,feed_start_date,feed_end_date,feed_version
+"Teman Kereta (dari KP DJKA 116/2026, GAPEKA Jawa)",https://djka.kemenhub.go.id/,id,20261201,20271231,gapeka-2026-gapeka-kci

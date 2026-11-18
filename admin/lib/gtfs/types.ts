@@ -19,6 +19,9 @@ export type GtfsRoute = {
   color: string | null;
   textColor: string | null;
   routeType: number | null;
+  /** GTFS `agency_id` (optional column; null when absent/empty). Used by
+   * scripts/import-real-gtfs.mts `--operator-map` to pick the operator. */
+  agencyId?: string | null;
 };
 
 export type GtfsTrip = {
@@ -37,6 +40,9 @@ export type GtfsStopTime = {
   stopSequence: number;
   arrivalSeconds: number;
   departureSeconds: number;
+  /** GTFS `timepoint = 0`: the time is interpolated, not printed in the
+   * source timetable. Missing column, empty, or `1` -> false. */
+  isEstimated: boolean;
 };
 
 export type GtfsCalendar = {

@@ -316,6 +316,7 @@ export async function importGtfsFeed(params: {
     stop_sequence: number;
     scheduled_arrival: string;
     scheduled_departure: string;
+    is_estimated: boolean;
   };
   const stopTimeInserts: StopTimeInsert[] = [];
   for (const [key, stopTimes] of tripKeyToStopTimes.entries()) {
@@ -330,6 +331,7 @@ export async function importGtfsFeed(params: {
         stop_sequence: stopTime.stopSequence,
         scheduled_arrival: secondsToIntervalLiteral(stopTime.arrivalSeconds),
         scheduled_departure: secondsToIntervalLiteral(stopTime.departureSeconds),
+        is_estimated: stopTime.isEstimated,
       });
     }
   }

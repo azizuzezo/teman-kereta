@@ -1,0 +1,73 @@
+{
+  "networks": [
+    {
+      "id": "jabodetabek",
+      "label": "Jabodetabek",
+      "lines": [
+        "BOGOR",
+        "CIKARANG",
+        "RANGKAS",
+        "TANGERANG",
+        "PRIOK",
+        "NAMBO",
+        "BST",
+        "MERAK",
+        "WALAHAR",
+        "JATILUHUR"
+      ]
+    },
+    {
+      "id": "jogja",
+      "label": "Yogyakarta",
+      "lines": [
+        "YKPL",
+        "YIA",
+        "PRAMEKS",
+        "SMO",
+        "BATARAKRESNA"
+      ]
+    },
+    {
+      "id": "bandung",
+      "label": "Bandung Raya",
+      "lines": [
+        "BDR",
+        "GARUT",
+        "FEEDER"
+      ]
+    },
+    {
+      "id": "jatim",
+      "label": "Jawa Timur",
+      "lines": [
+        "DHOHO",
+        "PENATARAN",
+        "JENGGALA",
+        "SUPAS",
+        "ARJONEGORO",
+        "BLORASURA"
+      ]
+    },
+    {
+      "id": "semarang",
+      "label": "Semarang",
+      "lines": [
+        "KEDUNGSEPUR"
+      ]
+    },
+    {
+      "id": "sukabumi",
+      "label": "Sukabumi-Cianjur",
+      "lines": [
+        "SILIWANGI"
+      ]
+    },
+    {
+      "id": "banyuwangi",
+      "label": "Jember-Banyuwangi",
+      "lines": [
+        "PANDANWANGI"
+      ]
+    }
+  ]
+}

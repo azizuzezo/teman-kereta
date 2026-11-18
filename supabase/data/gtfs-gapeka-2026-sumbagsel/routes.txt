@@ -1,0 +1,5 @@
+route_id,agency_id,route_short_name,route_long_name,route_desc,route_type
+GS26_BUKIT_SERELO,KAI,Bukit Serelo,Bukit Serelo (EKONOMI),Kelas GAPEKA: EKONOMI,2
+GS26_EXSPRES_RAJABASA,KAI,Exspres Rajabasa,Exspres Rajabasa (EKONOMI),Kelas GAPEKA: EKONOMI,2
+GS26_KUALA_STABAS,KAI,Kuala Stabas,Kuala Stabas (EKONOMI),Kelas GAPEKA: EKONOMI,2
+GS26_SINDANG_MARGA,KAI,Sindang Marga,Sindang Marga (EKSEKUTIF BISNIS),Kelas GAPEKA: EKSEKUTIF BISNIS,2

@@ -90,6 +90,7 @@ export function parseStationDescription(
 export function parseRoutes(csvText: string): GtfsRoute[] {
   return mapRows(csvText, ["route_id"]).map((row) => ({
     routeId: row.route_id,
+    agencyId: nullIfEmpty(row.agency_id?.trim()),
     shortName: nullIfEmpty(row.route_short_name),
     longName: nullIfEmpty(row.route_long_name),
     color: nullIfEmpty(row.route_color),
@@ -131,6 +132,8 @@ export function parseStopTimes(csvText: string): GtfsStopTime[] {
       stopSequence,
       arrivalSeconds: parseGtfsTimeOfDay(row.arrival_time),
       departureSeconds: parseGtfsTimeOfDay(row.departure_time),
+      // GTFS `timepoint`: 0 = approximate (interpolated), 1/empty/absent = exact.
+      isEstimated: row.timepoint?.trim() === "0",
     };
   });
 }

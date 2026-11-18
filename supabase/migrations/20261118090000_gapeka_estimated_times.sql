@@ -1,0 +1,348 @@
+-- ============================================================================
+-- GAPEKA 2026: jam perkiraan (interpolasi) dan service_id pada RPC jadwal.
+-- Kontrak: supabase/data/gapeka-2026/CONTRACT.md bagian A.
+--
+-- 1. `stop_times.is_estimated`: true = jam di stasiun ini tidak tercetak di
+--    GAPEKA dan diisi dengan interpolasi (GTFS `timepoint = 0`). Baris lama
+--    otomatis false.
+-- 2. Empat RPC jadwal mendapat kolom keluaran baru DI AKHIR. Semua kolom lama
+--    tetap dengan nama, tipe, dan urutan yang sama (lihat catatan 6 September
+--    2026 di 20260902090000_deactivate_karet_and_filter_inactive.sql: jangan
+--    sampai external_trip_id/service_date hilang lagi).
+--
+-- Tipe kembalian berubah, jadi `create or replace` tidak cukup: setiap fungsi
+-- di-DROP lalu dibuat ulang, dan GRANT serta COMMENT dipasang kembali.
+-- Badan fungsi disalin dari definisi terakhir:
+--   - get_station_departures: 20260805090000_transit_query_functions.sql
+--   - search_direct_trips, get_trip_stop_codes, search_one_transfer_trips:
+--     20260902090000_deactivate_karet_and_filter_inactive.sql
+-- Filter (is_active, data_source, horizon, limit) tidak berubah.
+-- ============================================================================
+
+alter table public.stop_times
+  add column if not exists is_estimated boolean not null default false;
+
+comment on column public.stop_times.is_estimated is
+  'true = jam tidak tercetak di GAPEKA, diisi interpolasi (GTFS timepoint = 0).';
+
+-- ----------------------------------------------------------------------------
+-- get_station_departures (+ is_estimated, service_id)
+-- ----------------------------------------------------------------------------
+
+drop function if exists public.get_station_departures(text, timestamptz, integer);
+
+create function public.get_station_departures(
+  p_station_code text,
+  p_from timestamptz,
+  p_limit integer default 20
+)
+returns table (
+  trip_id uuid,
+  external_trip_id text,
+  headsign text,
+  trip_number text,
+  line_name text,
+  line_color text,
+  data_source text,
+  scheduled_departure timestamptz,
+  is_estimated boolean,
+  service_id text
+)
+language sql
+stable
+as $$
+  select
+    t.id as trip_id,
+    t.external_trip_id,
+    t.headsign,
+    t.trip_number,
+    l.name as line_name,
+    l.color as line_color,
+    t.data_source,
+    (t.service_date + st.scheduled_departure) at time zone s.timezone as scheduled_departure,
+    st.is_estimated,
+    t.service_id
+  from public.stop_times st
+  join public.stations s on s.id = st.station_id
+  join public.trips t on t.id = st.trip_id
+  join public.lines l on l.id = t.line_id
+  where s.code = p_station_code
+    and s.is_active
+    and t.data_source is not null
+    and (t.service_date + st.scheduled_departure) at time zone s.timezone >= p_from
+  order by scheduled_departure asc
+  limit greatest(1, least(p_limit, 100));
+$$;
+
+comment on function public.get_station_departures is
+  'Upcoming departures from a station (by its short code), with the GTFS-style interval + service_date pair already resolved to a real timestamptz. is_estimated = the time is interpolated (not printed in GAPEKA); service_id e.g. GJ26_FAKULTATIF.';
+
+grant execute on function public.get_station_departures(text, timestamptz, integer) to anon, authenticated;
+
+-- ----------------------------------------------------------------------------
+-- search_direct_trips (+ origin_is_estimated, destination_is_estimated, service_id)
+-- ----------------------------------------------------------------------------
+
+drop function if exists public.search_direct_trips(text, text, timestamptz, integer);
+
+create function public.search_direct_trips(
+  p_origin_code text,
+  p_destination_code text,
+  p_from timestamptz,
+  p_limit integer default 5
+)
+returns table (
+  trip_id uuid,
+  external_trip_id text,
+  service_date date,
+  line_name text,
+  line_color text,
+  headsign text,
+  trip_number text,
+  data_source text,
+  origin_sequence integer,
+  destination_sequence integer,
+  origin_departure timestamptz,
+  destination_arrival timestamptz,
+  origin_is_estimated boolean,
+  destination_is_estimated boolean,
+  service_id text
+)
+language sql
+stable
+as $$
+  select
+    t.id as trip_id,
+    t.external_trip_id,
+    t.service_date,
+    l.name as line_name,
+    l.color as line_color,
+    t.headsign,
+    t.trip_number,
+    t.data_source,
+    o.stop_sequence as origin_sequence,
+    d.stop_sequence as destination_sequence,
+    (t.service_date + o.scheduled_departure) at time zone os.timezone as origin_departure,
+    (t.service_date + d.scheduled_arrival) at time zone ds.timezone as destination_arrival,
+    o.is_estimated as origin_is_estimated,
+    d.is_estimated as destination_is_estimated,
+    t.service_id
+  from public.trips t
+  join public.lines l on l.id = t.line_id
+  join public.stop_times o on o.trip_id = t.id
+  join public.stations os on os.id = o.station_id and os.code = p_origin_code and os.is_active
+  join public.stop_times d on d.trip_id = t.id
+  join public.stations ds on ds.id = d.station_id and ds.code = p_destination_code and ds.is_active
+  where o.stop_sequence < d.stop_sequence
+    and (t.service_date + o.scheduled_departure) at time zone os.timezone >= p_from
+    and not exists (
+      select 1
+      from public.stop_times mid
+      join public.stations ms on ms.id = mid.station_id
+      where mid.trip_id = t.id
+        and mid.stop_sequence between o.stop_sequence and d.stop_sequence
+        and not ms.is_active
+    )
+  order by origin_departure asc
+  limit greatest(1, least(p_limit, 20));
+$$;
+
+comment on function public.search_direct_trips is
+  'Direct (no-transfer) trip candidates between two stations on the same trip_id. Returns nothing if the pair only connects via a transfer, or if every candidate trip would pass through a closed (is_active = false) station along the way. *_is_estimated = interpolated time (not printed in GAPEKA).';
+
+grant execute on function public.search_direct_trips(text, text, timestamptz, integer) to anon, authenticated;
+
+-- ----------------------------------------------------------------------------
+-- get_trip_stop_codes (+ scheduled_arrival, scheduled_departure, is_estimated)
+-- ----------------------------------------------------------------------------
+
+drop function if exists public.get_trip_stop_codes(uuid, integer, integer);
+
+create function public.get_trip_stop_codes(
+  p_trip_id uuid,
+  p_from_sequence integer,
+  p_to_sequence integer
+)
+returns table (
+  station_code text,
+  stop_sequence integer,
+  scheduled_arrival interval,
+  scheduled_departure interval,
+  is_estimated boolean
+)
+language sql
+stable
+as $$
+  select s.code, st.stop_sequence, st.scheduled_arrival, st.scheduled_departure, st.is_estimated
+  from public.stop_times st
+  join public.stations s on s.id = st.station_id
+  where st.trip_id = p_trip_id
+    and st.stop_sequence between p_from_sequence and p_to_sequence
+    and s.is_active
+  order by st.stop_sequence asc;
+$$;
+
+comment on function public.get_trip_stop_codes is
+  'Ordered station codes for a slice of one trip — used to build a TripLeg.stationIds list for a matched direct trip. Closed stations (is_active = false) are skipped rather than listed as a stop. scheduled_arrival/scheduled_departure are the raw GTFS intervals relative to trips.service_date; is_estimated = interpolated time.';
+
+grant execute on function public.get_trip_stop_codes(uuid, integer, integer) to anon, authenticated;
+
+-- ----------------------------------------------------------------------------
+-- search_one_transfer_trips (+ four *_is_estimated, first/second_service_id)
+-- ----------------------------------------------------------------------------
+
+drop function if exists public.search_one_transfer_trips(text, text, timestamptz, integer, integer, integer);
+
+create function public.search_one_transfer_trips(
+  p_origin_code text,
+  p_destination_code text,
+  p_from timestamptz,
+  p_horizon_hours integer default 3,
+  p_transfer_buffer_seconds integer default 180,
+  p_limit integer default 5
+)
+returns table (
+  outbound_trip_id uuid,
+  outbound_external_trip_id text,
+  outbound_service_date date,
+  outbound_line_name text,
+  outbound_line_color text,
+  outbound_headsign text,
+  outbound_trip_number text,
+  outbound_data_source text,
+  outbound_origin_sequence integer,
+  outbound_transfer_sequence integer,
+  outbound_origin_departure timestamptz,
+  outbound_transfer_arrival timestamptz,
+  transfer_station_code text,
+  inbound_trip_id uuid,
+  inbound_external_trip_id text,
+  inbound_service_date date,
+  inbound_line_name text,
+  inbound_line_color text,
+  inbound_headsign text,
+  inbound_trip_number text,
+  inbound_data_source text,
+  inbound_transfer_sequence integer,
+  inbound_destination_sequence integer,
+  inbound_transfer_departure timestamptz,
+  inbound_destination_arrival timestamptz,
+  origin_is_estimated boolean,
+  transfer_arrival_is_estimated boolean,
+  transfer_departure_is_estimated boolean,
+  destination_is_estimated boolean,
+  first_service_id text,
+  second_service_id text
+)
+language sql
+stable
+as $$
+  with outbound as (
+    select
+      t.id as trip_id,
+      t.external_trip_id,
+      t.service_date,
+      l.name as line_name,
+      l.color as line_color,
+      t.headsign,
+      t.trip_number,
+      t.data_source,
+      t.service_id,
+      o.stop_sequence as origin_sequence,
+      tr.stop_sequence as transfer_sequence,
+      tr.station_id as transfer_station_id,
+      ts.code as transfer_station_code,
+      (t.service_date + o.scheduled_departure) at time zone os.timezone as origin_departure,
+      (t.service_date + tr.scheduled_arrival) at time zone ts.timezone as transfer_arrival,
+      o.is_estimated as origin_is_estimated,
+      tr.is_estimated as transfer_arrival_is_estimated
+    from public.trips t
+    join public.lines l on l.id = t.line_id
+    join public.stop_times o on o.trip_id = t.id
+    join public.stations os on os.id = o.station_id and os.code = p_origin_code and os.is_active
+    join public.stop_times tr
+      on tr.trip_id = t.id and tr.stop_sequence > o.stop_sequence
+    join public.stations ts
+      on ts.id = tr.station_id
+      and ts.code <> p_origin_code
+      and ts.code <> p_destination_code
+      and ts.is_active
+    where (t.service_date + o.scheduled_departure) at time zone os.timezone >= p_from
+      and (t.service_date + o.scheduled_departure) at time zone os.timezone
+        < p_from + make_interval(hours => p_horizon_hours)
+  ),
+  inbound as (
+    select
+      t.id as trip_id,
+      t.external_trip_id,
+      t.service_date,
+      l.name as line_name,
+      l.color as line_color,
+      t.headsign,
+      t.trip_number,
+      t.data_source,
+      t.service_id,
+      tr.stop_sequence as transfer_sequence,
+      d.stop_sequence as destination_sequence,
+      tr.station_id as transfer_station_id,
+      (t.service_date + tr.scheduled_departure) at time zone ts.timezone as transfer_departure,
+      (t.service_date + d.scheduled_arrival) at time zone ds.timezone as destination_arrival,
+      tr.is_estimated as transfer_departure_is_estimated,
+      d.is_estimated as destination_is_estimated
+    from public.trips t
+    join public.lines l on l.id = t.line_id
+    join public.stop_times d on d.trip_id = t.id
+    join public.stations ds on ds.id = d.station_id and ds.code = p_destination_code and ds.is_active
+    join public.stop_times tr
+      on tr.trip_id = t.id and tr.stop_sequence < d.stop_sequence
+    join public.stations ts on ts.id = tr.station_id and ts.is_active
+    where (t.service_date + d.scheduled_arrival) at time zone ds.timezone >= p_from
+      and (t.service_date + d.scheduled_arrival) at time zone ds.timezone
+        < p_from + make_interval(hours => p_horizon_hours) + interval '2 hours'
+  )
+  select
+    ob.trip_id,
+    ob.external_trip_id,
+    ob.service_date,
+    ob.line_name,
+    ob.line_color,
+    ob.headsign,
+    ob.trip_number,
+    ob.data_source,
+    ob.origin_sequence,
+    ob.transfer_sequence,
+    ob.origin_departure,
+    ob.transfer_arrival,
+    ob.transfer_station_code,
+    ib.trip_id,
+    ib.external_trip_id,
+    ib.service_date,
+    ib.line_name,
+    ib.line_color,
+    ib.headsign,
+    ib.trip_number,
+    ib.data_source,
+    ib.transfer_sequence,
+    ib.destination_sequence,
+    ib.transfer_departure,
+    ib.destination_arrival,
+    ob.origin_is_estimated,
+    ob.transfer_arrival_is_estimated,
+    ib.transfer_departure_is_estimated,
+    ib.destination_is_estimated,
+    ob.service_id,
+    ib.service_id
+  from outbound ob
+  join inbound ib
+    on ib.transfer_station_id = ob.transfer_station_id
+    and ib.trip_id <> ob.trip_id
+    and ib.transfer_departure >= ob.transfer_arrival + make_interval(secs => p_transfer_buffer_seconds)
+  order by ob.origin_departure asc, (ib.destination_arrival - ob.origin_departure) asc
+  limit greatest(1, least(p_limit, 20));
+$$;
+
+comment on function public.search_one_transfer_trips is
+  'Trip candidates between two stations requiring exactly one line change, found by joining a direct-from-origin leg to a direct-to-destination leg at a shared transfer station, respecting p_transfer_buffer_seconds as the minimum dwell. Closed stations (is_active = false) are never used as origin, destination, transfer point, or intermediate stop. Not a general router - see the file header comment on search_direct_trips. *_is_estimated = interpolated time; first/second_service_id = trips.service_id of each leg.';
+
+grant execute on function public.search_one_transfer_trips(text, text, timestamptz, integer, integer, integer)
+  to anon, authenticated;

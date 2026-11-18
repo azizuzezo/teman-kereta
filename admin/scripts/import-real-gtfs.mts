@@ -12,7 +12,11 @@
 // outside Next.js's own bundler substitution) via the same underlying
 // parser/calendar helpers, which have no such guard.
 //
-// Usage: npx tsx scripts/import-real-gtfs.mts <path-to-gtfs.zip> <operator-id> <window-days>
+// Usage:
+//   npx tsx scripts/import-real-gtfs.mts <path-to-gtfs.zip> <operator-id> [window-days=7] [--respect-calendar]
+//   npx tsx scripts/import-real-gtfs.mts <path-to-gtfs.zip> [window-days=7] --operator-map KAI=<uuid>,KCI=<uuid> [--respect-calendar]
+// With --operator-map each route goes to the operator mapped from its routes.txt `agency_id` (a feed mixing KAI
+// intercity and KCI commuter routes); without it every route goes to the single positional <operator-id>.
 import { readFileSync } from "node:fs";
 import JSZip from "jszip";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
@@ -94,22 +98,82 @@ async function upsertInChunks(
   }
 }
 
-async function main() {
-  const [zipPath, operatorId, windowDaysArg] = process.argv.slice(2);
-  if (!zipPath || !operatorId) {
-    console.error(
-      "Usage: npx tsx scripts/import-real-gtfs.mts <path-to-gtfs.zip> <operator-id> [window-days=7]",
-    );
-    process.exit(1);
+const USAGE = [
+  "Usage: npx tsx scripts/import-real-gtfs.mts <path-to-gtfs.zip> <operator-id> [window-days=7] [--respect-calendar]",
+  "   or: npx tsx scripts/import-real-gtfs.mts <path-to-gtfs.zip> [window-days=7] --operator-map KAI=<uuid>,KCI=<uuid> [--respect-calendar]",
+].join("\n");
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+function usageError(message?: string): never {
+  if (message) console.error(`Error: ${message}`);
+  console.error(USAGE);
+  process.exit(1);
+}
+
+/** `KAI=<uuid>,KCI=<uuid>` -> Map(agency_id -> operator uuid). */
+function parseOperatorMap(value: string): Map<string, string> {
+  const map = new Map<string, string>();
+  for (const pair of value.split(",").map((p) => p.trim()).filter(Boolean)) {
+    const eq = pair.indexOf("=");
+    const agency = eq === -1 ? "" : pair.slice(0, eq).trim();
+    const operator = eq === -1 ? "" : pair.slice(eq + 1).trim();
+    if (!agency || !operator) usageError(`--operator-map entry "${pair}" must look like AGENCY=<operator-uuid>.`);
+    if (!UUID.test(operator)) usageError(`--operator-map: "${operator}" (agency ${agency}) is not a UUID.`);
+    if (map.has(agency)) usageError(`--operator-map: agency ${agency} is mapped twice.`);
+    map.set(agency, operator);
   }
+  if (map.size === 0) usageError("--operator-map is empty.");
+  return map;
+}
+
+async function main() {
+  const rawArgs = process.argv.slice(2);
+  // --respect-calendar: honour calendar.txt start/end dates (needed for a feed that starts on a future date, e.g.
+  // GAPEKA 2026 from 2026-12-01). Without it the script keeps its original open-ended behaviour (see below).
+  let respectCalendar = false;
+  let operatorMapArg: string | null = null;
+  const positional: string[] = [];
+  for (let i = 0; i < rawArgs.length; i += 1) {
+    const arg = rawArgs[i];
+    if (arg === "--respect-calendar") {
+      respectCalendar = true;
+    } else if (arg === "--operator-map") {
+      const next = rawArgs[i + 1];
+      if (next === undefined || next.startsWith("--")) usageError("--operator-map needs a value.");
+      operatorMapArg = next;
+      i += 1;
+    } else if (arg.startsWith("--operator-map=")) {
+      operatorMapArg = arg.slice("--operator-map=".length);
+    } else if (arg.startsWith("--")) {
+      console.warn(`Ignoring unknown option ${arg}.`); // previous behaviour: unknown --flags were ignored
+    } else {
+      positional.push(arg);
+    }
+  }
+  const operatorMap = operatorMapArg !== null ? parseOperatorMap(operatorMapArg) : null;
+
+  let zipPath: string | undefined;
+  let operatorId: string | null = null;
+  let windowDaysArg: string | undefined;
+  if (operatorMap) {
+    if (positional.length > 2 || (positional[1] !== undefined && !/^\d+$/.test(positional[1]))) {
+      usageError("With --operator-map do not pass a positional <operator-id>; use <path-to-gtfs.zip> [window-days].");
+    }
+    [zipPath, windowDaysArg] = positional;
+  } else {
+    [zipPath, operatorId = null, windowDaysArg] = positional;
+    if (!operatorId) usageError();
+  }
+  if (!zipPath) usageError();
   const windowDays = Number.parseInt(windowDaysArg ?? "", 10) || 7;
 
-  const env = loadEnvLocal();
-  const supabase = createClient(env.NEXT_PUBLIC_SUPABASE_URL, env.SUPABASE_SERVICE_ROLE_KEY, {
-    auth: { autoRefreshToken: false, persistSession: false },
-  });
-
-  console.log(`Importing ${zipPath} for operator ${operatorId}, window ${windowDays} days...`);
+  console.log(
+    `Importing ${zipPath} for ${
+      operatorMap
+        ? `operators ${[...operatorMap].map(([agency, id]) => `${agency}=${id}`).join(", ")}`
+        : `operator ${operatorId}`
+    }, window ${windowDays} days...`,
+  );
   const zipBytes = readFileSync(zipPath);
   const files = await extractGtfsFiles(zipBytes.buffer.slice(zipBytes.byteOffset, zipBytes.byteOffset + zipBytes.byteLength));
 
@@ -125,8 +189,45 @@ async function main() {
     calendarDates: files["calendar_dates.txt"] ? parseCalendarDates(files["calendar_dates.txt"]) : [],
   };
   console.log(
-    `Parsed: ${feed.stops.length} stops, ${feed.routes.length} routes, ${feed.trips.length} trips, ${feed.stopTimes.length} stop_times`,
+    `Parsed: ${feed.stops.length} stops, ${feed.routes.length} routes, ${feed.trips.length} trips, ${
+      feed.stopTimes.length
+    } stop_times (${feed.stopTimes.filter((st) => st.isEstimated).length} estimated)`,
   );
+
+  // Resolve every route's operator before touching the database, so a
+  // missing --operator-map entry fails without writing anything.
+  const operatorIdByRouteId = new Map<string, string>();
+  const unmapped = new Set<string>();
+  for (const route of feed.routes) {
+    if (!operatorMap) {
+      operatorIdByRouteId.set(route.routeId, operatorId as string);
+      continue;
+    }
+    const agency = route.agencyId ?? null;
+    const mapped = agency !== null ? operatorMap.get(agency) : undefined;
+    if (!mapped) {
+      unmapped.add(agency === null ? `(route ${route.routeId} has no agency_id)` : agency);
+      continue;
+    }
+    operatorIdByRouteId.set(route.routeId, mapped);
+  }
+  if (unmapped.size > 0) {
+    throw new Error(
+      `--operator-map has no operator for agency_id: ${[...unmapped].join(", ")}. ` +
+        `Mapped: ${[...(operatorMap?.keys() ?? [])].join(", ")}.`,
+    );
+  }
+  const routeOperator = (routeId: string): string => {
+    const id = operatorIdByRouteId.get(routeId);
+    if (!id) throw new Error(`Route ${routeId} is not in routes.txt.`);
+    return id;
+  };
+  const lineKey = (operator: string, code: string) => `${operator}::${code}`;
+
+  const env = loadEnvLocal();
+  const supabase = createClient(env.NEXT_PUBLIC_SUPABASE_URL, env.SUPABASE_SERVICE_ROLE_KEY, {
+    auth: { autoRefreshToken: false, persistSession: false },
+  });
 
   // This feed's calendar.txt is bounded to 2025-02-01..2025-12-31 — a real
   // KRL timetable doesn't stop existing at year end, so at the user's
@@ -136,12 +237,15 @@ async function main() {
   // calendar_dates.txt exceptions still apply normally) — the general
   // ServiceCalendar semantics in calendar.ts are untouched for feeds whose
   // start/end dates are meant to matter.
-  const openEndedCalendar = feed.calendar.map((entry) => ({
-    ...entry,
-    startDate: "2000-01-01",
-    endDate: "2099-12-31",
-  }));
+  const openEndedCalendar = respectCalendar
+    ? feed.calendar
+    : feed.calendar.map((entry) => ({
+        ...entry,
+        startDate: "2000-01-01",
+        endDate: "2099-12-31",
+      }));
   const calendar = new ServiceCalendar(openEndedCalendar, feed.calendarDates);
+  console.log(respectCalendar ? "Calendar: start/end dates respected" : "Calendar: open-ended (start/end dates ignored)");
   const startDateIso = new Date().toISOString().slice(0, 10);
   const days = dateWindow(startDateIso, windowDays);
 
@@ -184,7 +288,7 @@ async function main() {
     supabase,
     "lines",
     feed.routes.map((route) => ({
-      operator_id: operatorId,
+      operator_id: routeOperator(route.routeId),
       code: canonicalRouteCode(route.routeId),
       name: route.longName ?? route.shortName ?? route.routeId,
       transport_mode: routeTypeToTransportMode(route.routeType),
@@ -193,13 +297,24 @@ async function main() {
     })),
     "operator_id,code",
   );
-  const { data: lineRows, error: lineError } = await supabase
-    .from("lines")
-    .select("id, code")
-    .eq("operator_id", operatorId)
-    .in("code", feed.routes.map((r) => canonicalRouteCode(r.routeId)));
-  if (lineError) throw new Error(`Gagal membaca jalur: ${lineError.message}`);
-  const lineIdByCode = new Map(lineRows.map((r) => [r.code, r.id as string]));
+  // lines are unique on (operator_id, code): look them up per operator.
+  const lineIdByKey = new Map<string, string>();
+  for (const operator of new Set(operatorIdByRouteId.values())) {
+    const codes = feed.routes
+      .filter((r) => routeOperator(r.routeId) === operator)
+      .map((r) => canonicalRouteCode(r.routeId));
+    const { data: lineRows, error: lineError } = await supabase
+      .from("lines")
+      .select("id, code")
+      .eq("operator_id", operator)
+      .in("code", codes);
+    if (lineError) throw new Error(`Gagal membaca jalur: ${lineError.message}`);
+    for (const r of lineRows) lineIdByKey.set(lineKey(operator, r.code), r.id as string);
+  }
+  const lineIdForRoute = (routeId: string): string | undefined => {
+    const operator = operatorIdByRouteId.get(routeId);
+    return operator ? lineIdByKey.get(lineKey(operator, canonicalRouteCode(routeId))) : undefined;
+  };
 
   const stopTimesByTripId = new Map<string, typeof feed.stopTimes>();
   for (const stopTime of feed.stopTimes) {
@@ -226,7 +341,7 @@ async function main() {
   }
   const stationLineRows: { station_id: string; line_id: string; stop_order: number }[] = [];
   for (const [routeId, trip] of canonicalTripByRoute) {
-    const lineId = lineIdByCode.get(canonicalRouteCode(routeId));
+    const lineId = lineIdForRoute(routeId);
     if (!lineId) continue;
     const orderedStopTimes = [...(stopTimesByTripId.get(trip.tripId) ?? [])].sort(
       (a, b) => a.stopSequence - b.stopSequence,
@@ -253,7 +368,7 @@ async function main() {
   const tripKeyToStopTimes = new Map<string, typeof feed.stopTimes>();
 
   for (const trip of feed.trips) {
-    const lineId = lineIdByCode.get(canonicalRouteCode(trip.routeId));
+    const lineId = lineIdForRoute(trip.routeId);
     if (!lineId) continue;
     for (const day of days) {
       if (!calendar.runsOn(trip.serviceId, day)) continue;
@@ -289,6 +404,7 @@ async function main() {
     stop_sequence: number;
     scheduled_arrival: string;
     scheduled_departure: string;
+    is_estimated: boolean;
   };
   const stopTimeInserts: StopTimeInsert[] = [];
   for (const [key, stopTimes] of tripKeyToStopTimes.entries()) {
@@ -303,6 +419,7 @@ async function main() {
         stop_sequence: stopTime.stopSequence,
         scheduled_arrival: secondsToIntervalLiteral(stopTime.arrivalSeconds),
         scheduled_departure: secondsToIntervalLiteral(stopTime.departureSeconds),
+        is_estimated: stopTime.isEstimated,
       });
     }
   }

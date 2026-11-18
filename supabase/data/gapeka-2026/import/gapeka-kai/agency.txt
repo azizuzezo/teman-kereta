@@ -1,0 +1,2 @@
+agency_id,agency_name,agency_url,agency_timezone,agency_lang
+KAI,PT Kereta Api Indonesia (Persero),https://www.kai.id/,Asia/Jakarta,id
