@@ -5,15 +5,19 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../../app/theme/app_theme.dart';
+import '../../../../core/widgets/data_badges.dart';
 import '../../../../core/widgets/tk_components.dart';
+import '../../../../data/providers/provider_registry.dart';
 import '../../../active_trip/presentation/active_trip_controller.dart';
 import '../../data/intercity_repository.dart';
 import '../../domain/intercity_models.dart';
 import '../../domain/intercity_trip.dart';
 
 /// "Mulai perjalanan" for an intercity ride: where from, where to, then which
-/// train. Every train is its own entry, so the rider picks the one they are
-/// actually on.
+/// train. From the GAPEKA 2026 start date the rider picks today's departure
+/// (KA number and timetable times); "Pakai perkiraan (tanpa jadwal)" keeps the
+/// old way, a train by name with estimated times. Before that date, or when no
+/// run links the two stations, only the old way is offered.
 class IntercityTripCard extends ConsumerStatefulWidget {
   const IntercityTripCard({super.key});
 
@@ -25,6 +29,12 @@ class _IntercityTripCardState extends ConsumerState<IntercityTripCard> {
   String? _originCode;
   String? _destinationCode;
   String? _serviceId;
+
+  /// [IntercityDeparture.key] of the chosen timetabled departure.
+  String? _departureKey;
+
+  /// The rider chose "Pakai perkiraan (tanpa jadwal)" over the timetable.
+  bool _useEstimate = false;
   bool _starting = false;
   final TextEditingController _customName = TextEditingController();
 
@@ -79,9 +89,15 @@ class _IntercityTripCardState extends ConsumerState<IntercityTripCard> {
       } else {
         _destinationCode = picked;
       }
-      _serviceId = null;
+      _resetChoice();
       _autoSelectSingleTrain(catalog);
     });
+  }
+
+  void _resetChoice() {
+    _serviceId = null;
+    _departureKey = null;
+    _useEstimate = false;
   }
 
   void _autoSelectSingleTrain(IntercityCatalog catalog) {
@@ -101,15 +117,33 @@ class _IntercityTripCardState extends ConsumerState<IntercityTripCard> {
       final o = _originCode;
       _originCode = _destinationCode;
       _destinationCode = o;
-      _serviceId = null;
+      _resetChoice();
       _autoSelectSingleTrain(catalog);
     });
   }
 
-  Future<void> _start(IntercityCatalog catalog) async {
-    if (_serviceId == null || _originCode == null || _destinationCode == null) {
+  Future<void> _start(
+    IntercityCatalog catalog,
+    IntercityDeparture? departure,
+  ) async {
+    if (_originCode == null || _destinationCode == null) return;
+    if (departure != null) {
+      final router = GoRouter.of(context);
+      setState(() => _starting = true);
+      final trip = buildIntercityTrip(
+        service: departure.service,
+        catalog: catalog,
+        boarding: _originCode!,
+        destination: _destinationCode!,
+        now: ref.read(clockProvider).now(),
+        departure: departure,
+      );
+      await ref.read(activeTripControllerProvider.notifier).start(trip);
+      if (mounted) setState(() => _starting = false);
+      unawaited(router.push('/active-trip'));
       return;
     }
+    if (_serviceId == null) return;
     final typedName = _customName.text.trim();
     final service = _isCustom
         ? catalog.serviceForCustomRide(_originCode!, _destinationCode!)
@@ -122,7 +156,7 @@ class _IntercityTripCardState extends ConsumerState<IntercityTripCard> {
       catalog: catalog,
       boarding: _originCode!,
       destination: _destinationCode!,
-      now: DateTime.now(),
+      now: ref.read(clockProvider).now(),
       customName: _isCustom ? typedName : null,
     );
     await ref.read(activeTripControllerProvider.notifier).start(trip);
@@ -141,13 +175,16 @@ class _IntercityTripCardState extends ConsumerState<IntercityTripCard> {
           style: Theme.of(context).textTheme.bodyMedium,
         ),
       ),
-      data: _buildCard,
+      data: (all) => _buildCard(all, ref.watch(clockProvider).now()),
     );
   }
 
-  Widget _buildCard(IntercityCatalog catalog) {
+  Widget _buildCard(IntercityCatalog all, DateTime now) {
     final tk = context.tk;
     final textTheme = Theme.of(context).textTheme;
+    // The trains offered today: v1 estimates before the GAPEKA start date,
+    // the GAPEKA trains from then on.
+    final catalog = all.onDate(timetableDate(now));
     final origin = _originCode == null ? null : catalog.stations[_originCode];
     final destination = _destinationCode == null
         ? null
@@ -155,10 +192,20 @@ class _IntercityTripCardState extends ConsumerState<IntercityTripCard> {
     final trains = origin != null && destination != null
         ? catalog.servicesBetween(origin.code, destination.code)
         : const <IntercityService>[];
+    final departures = origin != null && destination != null
+        ? all.departuresBetween(origin.code, destination.code, now: now)
+        : const <IntercityDeparture>[];
+    final hasTimetable = departures.isNotEmpty;
+    final departure = hasTimetable && !_useEstimate
+        ? departures.where((d) => d.key == _departureKey).firstOrNull
+        : null;
+    final showTrains = !hasTimetable || _useEstimate;
     final ready =
-        _serviceId != null &&
         !_starting &&
-        (!_isCustom || _customName.text.trim().isNotEmpty);
+        (departure != null ||
+            (showTrains &&
+                _serviceId != null &&
+                (!_isCustom || _customName.text.trim().isNotEmpty)));
 
     return TkCard(
       padding: const EdgeInsets.all(14),
@@ -198,7 +245,40 @@ class _IntercityTripCardState extends ConsumerState<IntercityTripCard> {
               ),
             ],
           ),
-          if (origin != null && destination != null) ...<Widget>[
+          if (origin != null && destination != null && hasTimetable) ...<Widget>[
+            const SizedBox(height: 14),
+            Text('Pilih keberangkatan hari ini', style: textTheme.titleSmall),
+            const SizedBox(height: 6),
+            for (final d in departures)
+              _DepartureTile(
+                departure: d,
+                now: now,
+                selected: !_useEstimate && _departureKey == d.key,
+                onTap: _starting
+                    ? null
+                    : () => setState(() {
+                        _departureKey = d.key;
+                        _useEstimate = false;
+                      }),
+              ),
+            TimetableNotes(
+              showEstimated: departures.any(
+                (d) => d.departureEstimated || d.arrivalEstimated,
+              ),
+              showFakultatif: departures.any((d) => d.run.fakultatif),
+              padding: const EdgeInsets.only(bottom: 8),
+            ),
+            _EstimateChoiceTile(
+              selected: _useEstimate,
+              onTap: _starting
+                  ? null
+                  : () => setState(() {
+                      _useEstimate = true;
+                      _departureKey = null;
+                    }),
+            ),
+          ],
+          if (origin != null && destination != null && showTrains) ...<Widget>[
             const SizedBox(height: 14),
             Text('Pilih kereta', style: textTheme.titleSmall),
             const SizedBox(height: 6),
@@ -229,7 +309,7 @@ class _IntercityTripCardState extends ConsumerState<IntercityTripCard> {
           SizedBox(
             width: double.infinity,
             child: FilledButton.icon(
-              onPressed: ready ? () => _start(catalog) : null,
+              onPressed: ready ? () => _start(catalog, departure) : null,
               icon: _starting
                   ? const SizedBox.square(
                       dimension: 18,
@@ -247,9 +327,15 @@ class _IntercityTripCardState extends ConsumerState<IntercityTripCard> {
               const SizedBox(width: 6),
               Expanded(
                 child: Text(
-                  'Kamu diingatkan saat sisa 30, 15 dan 10 km menuju tujuan, '
-                  'dihitung sepanjang rel. Jadwal resmi tidak tersedia, jadi jam '
-                  'tiba hanya estimasi.',
+                  hasTimetable
+                      ? 'Kamu diingatkan saat sisa 30, 15 dan 10 km menuju '
+                            'tujuan, dihitung sepanjang rel. Jam keberangkatan '
+                            'dari GAPEKA 2026 (jadwal dasar); jadwal KAI di hari '
+                            'itu bisa berbeda. Pilihan perkiraan hanya memberi '
+                            'estimasi.'
+                      : 'Kamu diingatkan saat sisa 30, 15 dan 10 km menuju '
+                            'tujuan, dihitung sepanjang rel. Jadwal resmi tidak '
+                            'tersedia, jadi jam tiba hanya estimasi.',
                   style: textTheme.bodySmall?.copyWith(color: tk.textMuted),
                 ),
               ),
@@ -260,16 +346,204 @@ class _IntercityTripCardState extends ConsumerState<IntercityTripCard> {
     );
   }
 
-  /// A heads-up when Wikipedia's note says the train does not stop here on
-  /// every run, so the rider checks before relying on it.
+  /// A heads-up when the stop's note says the train does not stop here on
+  /// every run (Wikipedia's note, or not every GAPEKA run), so the rider
+  /// checks before relying on it.
   String? _noteFor(IntercityService service) {
     final notes = <String>[
       for (final code in <String?>[_originCode, _destinationCode])
         if (code != null && service.stopAt(code)?.qualifier != null)
           '${service.stopAt(code)!.qualifier}',
     ];
-    if (!service.verified) notes.add('rute belum terverifikasi penuh');
+    if (service.approximateTrack) {
+      notes.add('jalur rel perkiraan (garis lurus antarstasiun)');
+    } else if (!service.verified) {
+      notes.add('rute belum terverifikasi penuh');
+    }
     return notes.isEmpty ? null : 'Catatan: ${notes.join('; ')}';
+  }
+}
+
+/// `08:05` for a timetable time in minutes after the service day's midnight
+/// (25:10 reads 01:10). Shown as GAPEKA prints it, in WIB, like the ticket,
+/// whatever time zone the phone is set to.
+String _clock(int minutes) {
+  final m = minutes % 1440;
+  return '${(m ~/ 60).toString().padLeft(2, '0')}:'
+      '${(m % 60).toString().padLeft(2, '0')}';
+}
+
+/// One timetabled departure: KA number, train, times at both stations.
+class _DepartureTile extends StatelessWidget {
+  const _DepartureTile({
+    required this.departure,
+    required this.now,
+    required this.selected,
+    required this.onTap,
+  });
+
+  final IntercityDeparture departure;
+  final DateTime now;
+  final bool selected;
+  final VoidCallback? onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final tk = context.tk;
+    final textTheme = Theme.of(context).textTheme;
+    final d = departure;
+    final depart = approxTime(
+      _clock(d.boarding.departure),
+      estimated: d.departureEstimated,
+    );
+    final arrive = approxTime(
+      _clock(d.alighting.arrival),
+      estimated: d.arrivalEstimated,
+    );
+    final leftYesterday = timetableDate(
+      d.departureAt,
+    ).isBefore(timetableDate(now));
+    final arriveDays = d.alighting.arrival ~/ 1440 - d.boarding.departure ~/ 1440;
+    final minutes = d.alighting.arrival - d.boarding.departure;
+    final duration = minutes < 60
+        ? '$minutes menit'
+        : '${minutes ~/ 60} j ${(minutes % 60).toString().padLeft(2, '0')} m';
+    final times =
+        '${leftYesterday ? 'kemarin ' : ''}$depart → $arrive'
+        '${arriveDays > 0 ? ' (+$arriveDays hari)' : ''}  ·  $duration';
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 8),
+      child: Semantics(
+        button: true,
+        selected: selected,
+        label:
+            'KA ${d.run.ka} ${d.service.name}, berangkat $depart, tiba $arrive'
+            '${d.run.fakultatif ? ', $fakultatifNote' : ''}',
+        excludeSemantics: true,
+        child: Material(
+          color: selected ? tk.primarySoft : tk.surfaceAlt,
+          borderRadius: BorderRadius.circular(TkRadius.control),
+          clipBehavior: Clip.antiAlias,
+          child: InkWell(
+            onTap: onTap,
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+              child: Row(
+                children: <Widget>[
+                  Icon(
+                    selected
+                        ? Icons.radio_button_checked_rounded
+                        : Icons.radio_button_unchecked_rounded,
+                    size: 20,
+                    color: selected ? tk.primary : tk.textMuted,
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: <Widget>[
+                        Wrap(
+                          spacing: 6,
+                          runSpacing: 4,
+                          crossAxisAlignment: WrapCrossAlignment.center,
+                          children: <Widget>[
+                            Text(
+                              'KA ${d.run.ka} ${d.service.name}',
+                              style: textTheme.titleSmall,
+                            ),
+                            if (d.run.fakultatif) const FakultatifBadge(),
+                          ],
+                        ),
+                        Text(
+                          times,
+                          style: textTheme.bodySmall?.copyWith(
+                            color: tk.textMuted,
+                          ),
+                        ),
+                        if (d.service.approximateTrack)
+                          Text(
+                            'Catatan: jalur rel perkiraan (garis lurus '
+                            'antarstasiun)',
+                            style: textTheme.bodySmall?.copyWith(
+                              color: tk.warning,
+                            ),
+                          ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// "Pakai perkiraan (tanpa jadwal)": the old way, a train by name with
+/// estimated times, for a train that is not running to the timetable.
+class _EstimateChoiceTile extends StatelessWidget {
+  const _EstimateChoiceTile({required this.selected, required this.onTap});
+
+  final bool selected;
+  final VoidCallback? onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final tk = context.tk;
+    final textTheme = Theme.of(context).textTheme;
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 8),
+      child: Semantics(
+        button: true,
+        selected: selected,
+        label: 'Pakai perkiraan, tanpa jadwal',
+        excludeSemantics: true,
+        child: Material(
+          color: selected ? tk.primarySoft : tk.surfaceAlt,
+          borderRadius: BorderRadius.circular(TkRadius.control),
+          clipBehavior: Clip.antiAlias,
+          child: InkWell(
+            onTap: onTap,
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+              child: Row(
+                children: <Widget>[
+                  Icon(
+                    selected
+                        ? Icons.radio_button_checked_rounded
+                        : Icons.radio_button_unchecked_rounded,
+                    size: 20,
+                    color: selected ? tk.primary : tk.textMuted,
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: <Widget>[
+                        Text(
+                          'Pakai perkiraan (tanpa jadwal)',
+                          style: textTheme.titleSmall,
+                        ),
+                        Text(
+                          'Kalau keretamu tidak ada di daftar atau berjalan '
+                          'di luar jadwal: pilih kereta, jam tiba dihitung '
+                          'dari jarak.',
+                          style: textTheme.bodySmall?.copyWith(
+                            color: tk.textMuted,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
   }
 }
 

@@ -6,7 +6,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../domain/intercity_models.dart';
 
-const intercityAssetPath = 'assets/intercity/intercity_v1.json';
+const intercityAssetPath = 'assets/intercity/intercity_v2.json';
 
 IntercityCatalog _parse(String raw) =>
     IntercityCatalog.fromJson(jsonDecode(raw) as Map<String, dynamic>);

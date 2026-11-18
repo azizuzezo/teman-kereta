@@ -29,9 +29,12 @@ void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
   final catalog = IntercityCatalog.fromJson(
-    jsonDecode(File('assets/intercity/intercity_v1.json').readAsStringSync())
+    jsonDecode(File('assets/intercity/intercity_v2.json').readAsStringSync())
         as Map<String, dynamic>,
   );
+  // The trains offered before the GAPEKA 2026 timetable (v1 estimates), as
+  // the picker and the ride controller see them for a ride on 18 Oct 2026.
+  final beforeTimetable = catalog.onDate(DateTime.utc(2026, 10, 18));
 
   late ProviderContainer container;
   late FakeNotificationService notifications;
@@ -96,7 +99,7 @@ void main() {
 
   group('a train the rider names themselves', () {
     test('reuses a listed train\'s track when one serves the pair', () {
-      final service = catalog.serviceForCustomRide('GMR', 'KAC');
+      final service = beforeTimetable.serviceForCustomRide('GMR', 'KAC');
       expect(<String>['papandayan', 'pangandaran'], contains(service.id));
       final trip = buildIntercityTrip(
         service: service,
@@ -115,7 +118,7 @@ void main() {
     });
 
     test('joins two stations no train links with a stretched straight line', () {
-      final service = catalog.serviceForCustomRide('KPT', 'GMR');
+      final service = beforeTimetable.serviceForCustomRide('KPT', 'GMR');
       expect(service.id, customServiceId);
       expect(service.stops.map((s) => s.code), <String>['KPT', 'GMR']);
       expect(service.totalKm, greaterThan(500));
@@ -134,7 +137,7 @@ void main() {
 
     test('a name with odd characters survives the trip id', () {
       final trip = buildIntercityTrip(
-        service: catalog.serviceForCustomRide('GMR', 'BD'),
+        service: beforeTimetable.serviceForCustomRide('GMR', 'BD'),
         catalog: catalog,
         boarding: 'GMR',
         destination: 'BD',
@@ -146,7 +149,7 @@ void main() {
 
     test('a typed-name ride is announced like any other', () async {
       final trip = buildIntercityTrip(
-        service: catalog.serviceForCustomRide('PWK', 'BD'),
+        service: beforeTimetable.serviceForCustomRide('PWK', 'BD'),
         catalog: catalog,
         boarding: 'PWK',
         destination: 'BD',
@@ -163,6 +166,47 @@ void main() {
       expect(ride.serviceName, 'KA Tambahan Libur');
       expect(ride.destinationName, 'Bandung');
     });
+  });
+
+  test('a timetabled ride follows its run and says so', () async {
+    final day = DateTime.utc(2026, 12, 2);
+    final now = timetableInstant(day, 4 * 60 + 30);
+    final departure = catalog
+        .departuresBetween('BD', 'GMR', now: now)
+        .firstWhere((d) => d.run.ka == '131');
+    final trip = buildIntercityTrip(
+      service: departure.service,
+      catalog: catalog,
+      boarding: 'BD',
+      destination: 'GMR',
+      now: now,
+      departure: departure,
+    );
+    container.listen(intercityRideControllerProvider, (_, _) {});
+    await container.read(activeTripControllerProvider.notifier).start(trip);
+    for (var i = 0; i < 20; i += 1) {
+      await Future<void>.delayed(Duration.zero);
+    }
+    final ride = container.read(intercityRideControllerProvider);
+    expect(ride.isActive, isTrue);
+    expect(ride.scheduled, isTrue);
+    expect(ride.serviceName, 'Parahyangan (KA 131)');
+    expect(ride.destinationName, 'Gambir');
+  });
+
+  test('a ride id from before timetables still arms the estimate', () async {
+    // An id as v1 wrote it: no KA number. Its train is still in the file.
+    final trip = tripFor('parahyangan', 'GMR', 'BD');
+    expect(IntercityTripRef.tryParse(trip.id)!.isScheduled, isFalse);
+    container.listen(intercityRideControllerProvider, (_, _) {});
+    await container.read(activeTripControllerProvider.notifier).start(trip);
+    for (var i = 0; i < 20; i += 1) {
+      await Future<void>.delayed(Duration.zero);
+    }
+    final ride = container.read(intercityRideControllerProvider);
+    expect(ride.isActive, isTrue);
+    expect(ride.scheduled, isFalse);
+    expect(ride.serviceName, 'Parahyangan');
   });
 
   test('the active-trip stations add intercity stations only for intercity rides',

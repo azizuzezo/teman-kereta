@@ -75,8 +75,13 @@ class IntercityRideCard extends ConsumerWidget {
           ),
           const SizedBox(height: 8),
           Text(
-            'Pengingat dihitung dari sisa jarak sepanjang rel, bukan garis lurus. '
-            'Jam tiba hanya estimasi karena jadwal resmi tidak tersedia.',
+            ride.scheduled
+                ? 'Pengingat dihitung dari sisa jarak sepanjang rel, bukan garis '
+                      'lurus. Estimasi berangkat dari jadwal GAPEKA 2026, lalu '
+                      'mengikuti kecepatan kereta yang sebenarnya.'
+                : 'Pengingat dihitung dari sisa jarak sepanjang rel, bukan garis '
+                      'lurus. Jam tiba hanya estimasi karena jadwal resmi tidak '
+                      'tersedia.',
             style: textTheme.bodySmall?.copyWith(color: tk.textMuted),
           ),
         ],

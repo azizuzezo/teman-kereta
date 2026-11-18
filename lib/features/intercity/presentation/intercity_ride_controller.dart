@@ -3,12 +3,14 @@ import 'dart:async';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/notifications/local_notification_service.dart';
+import '../../../data/providers/provider_registry.dart';
 import '../../../domain/entities/active_trip.dart';
 import '../../active_trip/presentation/active_trip_controller.dart';
 import '../../live_map/presentation/native_gps_fix.dart';
 import '../../settings/presentation/settings_controller.dart';
 import '../data/intercity_repository.dart';
 import '../domain/intercity_eta.dart';
+import '../domain/intercity_models.dart';
 import '../domain/intercity_reminder_planner.dart';
 import '../domain/intercity_trip.dart';
 
@@ -19,6 +21,7 @@ class IntercityRideState {
     this.destinationName,
     this.eta,
     this.firedKm = const <int>{},
+    this.scheduled = false,
   });
 
   /// The active intercity trip this belongs to, or null when none is running.
@@ -32,6 +35,9 @@ class IntercityRideState {
   /// The "[n] kilometer lagi" reminders already announced on this ride.
   final Set<int> firedKm;
 
+  /// The ride follows a GAPEKA run: the estimate starts from its timetable.
+  final bool scheduled;
+
   bool get isActive => tripId != null;
 
   IntercityRideState copyWith({IntercityEta? eta, Set<int>? firedKm}) =>
@@ -41,6 +47,7 @@ class IntercityRideState {
         destinationName: destinationName,
         eta: eta ?? this.eta,
         firedKm: firedKm ?? this.firedKm,
+        scheduled: scheduled,
       );
 }
 
@@ -96,10 +103,15 @@ class IntercityRideController extends Notifier<IntercityRideState> {
     final generation = ++_generation;
     final catalog = await ref.read(intercityCatalogProvider.future);
     if (!ref.mounted || generation != _generation) return;
+    // A typed-in train borrows the track of a train listed on the day the
+    // ride was started, the same one the picker used.
+    final listed = catalog.onDate(
+      timetableDate(ref0.startedAt ?? ref.read(clockProvider).now()),
+    );
     final service = ref0.isCustom
         ? (catalog.stations.containsKey(ref0.boardingCode) &&
                   catalog.stations.containsKey(ref0.destinationCode)
-              ? catalog.serviceForCustomRide(
+              ? listed.serviceForCustomRide(
                   ref0.boardingCode,
                   ref0.destinationCode,
                 )
@@ -111,8 +123,16 @@ class IntercityRideController extends Notifier<IntercityRideState> {
         !service.connects(ref0.boardingCode, ref0.destinationCode)) {
       return;
     }
+    // A timetabled ride runs on its run's stops and times; an id without a
+    // KA number (or one this file no longer has) keeps the train's estimate.
+    final run = ref0.isScheduled ? service.runByKa(ref0.ka!) : null;
+    final scheduledRun =
+        run != null &&
+            run.servesInOrder(ref0.boardingCode, ref0.destinationCode)
+        ? run
+        : null;
     _estimator = IntercityEtaEstimator(
-      service: service,
+      service: scheduledRun == null ? service : service.forRun(scheduledRun),
       boardingCode: ref0.boardingCode,
       destinationCode: ref0.destinationCode,
       destinationLatitude: destination.latitude,
@@ -123,8 +143,13 @@ class IntercityRideController extends Notifier<IntercityRideState> {
     _lastFixAt = null;
     state = IntercityRideState(
       tripId: tripId,
-      serviceName: ref0.customName ?? service.name,
+      serviceName:
+          ref0.customName ??
+          (scheduledRun == null
+              ? service.name
+              : '${service.name} (KA ${scheduledRun.ka})'),
       destinationName: destination.name,
+      scheduled: scheduledRun != null,
     );
     // A fix may already be waiting (restored trip, or the app was reopened).
     final waiting = ref.read(latestNativeGpsFixProvider);

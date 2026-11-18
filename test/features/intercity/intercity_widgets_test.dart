@@ -1,11 +1,13 @@
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:clock/clock.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:teman_kereta/app/theme/app_theme.dart';
+import 'package:teman_kereta/data/providers/provider_registry.dart';
 import 'package:teman_kereta/domain/entities/active_trip.dart';
 import 'package:teman_kereta/features/active_trip/presentation/active_trip_controller.dart';
 import 'package:teman_kereta/features/intercity/data/intercity_repository.dart';
@@ -31,14 +33,21 @@ class _NoTrip extends ActiveTripController {
 }
 
 IntercityCatalog _catalog() => IntercityCatalog.fromJson(
-  jsonDecode(File('assets/intercity/intercity_v1.json').readAsStringSync())
+  jsonDecode(File('assets/intercity/intercity_v2.json').readAsStringSync())
       as Map<String, dynamic>,
 );
 
-Widget _app(Widget child) => ProviderScope(
+/// 18 November 2026, 08:00 WIB: before the GAPEKA 2026 timetable starts.
+final _beforeTimetable = timetableInstant(DateTime.utc(2026, 11, 18), 8 * 60);
+
+/// 2 December 2026, 04:00 WIB: the timetable is in force.
+final _onTimetable = timetableInstant(DateTime.utc(2026, 12, 2), 4 * 60);
+
+Widget _app(Widget child, {DateTime? now}) => ProviderScope(
   overrides: [
     intercityCatalogProvider.overrideWith((ref) async => _catalog()),
     mapTileProviderProvider.overrideWithValue(_FakeTileProvider()),
+    clockProvider.overrideWithValue(Clock.fixed(now ?? _beforeTimetable)),
   ],
   child: MaterialApp(
     theme: AppTheme.light(),
@@ -124,6 +133,58 @@ void main() {
       await tester.pumpAndSettle();
       expect(tester.widget<FilledButton>(start).onPressed, isNotNull);
     });
+
+    testWidgets('from the timetable start, lists the day\'s departures with the '
+        'estimate kept as a choice', (tester) async {
+      tester.view.physicalSize = const Size(800, 3200);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.reset);
+      await tester.pumpWidget(
+        _app(const IntercityTripCard(), now: _onTimetable),
+      );
+      await tester.pumpAndSettle();
+
+      await _pickStation(tester, field: 'Naik dari', search: 'Bandung', result: 'Bandung');
+      await _pickStation(tester, field: 'Turun di', search: 'Gambir', result: 'Gambir');
+
+      expect(find.text('Pilih keberangkatan hari ini'), findsOneWidget);
+      expect(find.text('KA 131 Parahyangan'), findsOneWidget);
+      expect(find.textContaining('05:00 → 08:08'), findsOneWidget);
+      // The fakultatif run carries its chip.
+      expect(find.text('KA 141F Parahyangan Fakultatif'), findsOneWidget);
+      expect(find.text('Fakultatif'), findsWidgets);
+      // The train list waits behind "Pakai perkiraan".
+      expect(find.text('Pilih kereta'), findsNothing);
+      final start = find.widgetWithText(FilledButton, 'Mulai perjalanan');
+      expect(tester.widget<FilledButton>(start).onPressed, isNull);
+
+      await tester.tap(find.text('KA 131 Parahyangan'));
+      await tester.pumpAndSettle();
+      expect(tester.widget<FilledButton>(start).onPressed, isNotNull);
+
+      await tester.tap(find.text('Pakai perkiraan (tanpa jadwal)'));
+      await tester.pumpAndSettle();
+      expect(find.text('Pilih kereta'), findsOneWidget);
+      expect(find.text('Parahyangan'), findsOneWidget);
+    });
+
+    testWidgets('before the timetable start, only the estimate is offered', (
+      tester,
+    ) async {
+      tester.view.physicalSize = const Size(800, 2200);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.reset);
+      await tester.pumpWidget(_app(const IntercityTripCard()));
+      await tester.pumpAndSettle();
+
+      await _pickStation(tester, field: 'Naik dari', search: 'Bandung', result: 'Bandung');
+      await _pickStation(tester, field: 'Turun di', search: 'Gambir', result: 'Gambir');
+
+      expect(find.text('Pilih keberangkatan hari ini'), findsNothing);
+      expect(find.text('Pakai perkiraan (tanpa jadwal)'), findsNothing);
+      expect(find.text('Pilih kereta'), findsOneWidget);
+      expect(find.text('Parahyangan'), findsOneWidget);
+    });
   });
 
   group('IntercityMapPage', () {
@@ -137,6 +198,7 @@ void main() {
             intercityCatalogProvider.overrideWith((ref) async => _catalog()),
             mapTileProviderProvider.overrideWithValue(_FakeTileProvider()),
             activeTripControllerProvider.overrideWith(_NoTrip.new),
+            clockProvider.overrideWithValue(Clock.fixed(_beforeTimetable)),
           ],
           child: MaterialApp(
             theme: AppTheme.light(),

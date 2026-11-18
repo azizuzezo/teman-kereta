@@ -8,6 +8,7 @@ import 'package:latlong2/latlong.dart';
 import '../../../app/theme/app_theme.dart';
 import '../../../core/widgets/empty_state.dart';
 import '../../../core/widgets/tk_components.dart';
+import '../../../data/providers/provider_registry.dart';
 import '../../active_trip/presentation/active_trip_controller.dart';
 import '../../live_map/presentation/map_tiles.dart';
 import '../data/intercity_repository.dart';
@@ -104,12 +105,17 @@ class _IntercityMapPageState extends ConsumerState<IntercityMapPage> {
   }
 
   Future<void> _pickTrain(IntercityCatalog catalog) async {
+    // Only the trains running today: v1 estimates before the GAPEKA start
+    // date, the GAPEKA trains from then on.
+    final listed = catalog.onDate(
+      timetableDate(ref.read(clockProvider).now()),
+    );
     final picked = await showModalBottomSheet<IntercityService>(
       context: context,
       showDragHandle: true,
       isScrollControlled: true,
       builder: (context) =>
-          _TrainSheet(catalog: catalog, selectedId: _serviceId),
+          _TrainSheet(catalog: listed, selectedId: _serviceId),
     );
     if (picked != null) _select(picked);
   }
@@ -149,10 +155,16 @@ class _IntercityMapPageState extends ConsumerState<IntercityMapPage> {
       final service = tripRef == null
           ? null
           : (tripRef.isCustom
-                ? catalog.serviceForCustomRide(
-                    tripRef.boardingCode,
-                    tripRef.destinationCode,
-                  )
+                ? catalog
+                      .onDate(
+                        timetableDate(
+                          tripRef.startedAt ?? ref.read(clockProvider).now(),
+                        ),
+                      )
+                      .serviceForCustomRide(
+                        tripRef.boardingCode,
+                        tripRef.destinationCode,
+                      )
                 : catalog.serviceById(tripRef.serviceId));
       if (service != null) {
         _serviceId = service.id;
@@ -563,8 +575,13 @@ class _ServiceCard extends StatelessWidget {
                     ),
                   const SizedBox(height: 4),
                   Text(
-                    'Estimasi ${_hours(service.stops.last.estimatedMinutes)} '
-                    '(bukan jadwal resmi)',
+                    service.timingRunKa == null
+                        ? 'Estimasi ${_hours(service.stops.last.estimatedMinutes)} '
+                              '(bukan jadwal resmi)'
+                        : '${_hours(service.stops.last.estimatedMinutes)} '
+                              'menurut GAPEKA 2026 (KA ${service.timingRunKa}). '
+                              '${service.runs.length} perjalanan: '
+                              '${service.runs.map((r) => r.ka).join(', ')}',
                     style: textTheme.bodySmall?.copyWith(color: tk.textMuted),
                   ),
                   if (picked != null && pickedStop != null) ...<Widget>[
@@ -587,6 +604,9 @@ class _ServiceCard extends StatelessWidget {
                     text: service.verified
                         ? 'Rute mengikuti rel (±${precision.maxStopOffsetMeters.round()} m), '
                               '${precision.verifiedStations}/${precision.stopCount} koordinat stasiun cocok di dua sumber.'
+                        : service.approximateTrack
+                        ? 'Rute perkiraan: garis lurus antarstasiun, jarak '
+                              'dihitung 1,2 kali garis lurus.'
                         : 'Rute perkiraan: data rel di salah satu ruas janggal.',
                     warn:
                         !service.verified ||
@@ -620,6 +640,10 @@ class _ServiceCard extends StatelessWidget {
                           ? 'Garis mengikuti rel dari OpenStreetMap, '
                                 'disederhanakan sekitar 40 m. Tidak ada ruas '
                                 'memutar atau rel yang dilewati dua kali.'
+                          : service.approximateTrack
+                          ? 'Data rel untuk rute ini belum ada: garis lurus '
+                                'antarstasiun, jadi jarak dan posisi di peta '
+                                'hanya perkiraan.'
                           : 'Garis mengikuti rel dari OpenStreetMap, tapi data '
                                 'rel di sekitar salah satu ruas janggal. Anggap '
                                 'rute ini perkiraan.',
@@ -641,16 +665,33 @@ class _ServiceCard extends StatelessWidget {
                           'berbeda.',
                       warn: precision.verifiedStations < precision.stopCount,
                     ),
-                    _Fact(
-                      icon: Icons.fact_check_outlined,
-                      text:
-                          'Daftar pemberhentian dari Wikipedia (komunitas), bukan '
-                          'data resmi KAI. Bisa ada stasiun yang terlewat atau '
-                          'berhenti hanya di arah/jadwal tertentu.',
-                      warn: true,
-                    ),
+                    if (service.hasTimetable)
+                      _Fact(
+                        icon: Icons.fact_check_outlined,
+                        text:
+                            'Pemberhentian dan jam dari GAPEKA 2026 (KP DJKA '
+                            '116/2026 dan 119/2026, berlaku mulai 1 Desember '
+                            '2026). GAPEKA juga mencatat berhenti operasional '
+                            '(persilangan, ganti awak), jadi tidak semua stasiun '
+                            'di sini melayani naik/turun penumpang.',
+                        warn: true,
+                      )
+                    else
+                      _Fact(
+                        icon: Icons.fact_check_outlined,
+                        text:
+                            'Daftar pemberhentian dari Wikipedia (komunitas), bukan '
+                            'data resmi KAI. Bisa ada stasiun yang terlewat atau '
+                            'berhenti hanya di arah/jadwal tertentu.',
+                        warn: true,
+                      ),
                     const SizedBox(height: 10),
-                    Text('Pemberhentian', style: textTheme.titleSmall),
+                    Text(
+                      service.timingRunKa == null
+                          ? 'Pemberhentian'
+                          : 'Pemberhentian (waktu KA ${service.timingRunKa})',
+                      style: textTheme.titleSmall,
+                    ),
                     const SizedBox(height: 4),
                     for (final stop in service.stops)
                       _StopRow(

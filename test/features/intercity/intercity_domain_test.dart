@@ -3,15 +3,22 @@ import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:teman_kereta/core/utils/geo.dart';
+import 'package:teman_kereta/domain/entities/transit_models.dart';
 import 'package:teman_kereta/features/intercity/domain/intercity_eta.dart';
 import 'package:teman_kereta/features/intercity/domain/intercity_geometry.dart';
 import 'package:teman_kereta/features/intercity/domain/intercity_models.dart';
 import 'package:teman_kereta/features/intercity/domain/intercity_reminder_planner.dart';
+import 'package:teman_kereta/features/intercity/domain/intercity_trip.dart';
 
-IntercityCatalog _loadCatalog() {
-  final raw = File('assets/intercity/intercity_v1.json').readAsStringSync();
+IntercityCatalog _loadCatalog([String file = 'intercity_v2.json']) {
+  final raw = File('assets/intercity/$file').readAsStringSync();
   return IntercityCatalog.fromJson(jsonDecode(raw) as Map<String, dynamic>);
 }
+
+/// A day before and a day on the GAPEKA 2026 timetable (WIB dates).
+final _before = DateTime.utc(2026, 11, 30);
+final _dec2 = DateTime.utc(2026, 12, 2);
+final _dec3 = DateTime.utc(2026, 12, 3);
 
 /// Minimum distance from [lat],[lon] to the service's track, in meters.
 double _distanceToTrack(IntercityService service, double lat, double lon) =>
@@ -79,19 +86,34 @@ void main() {
       expect(catalog.stations.length, greaterThanOrEqualTo(150));
     });
 
-    test('only the two Medan trains are still flagged for review', () {
+    test('only the two Medan trains and the GAPEKA trains without a mapped '
+        'track are flagged', () {
       final flagged = catalog.services
           .where((s) => !s.verified)
           .map((s) => s.id)
           .toSet();
-      expect(flagged, <String>{'sribilah', 'putri-deli'});
+      final straightLine = catalog.services
+          .where((s) => s.approximateTrack)
+          .map((s) => s.id)
+          .toSet();
+      expect(flagged, <String>{'sribilah', 'putri-deli', ...straightLine});
+      // Only GAPEKA trains can lack a track; each one is said to be approximate.
+      expect(straightLine.every((id) => id.startsWith('g26-')), isTrue);
     });
 
-    test('every train is a different one: unique id and unique name', () {
+    test('every train is a different one: unique id, and a unique name on any '
+        'day before the timetable', () {
       expect(catalog.services.map((s) => s.id).toSet().length,
           catalog.services.length);
-      expect(catalog.services.map((s) => s.name).toSet().length,
-          catalog.services.length);
+      final before = catalog.onDate(_before).services;
+      expect(before.map((s) => s.name).toSet().length, before.length);
+      // From the timetable on, one name can cover several routes (Kaligung
+      // Semarang - Tegal and Semarang - Cirebon Prujakan): unique by route.
+      final after = catalog.onDate(_dec2).services;
+      expect(
+        after.map((s) => '${s.name}|${s.fromCode}|${s.toCode}').toSet().length,
+        after.length,
+      );
     });
 
     test('every stop is a known station, in increasing distance and time', () {
@@ -329,6 +351,275 @@ void main() {
         eta = e.update(latitude: f.lat, longitude: f.lon, at: f.at, speedKmh: f.kmh);
       }
       expect(eta!.remainingKm, closeTo(100, 4));
+    });
+  });
+
+  group('GAPEKA 2026 timetable (v2)', () {
+    test('the file says which version and from which day', () {
+      expect(catalog.version, 2);
+      expect(catalog.validFrom, DateTime.utc(2026, 12, 1));
+    });
+
+    test('a v1 file still reads, with no timetable', () {
+      final v1 = _loadCatalog('intercity_v1.json');
+      expect(v1.version, 1);
+      expect(v1.validFrom, isNull);
+      expect(v1.services.every((s) => s.runs.isEmpty), isTrue);
+      expect(v1.onDate(_dec2).services.length, v1.services.length);
+      expect(
+        v1.departuresBetween(
+          'BD',
+          'GMR',
+          now: timetableInstant(_dec2, 4 * 60),
+        ),
+        isEmpty,
+      );
+    });
+
+    test('runs carry the KA number, the fakultatif flag and the printed times',
+        () {
+      final pandalungan = catalog.serviceById('g26-pandalungan')!;
+      // KA 42 and 43 are one journey in Buku Penomoran: one run.
+      final run = pandalungan.runByKa('42/43')!;
+      expect(run.fakultatif, isFalse);
+      expect(run.stops.first.code, 'GMR');
+      expect(run.stops.first.departure, 21 * 60); // 21:00
+      expect(run.stops.last.code, 'JR');
+      expect(run.stops.last.arrival, 34 * 60 + 4); // 10:04 the next day
+      final fakultatif = catalog.serviceById('g26-parahyangan-fakultatif')!;
+      expect(fakultatif.runs.map((r) => r.ka), containsAll(<String>['141F', '142F']));
+      expect(fakultatif.runs.every((r) => r.fakultatif), isTrue);
+      // A stop with no printed time is marked, never silent.
+      final pangrango = catalog.serviceById('g26-pangrango')!.runByKa('265')!;
+      final karangtengah = pangrango.stops[pangrango.indexOfStop('KE')];
+      expect(karangtengah.estimated, isTrue);
+    });
+
+    test('every run is a known station list, in time order, inside its train',
+        () {
+      for (final service in catalog.services.where((s) => s.hasTimetable)) {
+        final codes = service.stops.map((s) => s.code).toList();
+        for (final run in service.runs) {
+          var last = -1;
+          var previous = -1;
+          for (final stop in run.stops) {
+            expect(catalog.stations.containsKey(stop.code), isTrue);
+            expect(stop.arrival, greaterThanOrEqualTo(last),
+                reason: '${service.id} KA ${run.ka} ${stop.code}');
+            expect(stop.departure, greaterThanOrEqualTo(stop.arrival));
+            last = stop.departure;
+            // The run's stops are the service's stops, one way or the other.
+            final i = codes.indexOf(stop.code);
+            expect(i, isNot(-1), reason: '${service.id} ${stop.code}');
+            if (previous >= 0) {
+              final forward = codes.indexOf(run.stops.first.code) <
+                  codes.indexOf(run.stops.last.code);
+              expect(forward ? i > previous : i < previous, isTrue,
+                  reason: '${service.id} KA ${run.ka} ${stop.code}');
+            }
+            previous = i;
+          }
+        }
+      }
+    });
+
+    test('before the timetable the estimates are offered, from its first day '
+        'the GAPEKA trains', () {
+      final before = catalog.onDate(_before).services.map((s) => s.id).toSet();
+      final after = catalog
+          .onDate(DateTime.utc(2026, 12, 1))
+          .services
+          .map((s) => s.id)
+          .toSet();
+      expect(before, contains('parahyangan'));
+      expect(before, isNot(contains('g26-parahyangan')));
+      expect(after, contains('g26-parahyangan'));
+      expect(after, isNot(contains('parahyangan')));
+      // Medan is not in these GAPEKA books: its estimates stay.
+      expect(before, contains('sribilah'));
+      expect(after, contains('sribilah'));
+    });
+
+    test('no departures are listed before the timetable starts', () {
+      expect(
+        catalog.departuresBetween(
+          'BD',
+          'GMR',
+          now: timetableInstant(_before, 10 * 60),
+        ),
+        isEmpty,
+      );
+    });
+
+    test('lists the day\'s departures between two stations, in order', () {
+      final departures = catalog.departuresBetween(
+        'BD',
+        'GMR',
+        now: timetableInstant(_dec2, 4 * 60),
+      );
+      expect(departures, isNotEmpty);
+      for (var i = 1; i < departures.length; i += 1) {
+        expect(
+          departures[i].departureAt.isBefore(departures[i - 1].departureAt),
+          isFalse,
+        );
+      }
+      final ka131 = departures.firstWhere((d) => d.run.ka == '131');
+      expect(ka131.service.id, 'g26-parahyangan');
+      expect(ka131.serviceDate, _dec2);
+      expect(ka131.departureAt, timetableInstant(_dec2, 5 * 60)); // 05:00
+      expect(ka131.arrivalAt, timetableInstant(_dec2, 8 * 60 + 8)); // 08:08
+      expect(ka131.stationCodes.first, 'BD');
+      expect(ka131.stationCodes.last, 'GMR');
+      // The other direction is not offered for this pair.
+      expect(departures.any((d) => d.run.ka == '132'), isFalse);
+      expect(
+        departures.where((d) => d.run.fakultatif).map((d) => d.run.ka),
+        contains('141F'),
+      );
+    });
+
+    test('a time past 24:00 is the next morning', () {
+      // KA 42/43 leaves Tegal at 24:36 on its service day: 00:36 next day.
+      final departures = catalog.departuresBetween(
+        'TG',
+        'JR',
+        now: timetableInstant(_dec3, 10), // 00:10 on 3 December
+      );
+      final night = departures.firstWhere(
+        (d) => d.run.ka == '42/43' && d.serviceDate == _dec2,
+      );
+      expect(night.departureAt, timetableInstant(_dec3, 36));
+      expect(timetableDate(night.departureAt), _dec3);
+      expect(night.arrivalAt, timetableInstant(_dec3, 10 * 60 + 4));
+    });
+
+    test('a night train boarded yesterday is still offered until it arrives',
+        () {
+      final departures = catalog.departuresBetween(
+        'GMR',
+        'JR',
+        now: timetableInstant(_dec3, 60), // 01:00, the 21:00 train is running
+      );
+      expect(
+        departures.any((d) => d.run.ka == '42/43' && d.serviceDate == _dec2),
+        isTrue,
+      );
+      // Tonight's run of the same train is listed too.
+      expect(
+        departures.any((d) => d.run.ka == '42/43' && d.serviceDate == _dec3),
+        isTrue,
+      );
+    });
+
+    test('a run\'s own minutes become the estimate prior, either direction', () {
+      final service = catalog.serviceById('g26-parahyangan')!;
+      for (final ka in <String>['131', '132']) {
+        final view = service.forRun(service.runByKa(ka)!);
+        final minutes =
+            (view.stopAt('GMR')!.estimatedMinutes -
+                    view.stopAt('BD')!.estimatedMinutes)
+                .abs();
+        expect(minutes, 188, reason: 'KA $ka'); // 05:00-08:08, 06:30-09:38
+        expect(view.timingRunKa, ka);
+        expect(view.totalKm, service.totalKm);
+        for (var i = 1; i < view.stops.length; i += 1) {
+          expect(view.stops[i].km, greaterThan(view.stops[i - 1].km));
+          expect(view.stops[i].estimatedMinutes,
+              greaterThanOrEqualTo(view.stops[i - 1].estimatedMinutes));
+        }
+      }
+    });
+  });
+
+  group('timetabled trips', () {
+    final service = catalog.serviceById('g26-parahyangan')!;
+    final now = timetableInstant(_dec2, 4 * 60 + 30);
+
+    IntercityDeparture pick(String from, String to, String ka) => catalog
+        .departuresBetween(from, to, now: now)
+        .firstWhere((d) => d.run.ka == ka);
+
+    test('a picked departure gives the timetable times and says so', () {
+      final departure = pick('BD', 'GMR', '131');
+      final trip = buildIntercityTrip(
+        service: service,
+        catalog: catalog,
+        boarding: 'BD',
+        destination: 'GMR',
+        now: now,
+        departure: departure,
+      );
+      expect(trip.freshness, DataFreshness.scheduled);
+      expect(trip.sourceLabel, 'Jadwal GAPEKA 2026');
+      expect(trip.departureAt, departure.departureAt);
+      expect(trip.arrivalAt, departure.arrivalAt);
+      expect(trip.stationIds, departure.stationCodes);
+      expect(trip.legs.single.lineName, 'Parahyangan (KA 131)');
+      expect(trip.legs.single.serviceId, isNull);
+      final ref = IntercityTripRef.tryParse(trip.id)!;
+      expect(ref.serviceId, 'g26-parahyangan');
+      expect(ref.ka, '131');
+      expect(ref.serviceDate, _dec2);
+      expect(ref.isScheduled, isTrue);
+      expect(ref.customName, isNull);
+      expect(ref.boardingCode, 'BD');
+      expect(ref.destinationCode, 'GMR');
+    });
+
+    test('a fakultatif run is marked on the trip', () {
+      final departure = pick('BD', 'GMR', '141F');
+      final trip = buildIntercityTrip(
+        service: departure.service,
+        catalog: catalog,
+        boarding: 'BD',
+        destination: 'GMR',
+        now: now,
+        departure: departure,
+      );
+      expect(trip.legs.single.serviceId, fakultatifServiceId);
+      expect(IntercityTripRef.tryParse(trip.id)!.ka, '141F');
+    });
+
+    test('an interpolated time is marked on the trip', () {
+      final departure = catalog
+          .departuresBetween('SI', 'KE', now: timetableInstant(_dec2, 5 * 60))
+          .firstWhere((d) => d.run.ka == '265');
+      expect(departure.arrivalEstimated, isTrue);
+      final trip = buildIntercityTrip(
+        service: departure.service,
+        catalog: catalog,
+        boarding: 'SI',
+        destination: 'KE',
+        now: now,
+        departure: departure,
+      );
+      expect(trip.legs.single.arrivalEstimated, isTrue);
+      expect(trip.legs.single.departureEstimated, isFalse);
+    });
+
+    test('trip ids written before timetables still read the same', () {
+      final plain = IntercityTripRef.tryParse(
+        'ic|parahyangan|GMR|BD|1760749200000',
+      )!;
+      expect(plain.serviceId, 'parahyangan');
+      expect(plain.boardingCode, 'GMR');
+      expect(plain.destinationCode, 'BD');
+      expect(plain.customName, isNull);
+      expect(plain.ka, isNull);
+      expect(plain.isScheduled, isFalse);
+      expect(
+        plain.startedAt,
+        DateTime.fromMillisecondsSinceEpoch(1760749200000),
+      );
+      final typed = IntercityTripRef.tryParse(
+        'ic|custom|PWK|BD|1760749200000|KA%20Tambahan%20Libur',
+      )!;
+      expect(typed.isCustom, isTrue);
+      expect(typed.customName, 'KA Tambahan Libur');
+      expect(typed.isScheduled, isFalse);
+      // And an old service id still resolves to its train.
+      expect(catalog.serviceById(plain.serviceId), isNotNull);
     });
   });
 
