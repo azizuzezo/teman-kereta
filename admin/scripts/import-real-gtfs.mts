@@ -34,6 +34,7 @@ import {
   parseStationDescription,
 } from "../lib/gtfs/parser";
 import { ServiceCalendar, dateWindow, routeTypeToTransportMode } from "../lib/gtfs/calendar";
+import { orderStationsOnLine } from "../lib/gtfs/station-lines";
 
 // A newer feed can use different route_id conventions than whatever was
 // imported before it under the same operator — upserts key on
@@ -374,7 +375,7 @@ async function main() {
   // ordering — a route's reverse-direction trips cover the same physical
   // stations, just reversed, so this is enough to establish "which stations
   // belong to this line, in order" without needing both directions).
-  console.log("Deriving station_lines ordering from the longest trip per route...");
+  console.log("Deriving station_lines ordering from the longest trip per route (plus stations only on other patterns)...");
   const canonicalTripByRoute = new Map<string, (typeof feed.trips)[number]>();
   for (const trip of feed.trips) {
     const stopCount = stopTimesByTripId.get(trip.tripId)?.length ?? 0;
@@ -383,17 +384,28 @@ async function main() {
     if (stopCount > existingCount) canonicalTripByRoute.set(trip.routeId, trip);
   }
   const stationLineRows: { station_id: string; line_id: string; stop_order: number }[] = [];
+  const tripsByRoute = new Map<string, (typeof feed.trips)[number][]>();
+  for (const trip of feed.trips) {
+    const list = tripsByRoute.get(trip.routeId) ?? [];
+    list.push(trip);
+    tripsByRoute.set(trip.routeId, list);
+  }
+  const stationIdsOfTrip = (tripId: string): string[] =>
+    [...(stopTimesByTripId.get(tripId) ?? [])]
+      .sort((a, b) => a.stopSequence - b.stopSequence)
+      .map((stopTime) => stationIdByCode.get(stopTime.stopId))
+      .filter((id): id is string => id !== undefined);
   for (const [routeId, trip] of canonicalTripByRoute) {
     const lineId = lineIdForRoute(routeId);
     if (!lineId) continue;
-    const orderedStopTimes = [...(stopTimesByTripId.get(trip.tripId) ?? [])].sort(
-      (a, b) => a.stopSequence - b.stopSequence,
-    );
-    orderedStopTimes.forEach((stopTime, index) => {
-      const stationId = stationIdByCode.get(stopTime.stopId);
-      if (!stationId) return;
-      stationLineRows.push({ station_id: stationId, line_id: lineId, stop_order: index + 1 });
-    });
+    // Stasiun yang hanya ada di pola lain (cabang, via kota lain) ikut mendapat baris dari tetangganya,
+    // supaya tidak dianggap "tanpa lini" oleh aplikasi.
+    const others = (tripsByRoute.get(routeId) ?? [])
+      .filter((other) => other.tripId !== trip.tripId)
+      .map((other) => stationIdsOfTrip(other.tripId));
+    for (const [stationId, stopOrder] of orderStationsOnLine(stationIdsOfTrip(trip.tripId), others)) {
+      stationLineRows.push({ station_id: stationId, line_id: lineId, stop_order: stopOrder });
+    }
   }
   await upsertInChunks(supabase, "station_lines", stationLineRows, "station_id,line_id");
   console.log(`Upserted station_lines: ${stationLineRows.length} rows across ${canonicalTripByRoute.size} lines`);

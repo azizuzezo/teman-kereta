@@ -13,6 +13,7 @@ import {
 } from "./parser";
 import { ServiceCalendar, dateWindow, routeTypeToTransportMode } from "./calendar";
 import type { GtfsFeed } from "./types";
+import { orderStationsOnLine } from "./station-lines";
 
 const REQUIRED_FILES = ["stops.txt", "routes.txt", "trips.txt", "stop_times.txt"];
 const HEX_COLOR = /^[0-9A-Fa-f]{6}$/;
@@ -243,17 +244,31 @@ export async function importGtfsFeed(params: {
   }
   const stationLineRows: { station_id: string; line_id: string; stop_order: number }[] =
     [];
+  const tripsByRoute = new Map<string, (typeof feed.trips)[number][]>();
+  for (const trip of feed.trips) {
+    const list = tripsByRoute.get(trip.routeId) ?? [];
+    list.push(trip);
+    tripsByRoute.set(trip.routeId, list);
+  }
+  const stationIdsOfTrip = (tripId: string): string[] =>
+    [...(stopTimesByTripId.get(tripId) ?? [])]
+      .sort((a, b) => a.stopSequence - b.stopSequence)
+      .map((stopTime) => stationIdByCode.get(stopTime.stopId))
+      .filter((id): id is string => id !== undefined);
   for (const [routeId, trip] of canonicalTripByRoute) {
     const lineId = lineIdByCode.get(routeId);
     if (!lineId) continue;
-    const orderedStopTimes = [...(stopTimesByTripId.get(trip.tripId) ?? [])].sort(
-      (a, b) => a.stopSequence - b.stopSequence
-    );
-    orderedStopTimes.forEach((stopTime, index) => {
-      const stationId = stationIdByCode.get(stopTime.stopId);
-      if (!stationId) return;
-      stationLineRows.push({ station_id: stationId, line_id: lineId, stop_order: index + 1 });
-    });
+    // Stasiun yang hanya ada di pola lain (cabang, via kota lain) ikut mendapat
+    // baris dari tetangganya, supaya tidak dianggap "tanpa lini" oleh aplikasi.
+    const others = (tripsByRoute.get(routeId) ?? [])
+      .filter((other) => other.tripId !== trip.tripId)
+      .map((other) => stationIdsOfTrip(other.tripId));
+    for (const [stationId, stopOrder] of orderStationsOnLine(
+      stationIdsOfTrip(trip.tripId),
+      others
+    )) {
+      stationLineRows.push({ station_id: stationId, line_id: lineId, stop_order: stopOrder });
+    }
   }
   await upsertInChunks(supabase, "station_lines", stationLineRows, "station_id,line_id");
 

@@ -854,7 +854,9 @@ class _MapBodyState extends ConsumerState<_MapBody>
                 child: Row(
                   crossAxisAlignment: CrossAxisAlignment.end,
                   children: <Widget>[
-                    Flexible(
+                    // Expanded (bukan Flexible): kolom kiri mengisi sisa lebar,
+                    // sehingga tombol zoom dan lokasi menempel di tepi kanan.
+                    Expanded(
                       child: Column(
                         mainAxisSize: MainAxisSize.min,
                         crossAxisAlignment: CrossAxisAlignment.start,
