@@ -6,12 +6,12 @@ import 'package:geolocator/geolocator.dart';
 import 'package:go_router/go_router.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
-import 'package:url_launcher/url_launcher.dart';
 
 import '../../../app/config/app_environment.dart';
 import '../../../app/theme/app_theme.dart';
 import '../../../core/notifications/local_notification_service.dart';
 import '../../../core/updates/update_checker.dart';
+import '../../../core/widgets/support_dev_card.dart';
 import '../../../core/widgets/tk_components.dart';
 import '../../account/presentation/account_controller.dart';
 import '../../account/presentation/delete_account_dialog.dart';
@@ -93,28 +93,7 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
     );
   }
 
-  /// Developer support page (patungan.gifts), opened in the browser.
-  static final Uri _supportUri = Uri.parse('https://patungan.gifts/dev');
-
-  Future<void> _openSupportPage() async {
-    var opened = false;
-    try {
-      opened = await launchUrl(
-        _supportUri,
-        mode: LaunchMode.externalApplication,
-      );
-    } on Object {
-      opened = false;
-    }
-    if (opened || !mounted) return;
-    final messenger = ScaffoldMessenger.of(context);
-    messenger.hideCurrentSnackBar();
-    messenger.showSnackBar(
-      const SnackBar(
-        content: Text('Tidak bisa membuka patungan.gifts/dev. Coba lagi nanti.'),
-      ),
-    );
-  }
+  Future<void> _openSupportPage() => openDeveloperSupportPage(context);
 
   Future<void> _confirmSignOut() async {
     final confirmed = await showDialog<bool>(
@@ -317,8 +296,7 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
                   ),
                   TkRow(
                     icon: Icons.volunteer_activism_outlined,
-                    title: 'Dukung pengembang',
-                    subtitle: 'Bantu Teman Kereta tetap gratis di patungan.gifts/dev',
+                    title: 'Dukung Pengembang',
                     onTap: _openSupportPage,
                   ),
                   TkRow(

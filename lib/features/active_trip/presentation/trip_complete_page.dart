@@ -7,6 +7,7 @@ import 'package:go_router/go_router.dart';
 import '../../../app/theme/app_theme.dart';
 import '../../../core/utils/geo.dart';
 import '../../../core/utils/map_launcher.dart';
+import '../../../core/widgets/support_dev_card.dart';
 import '../../../core/widgets/tk_components.dart';
 import '../../../data/providers/demo_data.dart';
 import '../../../domain/entities/active_trip.dart';
@@ -41,7 +42,8 @@ class TripCompletePage extends ConsumerWidget {
     final tk = context.tk;
     final theme = Theme.of(context);
     final session = ref.watch(activeTripControllerProvider);
-    final stations = ref.watch(activeTripStationsProvider).value ?? const <Station>[];
+    final stations =
+        ref.watch(activeTripStationsProvider).value ?? const <Station>[];
     final destinationName = session == null
         ? null
         : _stationName(session.trip.destinationStationId, stations);
@@ -135,10 +137,7 @@ class TripCompletePage extends ConsumerWidget {
                     ),
                   ],
                   const SizedBox(height: 28),
-                  FilledButton(
-                    onPressed: finish,
-                    child: const Text('Selesai'),
-                  ),
+                  FilledButton(onPressed: finish, child: const Text('Selesai')),
                   if (session != null) ...<Widget>[
                     const SizedBox(height: 10),
                     OutlinedButton.icon(
@@ -155,6 +154,8 @@ class TripCompletePage extends ConsumerWidget {
                     onPressed: openHistory,
                     child: const Text('Lihat riwayat'),
                   ),
+                  const SizedBox(height: 16),
+                  const SupportDevCard(),
                 ],
               ),
             ),
