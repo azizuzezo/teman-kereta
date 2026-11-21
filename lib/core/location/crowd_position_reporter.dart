@@ -75,25 +75,84 @@ class CrowdPositionReporter {
       return null;
     }
 
+    await reportFix(
+      externalTripId: externalTripId,
+      serviceDate: serviceDate,
+      latitude: position.latitude,
+      longitude: position.longitude,
+      at: DateTime.now(),
+      speedMetersPerSecond: position.speed,
+      bearingDegrees: position.heading,
+      headsign: headsign,
+      relation: relation,
+    );
+    return position;
+  }
+
+  /// Kolom `speed`/`bearing` baru ada setelah migrasi `train_live`. Bila
+  /// database belum dimigrasi, laporan diulang tanpa dua kolom itu (sekali
+  /// saja, lalu diingat) supaya laporan posisi tidak berhenti total.
+  bool _extrasSupported = true;
+
+  /// Mengirim satu fix GPS yang sudah ada (mis. dari pelacak native, tanpa
+  /// panggilan GPS kedua) sebagai laporan posisi. Best-effort: kegagalan tidak
+  /// pernah sampai ke pengguna.
+  Future<void> reportFix({
+    required String externalTripId,
+    required DateTime serviceDate,
+    required double latitude,
+    required double longitude,
+    required DateTime at,
+    double? speedMetersPerSecond,
+    double? bearingDegrees,
+    String? headsign,
+    String? relation,
+  }) async {
+    if (!AppEnvironment.supabaseEnabled) {
+      return;
+    }
     try {
       final sessionId = await _deviceSessionId();
-      await Supabase.instance.client.from('crowd_position_reports').insert(
-        <String, Object?>{
-          'external_trip_id': externalTripId,
-          'service_date': _isoDate(serviceDate),
-          'latitude': position.latitude,
-          'longitude': position.longitude,
-          'reported_at': DateTime.now().toUtc().toIso8601String(),
-          'device_session_id': sessionId,
-          'headsign': ?_clip(headsign),
-          'relation': ?_clip(relation),
-        },
-      );
+      final base = <String, Object?>{
+        'external_trip_id': externalTripId,
+        'service_date': _isoDate(serviceDate),
+        'latitude': latitude,
+        'longitude': longitude,
+        'reported_at': at.toUtc().toIso8601String(),
+        'device_session_id': sessionId,
+        'headsign': ?_clip(headsign),
+        'relation': ?_clip(relation),
+      };
+      final speed = speedMetersPerSecond;
+      final heading = bearingDegrees;
+      final withExtras = <String, Object?>{
+        ...base,
+        // Arah dari GPS hanya berarti bila kereta benar-benar bergerak.
+        if (speed != null && speed >= 0 && speed <= 60) 'speed': speed,
+        if (heading != null &&
+            heading >= 0 &&
+            heading < 360 &&
+            speed != null &&
+            speed > 1.5)
+          'bearing': heading,
+      };
+      final client = Supabase.instance.client;
+      if (!_extrasSupported) {
+        await client.from('crowd_position_reports').insert(base);
+        return;
+      }
+      try {
+        await client.from('crowd_position_reports').insert(withExtras);
+      } on PostgrestException catch (e) {
+        // PGRST204: kolom tidak ada di schema cache; 42703: undefined_column.
+        if (e.code == 'PGRST204' || e.code == '42703') {
+          _extrasSupported = false;
+          await client.from('crowd_position_reports').insert(base);
+        }
+      }
     } on Object {
-      // Best-effort — a failed report must never surface to the rider or
-      // interrupt their trip.
+      // Best-effort: laporan gagal tidak boleh mengganggu perjalanan.
     }
-    return position;
   }
 
   /// Reports that the rider's train has just reached [stationCode], heading

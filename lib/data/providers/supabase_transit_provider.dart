@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/foundation.dart' show visibleForTesting;
 import 'package:supabase_flutter/supabase_flutter.dart';
 
@@ -833,17 +835,99 @@ class SupabaseTransitProvider
     );
   }
 
+  /// Posisi kereta untuk peta: perkiraan dan sumber resmi dari
+  /// `vehicle_positions`, ditambah posisi langsung dari penumpang di
+  /// `train_live` (diperbarui tiap beberapa detik lewat Realtime).
+  ///
+  /// Bila `train_live` bisa dibaca, baris `crowd_sourced` di `vehicle_positions`
+  /// disembunyikan karena hanya salinan semenit-sekali dari kereta yang sama.
+  /// Bila belum bisa (migrasi belum diterapkan, atau Realtime gagal), aplikasi
+  /// memakai `vehicle_positions` apa adanya seperti sebelumnya.
   @override
   Stream<List<VehiclePosition>> watchVehiclePositions() {
+    late final StreamController<List<VehiclePosition>> controller;
+    StreamSubscription<List<(VehiclePosition, bool)>>? baseSub;
+    StreamSubscription<List<VehiclePosition>>? liveSub;
+    var base = const <(VehiclePosition, bool)>[];
+    var live = const <VehiclePosition>[];
+    var liveWorks = false;
+
+    void emit() {
+      if (controller.isClosed) return;
+      controller.add(<VehiclePosition>[
+        for (final (position, isCrowd) in base)
+          if (!(isCrowd && liveWorks)) position,
+        ...live,
+      ]);
+    }
+
+    // ignore: close_sinks, ditutup oleh pendengarnya lewat onCancel di bawah.
+    controller = StreamController<List<VehiclePosition>>(
+      onListen: () {
+        baseSub = _baseVehicleRows().listen((rows) {
+          base = rows;
+          emit();
+        }, onError: controller.addError);
+        liveSub = _liveTrainRows().listen(
+          (rows) {
+            live = rows;
+            liveWorks = true;
+            emit();
+          },
+          onError: (Object _) {
+            // train_live belum ada atau Realtime putus: kembali ke tabel lama.
+            live = const <VehiclePosition>[];
+            liveWorks = false;
+            emit();
+          },
+        );
+      },
+      onCancel: () async {
+        await baseSub?.cancel();
+        await liveSub?.cancel();
+      },
+    );
+    return controller.stream;
+  }
+
+  Stream<List<(VehiclePosition, bool)>> _baseVehicleRows() {
     return _client
         .from('vehicle_positions')
         .stream(primaryKey: <String>['id'])
         .asyncMap((rows) async {
           final codes = await _stationCodesById();
-          return rows
-              .map((row) => _vehiclePositionFromRow(row, codes))
-              .toList(growable: false);
+          return <(VehiclePosition, bool)>[
+            for (final row in rows)
+              (_vehiclePositionFromRow(row, codes), row['source'] == 'crowd_sourced'),
+          ];
         });
+  }
+
+  Stream<List<VehiclePosition>> _liveTrainRows() {
+    return _client
+        .from('train_live')
+        .stream(primaryKey: <String>['train_key'])
+        .map(
+          (rows) => <VehiclePosition>[
+            for (final row in rows) _liveTrainFromRow(row),
+          ],
+        );
+  }
+
+  VehiclePosition _liveTrainFromRow(Map<String, dynamic> row) {
+    return VehiclePosition(
+      id: 'live:${row['train_key']}',
+      tripId: (row['external_trip_id'] as String?) ?? '',
+      latitude: (row['latitude'] as num).toDouble(),
+      longitude: (row['longitude'] as num).toDouble(),
+      recordedAt: DateTime.parse(row['recorded_at'] as String),
+      freshness: DataFreshness.nearRealtime,
+      sourceLabel: 'Basis data KRL • Komunitas',
+      bearing: (row['bearing'] as num?)?.toDouble(),
+      speedMetersPerSecond: (row['speed'] as num?)?.toDouble(),
+      headsign: row['headsign'] as String?,
+      relation: row['relation'] as String?,
+    );
   }
 
   VehiclePosition _vehiclePositionFromRow(

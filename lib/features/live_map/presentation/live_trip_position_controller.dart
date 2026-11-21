@@ -49,6 +49,9 @@ class TripMapMarker {
     required this.bearing,
     required this.hopIndex,
     required this.hopFraction,
+    this.at,
+    this.speedMetersPerSecond,
+    this.fixPoint,
   });
 
   final LatLng point;
@@ -59,6 +62,19 @@ class TripMapMarker {
   /// Which hop (station i to i+1) the train is on, and how far through it.
   final int hopIndex;
   final double hopFraction;
+
+  /// Kapan posisi ini benar-benar terukur (waktu fix GPS), bukan kapan
+  /// dihitung. Penggerak peta memakainya untuk menghitung kecepatan dan
+  /// memprediksi posisi di antara fix. Null untuk perkiraan dari jadwal.
+  final DateTime? at;
+
+  /// Kecepatan dari fix GPS (m/s), bila ada.
+  final double? speedMetersPerSecond;
+
+  /// Titik GPS mentah di balik posisi ini; null untuk perkiraan jadwal.
+  /// Penggerak peta memproyeksikannya sendiri ke seluruh rute, jadi kereta
+  /// tidak tertahan di ujung hop ketika indeks stasiun terlambat naik.
+  final LatLng? fixPoint;
 }
 
 /// Drives the "you are here" marker on the live map while an Active Trip is
@@ -151,13 +167,21 @@ class LiveTripPositionController extends Notifier<TripMapMarker?> {
     }
     final hop = route.hops[index.clamp(0, hopCount - 1)];
 
-    TripMapMarker at(double fraction) {
+    TripMapMarker at(
+      double fraction, {
+      DateTime? measuredAt,
+      double? speed,
+      LatLng? fixPoint,
+    }) {
       final p = pointAlongPath(hop, fraction);
       return TripMapMarker(
         point: p.point,
         bearing: p.bearing,
         hopIndex: index,
         hopFraction: fraction,
+        at: measuredAt,
+        speedMetersPerSecond: speed,
+        fixPoint: fixPoint,
       );
     }
 
@@ -166,7 +190,12 @@ class LiveTripPositionController extends Notifier<TripMapMarker?> {
     if (fix != null) {
       final age = now.difference(fix.at);
       if (age <= _gpsStaleAfter) {
-        return at(fractionNearest(hop, fix.point));
+        return at(
+          fractionNearest(hop, fix.point),
+          measuredAt: fix.at,
+          speed: fix.speedMetersPerSecond,
+          fixPoint: fix.point,
+        );
       }
       if (age <= _deadReckoningStaleAfter &&
           fix.speedMetersPerSecond != null &&

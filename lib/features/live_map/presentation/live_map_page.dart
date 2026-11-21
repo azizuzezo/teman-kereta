@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
+import 'package:flutter/scheduler.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:geolocator/geolocator.dart';
@@ -9,6 +10,7 @@ import 'package:latlong2/latlong.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../../../app/theme/app_theme.dart';
+import '../../../core/utils/geo.dart';
 import '../../../core/widgets/empty_state.dart';
 import '../../../core/widgets/tk_components.dart';
 import '../../../data/providers/provider_registry.dart';
@@ -18,12 +20,16 @@ import '../../../domain/usecases/transit_network.dart';
 import '../../intercity/presentation/intercity_map_page.dart';
 import '../../intercity/presentation/trip_mode.dart';
 import 'active_trip_route.dart';
+import 'krl_train_painter.dart' show metersPerPixel;
 import 'live_map_geometry.dart';
 import 'live_trip_position_controller.dart';
 import 'map_panels.dart';
 import 'map_points_layer.dart';
 import 'map_tiles.dart';
+import 'map_vehicles_layer.dart';
+import 'rider_train_motion.dart';
 import 'trip_train_layer.dart';
+import 'vehicle_motion.dart';
 
 /// Live map of the KRL network.
 ///
@@ -129,7 +135,8 @@ class _MapBody extends ConsumerStatefulWidget {
   ConsumerState<_MapBody> createState() => _MapBodyState();
 }
 
-class _MapBodyState extends ConsumerState<_MapBody> {
+class _MapBodyState extends ConsumerState<_MapBody>
+    with TickerProviderStateMixin {
   static const _packageName = 'id.temankereta.teman_kereta';
 
   final MapController _mapController = MapController();
@@ -147,6 +154,22 @@ class _MapBodyState extends ConsumerState<_MapBody> {
   final ValueNotifier<bool> _followTrain = ValueNotifier(false);
   bool _mapReady = false;
   String? _framedTripId;
+
+  /// Trip yang sudah otomatis diikuti kameranya, supaya sesudah pengguna
+  /// menggeser peta dengan tangan, kamera tidak merebut balik.
+  String? _autoFollowedTripId;
+
+  /// Penggerak per frame: kereta penumpang dan kereta pengguna lain meluncur
+  /// di atas rel, bukan meloncat tiap fix GPS. Satu Ticker untuk keduanya,
+  /// berhenti sendiri bila tidak ada yang bergerak (juga ikut mati saat tab
+  /// peta tidak tampil, lewat TickerMode).
+  final RiderTrainMotion _rider = RiderTrainMotion();
+  late final VehicleMotionHub _hub = VehicleMotionHub(
+    riderPoint: () => _rider.pose.value?.point,
+    stationPoint: (code) => _stationLatLng(code),
+  );
+  Ticker? _ticker;
+  Timer? _staleTimer;
   final TileHealthTracker _tileHealth = TileHealthTracker();
   final StreamController<void> _tileReset = StreamController<void>.broadcast();
 
@@ -175,15 +198,35 @@ class _MapBodyState extends ConsumerState<_MapBody> {
   void initState() {
     super.initState();
     _derive();
+    _rider.pose.addListener(_followFrame);
+    _hub.setRails(<List<LatLng>>[for (final t in _tracks) t.points]);
+    ref.listenManual<RouteTrack?>(activeTripTrackProvider, (previous, next) {
+      _rider.setTrack(next);
+      _rider.observe(ref.read(liveTripPositionControllerProvider));
+      _syncTicker();
+    }, fireImmediately: true);
     ref.listenManual<TripMapMarker?>(liveTripPositionControllerProvider, (
       previous,
       next,
     ) {
-      if (next == null || !_followTrain.value || !_mapReady) return;
-      _mapController.move(
-        next.point,
-        math.max(_mapController.camera.zoom, 14.5),
-      );
+      _rider.observe(next);
+      if (next != null && previous == null) _autoFollow();
+      _syncTicker();
+    }, fireImmediately: true);
+    ref.listenManual<AsyncValue<List<VehiclePosition>>>(
+      vehiclePositionsProvider,
+      (previous, next) {
+        _hub.update(
+          next.asData?.value ?? const <VehiclePosition>[],
+          DateTime.now(),
+        );
+        _syncTicker();
+      },
+      fireImmediately: true,
+    );
+    // Kereta yang berhenti melapor harus hilang walau tidak ada data baru.
+    _staleTimer = Timer.periodic(const Duration(seconds: 30), (_) {
+      _hub.tick(DateTime.now());
     });
     ref.listenManual<ActiveTripRoute?>(
       activeTripRouteProvider,
@@ -205,6 +248,7 @@ class _MapBodyState extends ConsumerState<_MapBody> {
     if (!identical(oldWidget.stations, widget.stations)) {
       _derive();
       _trackKey = null;
+      _hub.setRails(<List<LatLng>>[for (final t in _tracks) t.points]);
     }
   }
 
@@ -275,8 +319,63 @@ class _MapBodyState extends ConsumerState<_MapBody> {
     );
   }
 
+  LatLng? _stationLatLng(String code) {
+    final station = _stationsByCode[code];
+    if (station == null) return null;
+    return LatLng(station.latitude, station.longitude);
+  }
+
+  /// Menyalakan Ticker selama ada yang perlu digerakkan.
+  void _syncTicker() {
+    if (!mounted) return;
+    if (!_rider.wantsFrames && !_hub.hasVehicles) return;
+    final ticker = _ticker ??= createTicker(_onFrame);
+    if (!ticker.isActive) ticker.start();
+  }
+
+  void _onFrame(Duration elapsed) {
+    final now = DateTime.now();
+    final riderBusy = _rider.tick(now);
+    final vehiclesBusy = _hub.tick(now);
+    if (!riderBusy && !vehiclesBusy) {
+      _ticker?.stop();
+    }
+  }
+
+  /// Kamera ikut kereta penumpang tiap frame, sedikit di depan kepalanya
+  /// (sekitar 40 dp) supaya jalan di depan lebih terlihat. Peta tetap utara di
+  /// atas, jadi geseran dibuat kecil: kereta selalu dekat tengah layar.
+  void _followFrame() {
+    final pose = _rider.pose.value;
+    if (pose == null || !_followTrain.value || !_mapReady) return;
+    final camera = _mapController.camera;
+    final zoom = math.max(camera.zoom, 14.5);
+    final aheadMeters = 40 * metersPerPixel(zoom, pose.point.latitude);
+    final shifted = destinationPoint(
+      pose.point.latitude,
+      pose.point.longitude,
+      pose.bearing,
+      aheadMeters,
+    );
+    _mapController.move(LatLng(shifted.$1, shifted.$2), zoom);
+  }
+
+  /// Begitu kereta penumpang pertama kali muncul di peta, kamera mengikutinya.
+  void _autoFollow() {
+    final route = ref.read(activeTripRouteProvider);
+    if (route == null || _autoFollowedTripId == route.tripId) return;
+    if (!_mapReady) return;
+    _autoFollowedTripId = route.tripId;
+    _followMyTrain();
+  }
+
   @override
   void dispose() {
+    _ticker?.dispose();
+    _staleTimer?.cancel();
+    _rider.pose.removeListener(_followFrame);
+    _rider.dispose();
+    _hub.dispose();
     _selection.dispose();
     _lineFilter.dispose();
     _network.dispose();
@@ -378,11 +477,12 @@ class _MapBodyState extends ConsumerState<_MapBody> {
     if (tap == null) {
       return;
     }
-    final vehicles = freshVehicles(
-      ref.read(vehiclePositionsProvider).asData?.value ??
-          const <VehiclePosition>[],
-      DateTime.now(),
-    );
+    // Posisi yang sedang digambar (bukan posisi laporan terakhir), supaya
+    // kereta yang disentuh adalah kereta yang terlihat di bawah jari.
+    final vehicles = <VehiclePosition>[
+      for (final v in _hub.frame.value)
+        v.vehicle.copyWith(latitude: v.point.latitude, longitude: v.point.longitude),
+    ];
     _selection.value = hitTestMapPoints(
       camera: _mapController.camera,
       tap: tap,
@@ -396,8 +496,9 @@ class _MapBodyState extends ConsumerState<_MapBody> {
   /// while the map is up.
   void _frameTrip(ActiveTripRoute? route) {
     if (route == null) {
-      _framedTripId = null;
-      _followTrain.value = false;
+      // Rute bisa null sesaat saat data stasiun dimuat ulang, jadi null tidak
+      // dianggap akhir trip: mode ikuti dan bingkai rute dibiarkan. Trip baru
+      // punya id baru, sehingga dibingkai dan diikuti ulang sendiri.
       return;
     }
     if (!_mapReady || _framedTripId == route.tripId) return;
@@ -412,12 +513,14 @@ class _MapBodyState extends ConsumerState<_MapBody> {
   }
 
   void _followMyTrain() {
-    final marker = ref.read(liveTripPositionControllerProvider);
+    final point =
+        _rider.pose.value?.point ??
+        ref.read(liveTripPositionControllerProvider)?.point;
     _followTrain.value = true;
-    if (marker != null) {
+    if (point != null) {
       _mapController.move(
-        marker.point,
-        math.max(_mapController.camera.zoom, 14.5),
+        point,
+        math.max(_mapController.camera.zoom, 15.5),
       );
     } else {
       _frameTrip(ref.read(activeTripRouteProvider));
@@ -642,6 +745,9 @@ class _MapBodyState extends ConsumerState<_MapBody> {
               onMapReady: () {
                 _mapReady = true;
                 _frameTrip(ref.read(activeTripRouteProvider));
+                if (ref.read(liveTripPositionControllerProvider) != null) {
+                  _autoFollow();
+                }
               },
               onPositionChanged: (camera, hasGesture) {
                 if (hasGesture && _followTrain.value) {
@@ -666,6 +772,7 @@ class _MapBodyState extends ConsumerState<_MapBody> {
                     _buildTrackLayer(_lineFilter.value, _network.value, tk),
               ),
               const TripRouteLayer(),
+              TripAheadLayer(motion: _rider),
               ValueListenableBuilder<TransitNetwork>(
                 valueListenable: _network,
                 builder: (context, network, _) => _PointsHost(
@@ -677,7 +784,8 @@ class _MapBodyState extends ConsumerState<_MapBody> {
                   colors: tk,
                 ),
               ),
-              const TripTrainLayer(),
+              MapVehiclesLayer(hub: _hub, selection: _selection, colors: tk),
+              TripTrainLayer(motion: _rider),
             ],
           ),
         ),
@@ -791,10 +899,9 @@ class _MapBodyState extends ConsumerState<_MapBody> {
   }
 }
 
-/// Rebuilds only the stations/trains/rider canvas when live data, selection or
-/// filter change. A timer re-checks train freshness so a stale marker leaves
-/// the map even when no new data arrives.
-class _PointsHost extends ConsumerStatefulWidget {
+/// Rebuilds only the stations canvas when selection or filter change. Trains
+/// are drawn by `MapVehiclesLayer`, which animates every frame on its own.
+class _PointsHost extends StatelessWidget {
   const _PointsHost({
     required this.points,
     required this.lineColors,
@@ -812,86 +919,20 @@ class _PointsHost extends ConsumerStatefulWidget {
   final TkColors colors;
 
   @override
-  ConsumerState<_PointsHost> createState() => _PointsHostState();
-}
-
-class _PointsHostState extends ConsumerState<_PointsHost> {
-  Timer? _staleTimer;
-
-  @override
-  void initState() {
-    super.initState();
-    _staleTimer = Timer.periodic(const Duration(seconds: 30), (_) {
-      if (mounted) {
-        setState(() {});
-      }
-    });
-  }
-
-  @override
-  void dispose() {
-    _staleTimer?.cancel();
-    super.dispose();
-  }
-
-  /// A train without its own heading points from the station it left to the
-  /// one it is heading for, so its direction shows on the map.
-  VehiclePosition _withBearing(VehiclePosition v) {
-    if (v.bearing != null) return v;
-    final from = v.previousStationId;
-    final to = v.nextStationId;
-    if (from == null || to == null) return v;
-    Station? find(String code) {
-      for (final p in widget.points) {
-        if (p.station.code == code || p.station.id == code) return p.station;
-      }
-      return null;
-    }
-
-    final a = find(from);
-    final b = find(to);
-    if (a == null || b == null) return v;
-    final dx =
-        (b.longitude - a.longitude) * math.cos(a.latitude * math.pi / 180);
-    final dy = b.latitude - a.latitude;
-    final degrees = (math.atan2(dx, dy) * 180 / math.pi + 360) % 360;
-    return v.copyWith(bearing: degrees);
-  }
-
-  @override
   Widget build(BuildContext context) {
-    final mine = ref.watch(liveTripPositionControllerProvider)?.point;
-    final vehicles = <VehiclePosition>[
-      for (final v in freshVehicles(
-        ref.watch(vehiclePositionsProvider).asData?.value ??
-            const <VehiclePosition>[],
-        DateTime.now(),
-      ))
-        // The rider's own train is already drawn by TripTrainLayer; the
-        // crowd position it helps produce would only be a second dot on it.
-        if (mine == null ||
-            const Distance().as(
-                  LengthUnit.Meter,
-                  mine,
-                  LatLng(v.latitude, v.longitude),
-                ) >
-                400)
-          _withBearing(v),
-    ];
     return ListenableBuilder(
       listenable: Listenable.merge(<Listenable>[
-        widget.lineFilter,
-        widget.selection,
-        widget.myLocation,
+        lineFilter,
+        selection,
+        myLocation,
       ]),
       builder: (context, _) => MapPointsLayer(
-        stations: widget.points,
-        vehicles: vehicles,
-        lineColors: widget.lineColors,
-        lineFilter: widget.lineFilter.value,
-        selection: widget.selection.value,
-        myLocation: widget.myLocation.value,
-        colors: widget.colors,
+        stations: points,
+        lineColors: lineColors,
+        lineFilter: lineFilter.value,
+        selection: selection.value,
+        myLocation: myLocation.value,
+        colors: colors,
       ),
     );
   }

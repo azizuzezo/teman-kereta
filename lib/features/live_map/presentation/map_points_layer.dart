@@ -1,5 +1,3 @@
-import 'dart:math' as math;
-
 import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart' hide Path;
@@ -85,7 +83,8 @@ MapSelection? hitTestMapPoints({
   return null;
 }
 
-/// Stations, trains and the rider's own position, drawn in one canvas pass.
+/// Stations and the rider's phone, drawn in one canvas pass. Trains are not
+/// here: they move every frame, see `MapVehiclesLayer`.
 ///
 /// This replaces ~100 `Marker` widgets (each a Row with a blurred-shadow Text)
 /// that flutter_map re-laid-out and repainted on every pan frame. Here a pan
@@ -94,7 +93,6 @@ MapSelection? hitTestMapPoints({
 class MapPointsLayer extends StatelessWidget {
   const MapPointsLayer({
     required this.stations,
-    required this.vehicles,
     required this.lineColors,
     required this.lineFilter,
     required this.selection,
@@ -104,7 +102,6 @@ class MapPointsLayer extends StatelessWidget {
   });
 
   final List<MapStationPoint> stations;
-  final List<VehiclePosition> vehicles;
   final Map<String, Color> lineColors;
   final String? lineFilter;
   final MapSelection? selection;
@@ -121,7 +118,6 @@ class MapPointsLayer extends StatelessWidget {
           painter: _MapPointsPainter(
             camera: camera,
             stations: stations,
-            vehicles: vehicles,
             lineColors: lineColors,
             lineFilter: lineFilter,
             selection: selection,
@@ -141,7 +137,6 @@ class _LabelPaint {
 }
 
 final Map<String, _LabelPaint> _labelCache = <String, _LabelPaint>{};
-final Map<int, TextPainter> _glyphCache = <int, TextPainter>{};
 
 _LabelPaint _labelFor(String name, TkColors tk, {required bool bold}) {
   final key = '$name|${tk.isDark}|$bold|${tk.text.toARGB32()}';
@@ -182,30 +177,10 @@ _LabelPaint _labelFor(String name, TkColors tk, {required bool bold}) {
   return _labelCache[key] = _LabelPaint(fill, halo);
 }
 
-TextPainter _glyph(IconData icon, Color color, double size) {
-  final key = Object.hash(icon.codePoint, color.toARGB32(), size);
-  return _glyphCache.putIfAbsent(
-    key,
-    () => TextPainter(
-      text: TextSpan(
-        text: String.fromCharCode(icon.codePoint),
-        style: TextStyle(
-          fontFamily: icon.fontFamily,
-          package: icon.fontPackage,
-          fontSize: size,
-          color: color,
-        ),
-      ),
-      textDirection: TextDirection.ltr,
-    )..layout(),
-  );
-}
-
 class _MapPointsPainter extends CustomPainter {
   _MapPointsPainter({
     required this.camera,
     required this.stations,
-    required this.vehicles,
     required this.lineColors,
     required this.lineFilter,
     required this.selection,
@@ -215,7 +190,6 @@ class _MapPointsPainter extends CustomPainter {
 
   final MapCamera camera;
   final List<MapStationPoint> stations;
-  final List<VehiclePosition> vehicles;
   final Map<String, Color> lineColors;
   final String? lineFilter;
   final MapSelection? selection;
@@ -346,60 +320,6 @@ class _MapPointsPainter extends CustomPainter {
       final at = Offset(rects[i].left + 2, rects[i].top + 2);
       labels[i].halo.paint(canvas, at);
       labels[i].fill.paint(canvas, at);
-    }
-
-    // Trains.
-    final selectedVehicleId = switch (selection) {
-      VehicleSelection(:final vehicle) => vehicle.id,
-      _ => null,
-    };
-    final detailed = zoom >= _vehicleDotZoom;
-    for (final v in vehicles) {
-      final o = toScreen(LatLng(v.latitude, v.longitude));
-      if (!viewport.contains(o)) {
-        continue;
-      }
-      final isSelected = v.id == selectedVehicleId;
-      if (isSelected) {
-        fillPaint.color = colors.accent.withValues(alpha: 0.25);
-        canvas.drawCircle(o, 22, fillPaint);
-      }
-      if (!detailed) {
-        fillPaint.color = colors.surface;
-        canvas.drawCircle(o, 4.2, fillPaint);
-        fillPaint.color = colors.primary;
-        canvas.drawCircle(o, 3, fillPaint);
-        continue;
-      }
-      final heading = v.bearing;
-      if (heading != null) {
-        // A pointer on the rim shows which way the train is going.
-        final angle = heading * math.pi / 180;
-        final dir = Offset(math.sin(angle), -math.cos(angle));
-        final side = Offset(-dir.dy, dir.dx);
-        final tip = o + dir * 21;
-        final pointer = Path()
-          ..moveTo(tip.dx, tip.dy)
-          ..lineTo((o + dir * 10 + side * 8).dx, (o + dir * 10 + side * 8).dy)
-          ..lineTo((o + dir * 10 - side * 8).dx, (o + dir * 10 - side * 8).dy)
-          ..close();
-        canvas
-          ..drawPath(
-            pointer,
-            Paint()
-              ..color = colors.surface
-              ..style = PaintingStyle.stroke
-              ..strokeWidth = 3
-              ..strokeJoin = StrokeJoin.round,
-          )
-          ..drawPath(pointer, Paint()..color = colors.primary);
-      }
-      fillPaint.color = colors.surface;
-      canvas.drawCircle(o, 13, fillPaint);
-      fillPaint.color = colors.primary;
-      canvas.drawCircle(o, 11, fillPaint);
-      final glyph = _glyph(Icons.train_rounded, colors.onPrimary, 14);
-      glyph.paint(canvas, o - Offset(glyph.width / 2, glyph.height / 2));
     }
 
     // The rider's phone. (The rider's train is drawn by `TripTrainLayer`.)

@@ -31,7 +31,7 @@ import 'trip_signal_gap.dart';
 /// "Deteksi Otomatis Naik KRL" is enabled — see [CrowdPositionReporter].
 /// Purely a crowd-sourced-position upload to Supabase, unrelated to this
 /// trip's own progress tracking (see `_nativeSyncInterval` for that).
-const _crowdReportInterval = Duration(seconds: 20);
+const _crowdReportInterval = Duration(seconds: 5);
 
 /// How often Dart polls the native `ActiveTripLocationService` for the
 /// continuously-updated distance/speed/station-progress it now owns (see
@@ -42,9 +42,14 @@ const _crowdReportInterval = Duration(seconds: 20);
 /// UI/local snapshot with whatever native has already decided.
 const _nativeSyncInterval = Duration(seconds: 4);
 
+/// Fix native yang lebih tua dari ini tidak dilaporkan; laporan jatuh kembali
+/// ke satu panggilan GPS baru.
+const _crowdFixMaxAge = Duration(seconds: 12);
+
 class ActiveTripController extends Notifier<ActiveTripSession?> {
   late final PreferencesStore _store;
   Timer? _crowdReportTimer;
+  DateTime? _lastReportedFixAt;
   Timer? _nativeSyncTimer;
 
   /// The other way(s) round for the current trip, built once per trip.
@@ -469,14 +474,34 @@ class ActiveTripController extends Notifier<ActiveTripSession?> {
       final now = ref.read(clockProvider).now();
       serviceDate = DateTime(now.year, now.month, now.day);
     }
-    await ref
-        .read(crowdPositionReporterProvider)
-        .reportOnce(
-          externalTripId: externalTripId,
-          serviceDate: serviceDate,
-          headsign: leg?.headsign,
-          relation: leg?.relation,
-        );
+    final reporter = ref.read(crowdPositionReporterProvider);
+    // Pakai fix dari pelacak native bila masih segar: tidak perlu panggilan GPS
+    // kedua, jadi laporan tiap beberapa detik tidak menguras baterai.
+    final fix = ref.read(latestNativeGpsFixProvider);
+    final now = ref.read(clockProvider).now();
+    if (fix != null && now.difference(fix.at).abs() <= _crowdFixMaxAge) {
+      // Fix yang sama sudah dilaporkan; tunggu yang baru.
+      if (fix.at == _lastReportedFixAt) return;
+      _lastReportedFixAt = fix.at;
+      await reporter.reportFix(
+        externalTripId: externalTripId,
+        serviceDate: serviceDate,
+        latitude: fix.latitude,
+        longitude: fix.longitude,
+        at: fix.at,
+        speedMetersPerSecond: fix.speedMetersPerSecond,
+        bearingDegrees: fix.bearingDegrees,
+        headsign: leg?.headsign,
+        relation: leg?.relation,
+      );
+      return;
+    }
+    await reporter.reportOnce(
+      externalTripId: externalTripId,
+      serviceDate: serviceDate,
+      headsign: leg?.headsign,
+      relation: leg?.relation,
+    );
   }
 
   /// Tells the server the train has just reached the station at [index], so
