@@ -32,10 +32,8 @@ PAGES = {
     "forum.html": ("/forum", True),
 }
 
-DESKTOP = [("/", "Beranda"), ("/#fitur", "Fitur"), ("/#cara-kerja", "Cara Kerja"),
-           ("/jadwal/", "Jadwal"), ("/cctv/", "CCTV Stasiun"), ("/artikel/", "Artikel")]
-MOBILE = [("/", "Beranda"), ("/forum", "Forum Komunitas KRL"), ("/#fitur", "Fitur"),
-          ("/#cara-kerja", "Cara Kerja"), ("/#faq", "FAQ"), ("/jadwal/", "Jadwal KRL"),
+DESKTOP = [("/", "Beranda"), ("/jadwal/", "Jadwal"), ("/cctv/", "CCTV Stasiun"), ("/artikel/", "Artikel")]
+MOBILE = [("/", "Beranda"), ("/forum", "Forum Komunitas KRL"), ("/#faq", "FAQ"), ("/jadwal/", "Jadwal KRL"),
           ("/cctv/", "CCTV Stasiun"), ("/artikel/", "Artikel"), ("/tentang/", "Tentang")]
 
 DL = ('<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" '
