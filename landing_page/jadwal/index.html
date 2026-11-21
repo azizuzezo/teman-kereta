@@ -1,0 +1,140 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Jadwal KRL dan Commuter Line Lengkap GAPEKA 2026 | Teman Kereta</title>
+  <meta name="description" content="Timetable lengkap GAPEKA 2026 untuk 26 lintas KRL dan Commuter Line: Jabodetabek, Yogyakarta, Bandara, Bandung Raya, dan lainnya. Cek jam kereta per stasiun. Berlaku 1 Desember 2026.">
+  <meta name="robots" content="index, follow, max-image-preview:large, max-snippet:-1">
+  <meta name="theme-color" content="#2563eb">
+  <link rel="canonical" href="https://temankereta.tech/jadwal/">
+
+  <meta property="og:type" content="website">
+  <meta property="og:url" content="https://temankereta.tech/jadwal/">
+  <meta property="og:site_name" content="Teman Kereta">
+  <meta property="og:locale" content="id_ID">
+  <meta property="og:title" content="Jadwal KRL dan Commuter Line Lengkap GAPEKA 2026">
+  <meta property="og:description" content="Cek jam kereta per stasiun untuk 26 lintas KRL dan Commuter Line. Berlaku 1 Desember 2026.">
+  <meta property="og:image" content="https://temankereta.tech/assets/branding/og-image.png">
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="Jadwal KRL dan Commuter Line Lengkap GAPEKA 2026">
+  <meta name="twitter:description" content="Cek jam kereta per stasiun untuk 26 lintas KRL dan Commuter Line. Berlaku 1 Desember 2026.">
+  <meta name="twitter:image" content="https://temankereta.tech/assets/branding/og-image.png">
+
+  <link rel="icon" type="image/png" href="/assets/branding/tk_icon.png">
+  <link rel="apple-touch-icon" href="/assets/branding/tk_icon.png">
+  <link rel="manifest" href="/site.webmanifest">
+  <link rel="stylesheet" href="/assets/css/style.css?v=21">
+  <link rel="stylesheet" href="/assets/css/legal.css?v=1">
+  <link rel="stylesheet" href="/assets/css/artikel.css?v=2">
+  <link rel="stylesheet" href="/assets/css/jadwal.css?v=5">
+  <link rel="preload" href="/jadwal/data.json" as="fetch" crossorigin>
+
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@graph": [
+      {
+        "@type": "WebPage",
+        "@id": "https://temankereta.tech/jadwal/#webpage",
+        "url": "https://temankereta.tech/jadwal/",
+        "name": "Jadwal KRL dan Commuter Line Lengkap GAPEKA 2026",
+        "description": "Timetable GAPEKA 2026 untuk 26 lintas KRL dan Commuter Line, dicari per stasiun atau per lintas.",
+        "inLanguage": "id-ID",
+        "isPartOf": { "@id": "https://temankereta.tech/#website" }
+      },
+      {
+        "@type": "BreadcrumbList",
+        "itemListElement": [
+          { "@type": "ListItem", "position": 1, "name": "Beranda", "item": "https://temankereta.tech/" },
+          { "@type": "ListItem", "position": 2, "name": "Jadwal KRL", "item": "https://temankereta.tech/jadwal/" }
+        ]
+      }
+    ]
+  }
+  </script>
+</head>
+<body class="lg-body jd-body">
+  <a class="lg-skip" href="#isi">Lewati ke isi halaman</a>
+
+  <header class="lg-header">
+    <div class="tk-container lg-header-inner">
+      <a class="lg-brand" href="/">
+        <span class="lg-brand-tile"><img src="/assets/branding/tk_icon.png" alt="" width="36" height="36"></span>
+        <span class="lg-brand-name">Teman Kereta<span class="lg-brand-sub">Teman Perjalanan KRL</span></span>
+      </a>
+      <nav aria-label="Navigasi situs">
+        <ul class="lg-nav">
+          <li><a href="/">Beranda</a></li>
+          <li><a href="/jadwal/" aria-current="page">Jadwal</a></li>
+          <li><a href="/cctv/">CCTV Stasiun</a></li>
+          <li><a href="/forum">Forum</a></li>
+          <li><a href="/artikel/">Artikel</a></li>
+          <li><a href="/tentang/">Tentang</a></li>
+        </ul>
+      </nav>
+    </div>
+  </header>
+
+  <main id="isi" class="lg-main jd-main">
+    <section class="jd-hero" aria-labelledby="jd-h1">
+      <div class="tk-container">
+        <div class="jd-hero-top">
+          <h1 id="jd-h1">Jadwal KRL</h1>
+          <span class="jd-pill"><span class="jd-pill-dot" aria-hidden="true"></span>GAPEKA 2026 · mulai 1 Des</span>
+        </div>
+        <div class="jd-find">
+          <label class="jd-search" for="jd-q">
+            <svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
+            <span class="jd-sr">Cari stasiun</span>
+            <input id="jd-q" type="search" placeholder="Mau naik dari stasiun mana?" autocomplete="off" spellcheck="false" role="combobox" aria-expanded="false" aria-controls="jd-sug" aria-autocomplete="list">
+          </label>
+          <ul id="jd-sug" class="jd-sug" role="listbox" aria-label="Stasiun" hidden></ul>
+        </div>
+        <div id="jd-pop" class="jd-pops" aria-label="Stasiun populer"></div>
+      </div>
+    </section>
+
+    <div class="tk-container">
+      <p id="jd-status" class="jd-empty" role="status">Memuat jadwal…</p>
+      <noscript><p class="jd-empty">Pencarian jadwal butuh JavaScript. Ringkasan per lintas ada di bawah.</p></noscript>
+
+      <div id="jd-app" hidden>
+        <div id="jd-tabs" class="jd-seg" role="tablist" aria-label="Lihat jadwal">
+          <button type="button" role="tab" class="jd-seg-b" id="tab-stasiun" aria-selected="true" aria-controls="panel-stasiun">Per stasiun</button>
+          <button type="button" role="tab" class="jd-seg-b" id="tab-lintas" aria-selected="false" aria-controls="panel-lintas" tabindex="-1">Per lintas</button>
+        </div>
+        <section id="panel-stasiun" role="tabpanel" aria-labelledby="tab-stasiun"><div id="jd-st-out" class="jd-out"></div></section>
+        <section id="panel-lintas" role="tabpanel" aria-labelledby="tab-lintas" hidden><div id="jd-lines"></div><div id="jd-ln-out" class="jd-out"></div></section>
+      </div>
+
+      <details class="jd-sumwrap"><summary>Ringkasan 26 lintas</summary>
+        <!--RINGKASAN:MULAI--><table class="jd-sum"><caption>Ringkasan GAPEKA 2026 per lintas</caption><thead><tr><th scope="col">Lintas</th><th scope="col">Perjalanan</th><th scope="col">Stasiun</th><th scope="col">Berangkat pertama</th><th scope="col">Tiba terakhir</th></tr></thead><tbody><tr><th scope="row">Bogor / Nambo</th><td>386</td><td>27</td><td>03:52</td><td>01:23</td></tr><tr><th scope="row">Cikarang (Loop)</th><td>388</td><td>27</td><td>04:10</td><td>01:10</td></tr><tr><th scope="row">Rangkasbitung</th><td>206</td><td>25</td><td>03:45</td><td>01:14</td></tr><tr><th scope="row">Tangerang</th><td>124</td><td>15</td><td>04:27</td><td>00:16</td></tr><tr><th scope="row">Tanjung Priok</th><td>64</td><td>5</td><td>05:00</td><td>21:18</td></tr><tr><th scope="row">Yogyakarta - Palur</th><td>34</td><td>13</td><td>04:55</td><td>00:28</td></tr><tr><th scope="row">Bandara Soetta</th><td>140</td><td>8</td><td>04:52</td><td>23:43</td></tr><tr><th scope="row">Bandara YIA</th><td>50</td><td>3</td><td>04:28</td><td>22:07</td></tr><tr><th scope="row">Prameks</th><td>10</td><td>7</td><td>04:55</td><td>21:00</td></tr><tr><th scope="row">Bandung Raya</th><td>38</td><td>22</td><td>03:55</td><td>00:14</td></tr><tr><th scope="row">Garut</th><td>6</td><td>30</td><td>04:25</td><td>23:06</td></tr><tr><th scope="row">Walahar</th><td>10</td><td>10</td><td>05:00</td><td>20:17</td></tr><tr><th scope="row">Jatiluhur</th><td>4</td><td>8</td><td>04:48</td><td>22:33</td></tr><tr><th scope="row">Merak</th><td>14</td><td>11</td><td>05:00</td><td>23:06</td></tr><tr><th scope="row">Dhoho</th><td>13</td><td>46</td><td>03:40</td><td>23:07</td></tr><tr><th scope="row">Penataran</th><td>13</td><td>49</td><td>03:45</td><td>23:37</td></tr><tr><th scope="row">Jenggala</th><td>23</td><td>22</td><td>03:25</td><td>23:23</td></tr><tr><th scope="row">Supas</th><td>8</td><td>12</td><td>02:18</td><td>23:18</td></tr><tr><th scope="row">Arjonegoro</th><td>9</td><td>18</td><td>04:40</td><td>22:58</td></tr><tr><th scope="row">Blorasura</th><td>4</td><td>14</td><td>04:30</td><td>22:33</td></tr><tr><th scope="row">Bandara Adi Soemarmo</th><td>10</td><td>13</td><td>05:30</td><td>22:24</td></tr><tr><th scope="row">Feeder</th><td>72</td><td>3</td><td>05:16</td><td>23:29</td></tr><tr><th scope="row">Batara Kresna</th><td>8</td><td>5</td><td>06:00</td><td>19:00</td></tr><tr><th scope="row">Kedung Sepur</th><td>4</td><td>13</td><td>06:00</td><td>22:06</td></tr><tr><th scope="row">Pandanwangi</th><td>4</td><td>11</td><td>05:05</td><td>21:14</td></tr><tr><th scope="row">Siliwangi</th><td>6</td><td>9</td><td>05:15</td><td>21:45</td></tr></tbody></table><!--RINGKASAN:SELESAI-->
+      </details>
+      <p class="jd-src">Sumber: GAPEKA 2026, KP DJKA 116 Tahun 2026. KA antarkota tidak termasuk.</p>
+    </div>
+
+    <dialog id="jd-sheet" class="jd-sheet" aria-labelledby="jd-sh-title"><div class="jd-sh-body"></div></dialog>
+  </main>
+
+  <footer class="lg-footer">
+    <div class="tk-container">
+      <ul class="lg-footer-links">
+        <li><a href="/">Beranda</a></li>
+        <li><a href="/jadwal/">Jadwal</a></li>
+        <li><a href="/cctv/">CCTV Stasiun</a></li>
+        <li><a href="/forum">Forum</a></li>
+        <li><a href="/artikel/">Artikel</a></li>
+        <li><a href="/tentang/">Tentang</a></li>
+        <li><a href="/privacy">Kebijakan Privasi</a></li>
+        <li><a href="/terms">Syarat dan Ketentuan</a></li>
+        <li><a href="/delete-account">Hapus Akun</a></li>
+        <li><a href="mailto:support@temankereta.web.id">support@temankereta.web.id</a></li>
+      </ul>
+      <p>&copy; 2026 Teman Kereta by duacincin.id. Aplikasi independen, bukan aplikasi resmi KAI Commuter. Jadwal bersumber dari GAPEKA 2026; selalu cocokkan dengan pengumuman resmi operator.</p>
+    </div>
+  </footer>
+
+  <script src="/jadwal/app.js?v=1" defer></script>
+</body>
+</html>

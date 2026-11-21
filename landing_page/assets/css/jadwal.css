@@ -1,0 +1,329 @@
+/*
+ * Timetable KRL (/jadwal/). Mengikuti DESIGN.md: bahasa papan informasi stasiun,
+ * navy #17376B sebagai warna utama, merah #C81E28 hanya untuk momen penting
+ * (berikutnya, stasiun tujuan), latar #F3F5F9, kartu radius 20 tanpa bayangan,
+ * tombol radius 14, pil hanya untuk chip, angka tabular, gerak <= 220ms.
+ */
+.jd-body {
+  --navy: #17376B;
+  --navy-2: #0f2850;
+  --red: #C81E28;
+  --bg: #F3F5F9;
+  --ink: #0f172a;
+  --muted: #475569;
+  --faint: #94a3b8;
+  --line: #dfe5ee;
+  --soft: #eaf0f8;
+  --r-card: 20px;
+  --r-btn: 14px;
+  --ease: cubic-bezier(0.16, 1, 0.3, 1);
+  background: var(--bg);
+}
+.jd-sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+.jd-main { padding-top: 0; }
+.jd-body :focus-visible { outline: 3px solid #f59e0b; outline-offset: 2px; }
+.jd-eyebrow { margin: 0; font-size: 0.75rem; font-weight: 800; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); }
+.jd-empty { margin: 2rem 0; color: var(--muted); }
+
+/* ---------- Hero: papan navy dengan rel di dasar ---------- */
+.jd-hero {
+  position: relative;
+  color: #fff;
+  background: var(--navy);
+  padding: 2.25rem 0 3.25rem;
+  margin-bottom: 1.75rem;
+  overflow: hidden;
+}
+.jd-hero::after {
+  /* rel: dua batang dan bantalan, motif identitas */
+  content: "";
+  position: absolute;
+  left: 0; right: 0; bottom: 14px;
+  height: 14px;
+  opacity: 0.22;
+  background:
+    linear-gradient(#fff, #fff) 0 2px / 100% 2px no-repeat,
+    linear-gradient(#fff, #fff) 0 10px / 100% 2px no-repeat,
+    repeating-linear-gradient(90deg, #fff 0 3px, transparent 3px 22px) 0 0 / 100% 14px no-repeat;
+  pointer-events: none;
+}
+.jd-hero-top { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 0.75rem 1rem; margin-bottom: 1.25rem; }
+.jd-hero h1 { margin: 0; font-size: clamp(2rem, 7vw, 3.25rem); line-height: 1; letter-spacing: -0.035em; font-weight: 800; color: #fff; }
+.jd-pill {
+  display: inline-flex; align-items: center; gap: 0.5rem;
+  padding: 0.4rem 0.85rem; border-radius: 999px;
+  background: rgba(255, 255, 255, 0.1); border: 1px solid rgba(255, 255, 255, 0.22);
+  font-size: 0.8125rem; font-weight: 700; color: #e2e8f0; white-space: nowrap;
+}
+.jd-pill-dot { width: 8px; height: 8px; border-radius: 50%; background: #fbbf24; }
+
+.jd-find { position: relative; max-width: 720px; }
+.jd-search {
+  display: flex; align-items: center; gap: 0.75rem;
+  min-height: 60px; padding: 0 1.1rem;
+  background: #fff; color: var(--muted);
+  border-radius: var(--r-btn);
+  box-shadow: 0 0 0 4px rgba(255, 255, 255, 0.12);
+}
+.jd-search:focus-within { box-shadow: 0 0 0 4px #fbbf24; }
+.jd-search input {
+  flex: 1; min-width: 0; border: 0; outline: 0; background: transparent;
+  font: inherit; font-size: 1.125rem; font-weight: 600; color: var(--ink); min-height: 58px;
+}
+.jd-search input::placeholder { color: #64748b; font-weight: 500; }
+.jd-body .jd-search input:focus-visible { outline: none; }
+.jd-sug {
+  position: absolute; z-index: 20; left: 0; right: 0; top: calc(100% + 8px);
+  margin: 0; padding: 0.4rem; list-style: none;
+  background: #fff; color: var(--ink); border-radius: var(--r-btn);
+  box-shadow: 0 18px 40px rgba(10, 17, 29, 0.28);
+  max-height: 340px; overflow-y: auto;
+}
+.jd-sug li[data-id] {
+  display: flex; justify-content: space-between; align-items: center; gap: 1rem;
+  min-height: 48px; padding: 0 0.85rem; border-radius: 10px; cursor: pointer; font-weight: 600;
+}
+.jd-sug li[data-id]:hover, .jd-sug li[aria-selected="true"] { background: var(--soft); }
+.jd-sug-dots { display: inline-flex; gap: 4px; }
+.jd-sug-dots i { width: 10px; height: 10px; border-radius: 50%; }
+.jd-sug-none { padding: 0.85rem; color: var(--muted); }
+
+.jd-pops { display: flex; flex-wrap: wrap; gap: 0.5rem; margin-top: 1rem; }
+.jd-pop {
+  appearance: none; font: inherit; font-size: 0.875rem; font-weight: 600; color: #e2e8f0;
+  background: transparent; border: 1px solid rgba(255, 255, 255, 0.28); border-radius: 999px;
+  min-height: 40px; padding: 0 0.9rem; cursor: pointer;
+  transition: background-color 0.15s, color 0.15s, border-color 0.15s;
+}
+.jd-pop:hover { background: #fff; color: var(--navy); border-color: #fff; }
+
+/* ---------- Segmen ---------- */
+.jd-seg { display: inline-flex; padding: 4px; gap: 4px; background: #e3e8f0; border-radius: var(--r-btn); margin-bottom: 1.5rem; }
+.jd-seg-b {
+  appearance: none; border: 0; background: transparent; font: inherit; font-weight: 700; font-size: 0.9375rem;
+  color: var(--muted); min-height: 44px; padding: 0 1.15rem; border-radius: 11px; cursor: pointer;
+  transition: background-color 0.15s, color 0.15s;
+}
+.jd-seg-b[aria-selected="true"] { background: #fff; color: var(--navy); }
+
+/* ---------- Kepala stasiun ---------- */
+.jd-out { scroll-margin-top: 1rem; }
+.jd-st-head { margin-bottom: 1rem; }
+.jd-st-head h2 { margin: 0.15rem 0 0.6rem; font-size: clamp(1.75rem, 6vw, 2.5rem); line-height: 1.05; letter-spacing: -0.03em; font-weight: 800; color: var(--navy); }
+.jd-ln-title { border-left: 6px solid var(--c); padding-left: 0.75rem; }
+.jd-lines-at { display: flex; flex-wrap: wrap; gap: 0.4rem; }
+.jd-line {
+  display: inline-flex; align-items: center; gap: 0.4rem;
+  padding: 0.2rem 0.65rem 0.2rem 0.5rem; border-radius: 999px;
+  background: #fff; border: 1px solid var(--line);
+  font-size: 0.8125rem; font-weight: 700; color: var(--ink); white-space: nowrap;
+}
+.jd-line::before { content: ""; width: 10px; height: 10px; border-radius: 50%; background: var(--c); }
+
+/* ---------- Arah ---------- */
+.jd-dirs { display: flex; gap: 0.6rem; overflow-x: auto; padding: 2px 2px 0.5rem; margin: 0 -2px 0.75rem; scrollbar-width: thin; }
+.jd-dir {
+  flex: none; appearance: none; font: inherit; text-align: left; cursor: pointer;
+  display: flex; flex-direction: column; gap: 0.15rem; min-width: 150px; max-width: 260px;
+  padding: 0.75rem 1rem; border-radius: var(--r-btn);
+  background: #fff; border: 1px solid var(--line); color: var(--ink);
+  transition: background-color 0.15s, border-color 0.15s, color 0.15s;
+}
+.jd-dir:hover { border-color: #b6c3d6; }
+.jd-dir[aria-selected="true"] { background: var(--navy); border-color: var(--navy); color: #fff; }
+.jd-dir-to { font-weight: 800; font-size: 1rem; line-height: 1.25; }
+.jd-dir-to::before { content: "→ "; opacity: 0.6; }
+.jd-dir-via { font-size: 0.8125rem; color: var(--muted); }
+.jd-dir[aria-selected="true"] .jd-dir-via { color: #c7d4ea; }
+
+/* ---------- Berikutnya ---------- */
+.jd-next {
+  display: grid; grid-template-columns: auto auto 1fr auto; align-items: center; gap: 0.25rem 0.75rem;
+  padding: 0.9rem 1.1rem; margin-bottom: 0.75rem;
+  background: #fff; border: 1px solid var(--line); border-left: 4px solid var(--red); border-radius: var(--r-btn);
+}
+.jd-next-dot { width: 10px; height: 10px; border-radius: 50%; background: var(--red); }
+.jd-next-lbl { font-size: 0.75rem; font-weight: 800; letter-spacing: 0.08em; text-transform: uppercase; color: var(--red); }
+.jd-next-time {
+  grid-row: 2; grid-column: 1 / 3; justify-self: start;
+  appearance: none; border: 0; background: none; padding: 0; cursor: pointer; font: inherit;
+  font-size: 2.25rem; font-weight: 800; letter-spacing: -0.03em; line-height: 1.05; color: var(--navy);
+  font-variant-numeric: tabular-nums;
+}
+.jd-next-to { grid-row: 2; grid-column: 3; font-weight: 700; font-size: 1.0625rem; }
+.jd-next-in { grid-row: 1 / 3; grid-column: 4; font-weight: 800; color: var(--red); font-variant-numeric: tabular-nums; white-space: nowrap; }
+
+/* ---------- Legenda tujuan ---------- */
+.jd-legend-dest { display: flex; gap: 0.5rem; overflow-x: auto; padding: 2px 2px 0.5rem; margin: 0 -2px 0.5rem; scrollbar-width: thin; }
+.jd-mk {
+  flex: none; appearance: none; font: inherit; font-size: 0.875rem; font-weight: 600; cursor: pointer;
+  display: inline-flex; align-items: center; gap: 0.45rem;
+  min-height: 40px; padding: 0 0.85rem 0 0.6rem; border-radius: 999px;
+  background: #fff; border: 1px solid var(--line); color: var(--ink);
+  transition: background-color 0.15s, border-color 0.15s, color 0.15s;
+}
+.jd-mk[data-mark=""], .jd-mk[data-to] { padding-left: 0.85rem; }
+.jd-mk b { display: inline-grid; place-items: center; min-width: 22px; height: 22px; padding: 0 4px; border-radius: 6px; background: var(--soft); color: var(--navy); font-size: 0.75rem; font-weight: 800; }
+.jd-mk-none { width: 22px; height: 22px; border-radius: 6px; border: 1.5px dashed #b6c3d6; }
+.jd-mk[aria-pressed="true"] { background: var(--navy); border-color: var(--navy); color: #fff; }
+.jd-mk[aria-pressed="true"] b { background: rgba(255, 255, 255, 0.18); color: #fff; }
+.jd-mk[aria-pressed="true"] .jd-mk-none { border-color: rgba(255, 255, 255, 0.5); }
+
+/* ---------- Kisi jam x menit ---------- */
+.jd-grid { background: #fff; border: 1px solid var(--line); border-radius: var(--r-card); overflow: hidden; }
+.jd-hr { display: grid; grid-template-columns: 4rem 1fr; }
+.jd-hr + .jd-hr { border-top: 1px solid var(--line); }
+.jd-hr-n {
+  display: flex; align-items: flex-start; justify-content: center; padding-top: 0.85rem;
+  background: #f7f9fc; border-right: 1px solid var(--line);
+  font-size: 1.25rem; font-weight: 800; color: var(--navy); font-variant-numeric: tabular-nums;
+}
+.jd-hr.is-now .jd-hr-n { background: var(--navy); color: #fff; }
+.jd-hr-m { display: flex; flex-wrap: wrap; gap: 2px; padding: 0.4rem 0.5rem; }
+.jd-m {
+  position: relative; appearance: none; border: 0; background: transparent; cursor: pointer; font: inherit;
+  min-width: 48px; height: 44px; padding: 0 0.3rem; border-radius: 10px;
+  font-size: 1.1875rem; font-weight: 700; color: var(--ink); font-variant-numeric: tabular-nums;
+  transition: background-color 0.12s, color 0.12s;
+}
+.jd-m:hover { background: var(--soft); color: var(--navy); }
+.jd-m sup { font-size: 0.625rem; font-weight: 800; color: var(--navy); margin-left: 1px; top: -0.65em; }
+.jd-m.is-est { text-decoration: underline dotted #94a3b8; text-decoration-thickness: 2px; text-underline-offset: 5px; }
+.jd-m.is-fak::after { content: ""; position: absolute; top: 7px; right: 5px; width: 6px; height: 6px; border-radius: 50%; background: #d97706; }
+.jd-m.is-past { color: #a3aec0; }
+.jd-m.is-past sup { color: #a3aec0; }
+.jd-m.is-next { background: var(--red); color: #fff; }
+.jd-m.is-next sup { color: #fff; }
+
+.jd-keys { display: flex; flex-wrap: wrap; gap: 0.5rem 1.25rem; margin: 0.75rem 0 0; font-size: 0.8125rem; color: var(--muted); }
+.jd-keys span { display: inline-flex; align-items: center; gap: 0.45rem; }
+.jd-keys i { display: inline-block; }
+.k-est { width: 18px; border-bottom: 2px dotted #94a3b8; height: 0; }
+.k-fak { width: 6px; height: 6px; border-radius: 50%; background: #d97706; }
+.k-next { width: 14px; height: 14px; border-radius: 4px; background: var(--red); }
+
+/* ---------- Per lintas ---------- */
+.jd-grp { margin: 1.25rem 0 0.5rem; }
+.jd-grp:first-child { margin-top: 0; }
+.jd-lgrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); gap: 0.5rem; }
+.jd-lcard {
+  appearance: none; font: inherit; text-align: left; cursor: pointer;
+  display: flex; align-items: center; justify-content: space-between; gap: 0.5rem;
+  min-height: 52px; padding: 0 0.9rem 0 0.75rem; border-radius: var(--r-btn);
+  background: #fff; border: 1px solid var(--line); border-left: 6px solid var(--c); color: var(--ink);
+  transition: background-color 0.15s, border-color 0.15s, color 0.15s;
+}
+.jd-lcard:hover { border-color: #b6c3d6; border-left-color: var(--c); }
+.jd-lcard-n { font-weight: 700; font-size: 0.9375rem; line-height: 1.2; }
+.jd-lcard-c { font-size: 0.8125rem; font-weight: 700; color: var(--muted); font-variant-numeric: tabular-nums; }
+.jd-lcard[aria-pressed="true"] { background: var(--navy); border-color: var(--navy); border-left-color: var(--c); color: #fff; }
+.jd-lcard[aria-pressed="true"] .jd-lcard-c { color: #c7d4ea; }
+#jd-ln-out:not(:empty) { margin-top: 2rem; scroll-margin-top: 1rem; }
+
+.jd-table { background: #fff; border: 1px solid var(--line); border-radius: var(--r-card); overflow: hidden; }
+.jd-tr {
+  display: grid; grid-template-columns: 4.75rem 1fr 4.75rem; align-items: center; gap: 0.75rem;
+  width: 100%; min-height: 56px; padding: 0.55rem 1rem; text-align: left;
+  appearance: none; border: 0; border-top: 1px solid var(--line); background: transparent; font: inherit; color: inherit; cursor: pointer;
+}
+.jd-th { min-height: 40px; border-top: 0; background: #f7f9fc; cursor: default; font-size: 0.75rem; font-weight: 800; letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); }
+.jd-th span:last-child, .jd-td-t.is-z { text-align: right; }
+button.jd-tr:hover { background: #f7f9fc; }
+.jd-td-t { font-size: 1.125rem; font-weight: 800; color: var(--navy); font-variant-numeric: tabular-nums; }
+.jd-td-t.is-z { color: var(--muted); font-weight: 700; }
+.jd-td-r { display: flex; flex-wrap: wrap; align-items: center; gap: 0.15rem 0.5rem; min-width: 0; font-size: 0.9375rem; }
+.jd-td-r b { font-weight: 700; }
+.jd-td-r i { width: 18px; height: 2px; background: var(--faint); position: relative; }
+.jd-td-r i::after { content: ""; position: absolute; right: -1px; top: -3px; border: 4px solid transparent; border-left: 5px solid var(--faint); border-right: 0; }
+.jd-td-r small { flex-basis: 100%; color: var(--muted); font-size: 0.8125rem; }
+.jd-tag-fak { font-style: normal; display: inline-grid; place-items: center; width: 18px; height: 18px; border-radius: 5px; background: #fef3c7; color: #92400e; font-size: 0.6875rem; font-weight: 800; }
+
+/* ---------- Bottom sheet ---------- */
+.jd-sheet {
+  width: min(100%, 460px); max-width: 100%; max-height: 86vh;
+  margin: auto 0 0 auto; padding: 0; border: 0;
+  border-radius: 24px 24px 0 0; background: #fff; color: var(--ink);
+  box-shadow: 0 -12px 40px rgba(10, 17, 29, 0.25);
+}
+.jd-sheet::backdrop { background: rgba(10, 17, 29, 0.5); }
+@media (min-width: 768px) {
+  .jd-sheet { margin: auto 1.5rem auto auto; height: auto; border-radius: 24px; max-height: calc(100vh - 3rem); }
+}
+@media (max-width: 767px) { .jd-sheet { margin: auto auto 0; width: 100%; } }
+@media (prefers-reduced-motion: no-preference) {
+  .jd-sheet[open] { animation: jd-up 0.22s var(--ease); }
+  @keyframes jd-up { from { transform: translateY(24px); opacity: 0; } to { transform: none; opacity: 1; } }
+}
+.jd-sh-body { display: flex; flex-direction: column; max-height: inherit; }
+.jd-sh-head {
+  display: flex; justify-content: space-between; align-items: flex-start; gap: 1rem;
+  padding: 1.25rem 1.25rem 1rem; border-bottom: 1px solid var(--line);
+  border-top: 6px solid var(--c);
+}
+.jd-sh-head h2 { margin: 0.2rem 0 0.55rem; font-size: 1.375rem; line-height: 1.2; letter-spacing: -0.02em; color: var(--navy); }
+.jd-sh-head h2 span[aria-hidden] { color: var(--faint); }
+.jd-sh-x {
+  flex: none; appearance: none; border: 0; cursor: pointer; display: grid; place-items: center;
+  width: 44px; height: 44px; border-radius: 12px; background: #f1f5f9; color: var(--ink);
+}
+.jd-sh-x:hover { background: #e2e8f0; }
+
+.jd-route { list-style: none; margin: 0; padding: 0.75rem 1.25rem 1.5rem 2.6rem; overflow-y: auto; position: relative; }
+.jd-route li { position: relative; display: flex; justify-content: space-between; align-items: center; gap: 1rem; min-height: 40px; font-size: 0.9375rem; }
+.jd-route li::before {
+  /* garis rute */
+  content: ""; position: absolute; left: calc(-1.35rem + 4px); top: 0; bottom: 0; width: 4px; background: var(--c);
+}
+.jd-route li:first-child::before { top: 50%; }
+.jd-route li:last-child::before { bottom: 50%; }
+.jd-route li::after {
+  content: ""; position: absolute; left: calc(-1.35rem - 1px); top: 50%; width: 14px; height: 14px; margin-top: -7px;
+  border-radius: 50%; background: #fff; border: 3px solid var(--c); box-sizing: border-box;
+}
+.jd-route li.is-before { color: var(--faint); }
+.jd-route li.is-before::before { background: #d6dde8; }
+.jd-route li.is-before::after { border-color: #c4cddb; }
+.jd-route li.is-start, .jd-route li.is-end, .jd-route li.is-here { font-weight: 800; }
+.jd-route li.is-end::after { background: var(--red); border-color: var(--red); width: 18px; height: 18px; margin-top: -9px; left: calc(-1.35rem - 3px); }
+.jd-route li.is-here { color: var(--navy); }
+.jd-route li.is-here::after { background: var(--navy); border-color: #fff; box-shadow: 0 0 0 3px var(--navy); width: 18px; height: 18px; margin-top: -9px; left: calc(-1.35rem - 3px); }
+.jd-route-n em { display: block; font-style: normal; font-size: 0.75rem; font-weight: 700; color: var(--muted); }
+.jd-route time { font-variant-numeric: tabular-nums; font-weight: 700; color: var(--ink); }
+.jd-route li.is-before time { color: var(--faint); }
+.jd-route time.is-est::before { content: "~"; color: var(--faint); margin-right: 1px; }
+
+/* ---------- Ringkasan + sumber ---------- */
+.jd-sumwrap { margin: 3rem 0 0; }
+.jd-sumwrap summary { cursor: pointer; font-weight: 700; color: var(--navy); min-height: 44px; display: inline-flex; align-items: center; }
+.jd-sumwrap[open] { overflow-x: auto; }
+.jd-sum { width: 100%; border-collapse: collapse; font-size: 0.9375rem; background: #fff; border: 1px solid var(--line); margin-top: 0.5rem; }
+.jd-sum caption { position: absolute; left: -9999px; }
+.jd-sum th, .jd-sum td { padding: 0.55rem 0.8rem; border-top: 1px solid var(--line); text-align: left; }
+.jd-sum thead th { background: #f7f9fc; border-top: 0; font-size: 0.8125rem; color: var(--muted); }
+.jd-sum td { font-variant-numeric: tabular-nums; }
+.jd-src { margin: 0.75rem 0 0; font-size: 0.8125rem; color: var(--muted); }
+
+/* ---------- Ponsel ---------- */
+@media (max-width: 560px) {
+  .jd-hero { padding: 1.5rem 0 2.75rem; }
+  .jd-pops { flex-wrap: nowrap; overflow-x: auto; margin-right: -16px; padding-right: 16px; scrollbar-width: none; }
+  .jd-pops::-webkit-scrollbar { display: none; }
+  .jd-pop { flex: none; }
+  .jd-dir { min-width: 140px; max-width: 220px; }
+  .jd-hr { grid-template-columns: 3rem 1fr; }
+  .jd-hr-n { font-size: 1.0625rem; }
+  .jd-hr-m { padding: 0.3rem; gap: 0; }
+  .jd-m { min-width: 44px; font-size: 1.0625rem; }
+  .jd-next { grid-template-columns: auto auto 1fr; }
+  .jd-next-in { grid-row: 1; grid-column: 3; justify-self: end; }
+  .jd-next-to { grid-column: 3; justify-self: end; text-align: right; }
+  .jd-tr { grid-template-columns: 3.75rem 1fr 3.5rem; gap: 0.5rem; padding: 0.55rem 0.75rem; }
+  .jd-td-t { font-size: 1rem; }
+}
+
+/* ---------- Audit Web Interface Guidelines ---------- */
+.jd-body button, .jd-sug li { touch-action: manipulation; -webkit-tap-highlight-color: transparent; }
+.jd-sheet, .jd-route { overscroll-behavior: contain; }
+.jd-st-head h2, .jd-sh-head h2, .jd-hero h1 { text-wrap: balance; }
+.jd-tr:not(.jd-th) { content-visibility: auto; contain-intrinsic-size: auto 56px; }
+.jd-dir-to, .jd-td-r b, .jd-next-to { overflow-wrap: anywhere; }
