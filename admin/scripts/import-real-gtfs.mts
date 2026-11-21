@@ -14,6 +14,10 @@
 //
 // Usage:
 //   npx tsx scripts/import-real-gtfs.mts <path-to-gtfs.zip> <operator-id> [window-days=7] [--respect-calendar]
+//       [--schedule-set <nama>] [--start-date YYYY-MM-DD]
+// --schedule-set menaruh perjalanan di set jadwal tersendiri (mis. gapeka2026) yang tidak terlihat pengguna sampai
+// diaktifkan dengan tombol di halaman Jadwal admin. Tanpa opsi ini perjalanan masuk set `lama` (langsung terlihat).
+// --start-date memulai jendela dari tanggal itu, bukan hari ini (mis. 2026-12-01 untuk GAPEKA 2026).
 //   npx tsx scripts/import-real-gtfs.mts <path-to-gtfs.zip> [window-days=7] --operator-map KAI=<uuid>,KCI=<uuid> [--respect-calendar]
 // With --operator-map each route goes to the operator mapped from its routes.txt `agency_id` (a feed mixing KAI
 // intercity and KCI commuter routes); without it every route goes to the single positional <operator-id>.
@@ -132,6 +136,9 @@ async function main() {
   // GAPEKA 2026 from 2026-12-01). Without it the script keeps its original open-ended behaviour (see below).
   let respectCalendar = false;
   let operatorMapArg: string | null = null;
+  let scheduleSet = "lama";
+  let scheduleSetExplicit = false;
+  let startDateArg: string | null = null;
   const positional: string[] = [];
   for (let i = 0; i < rawArgs.length; i += 1) {
     const arg = rawArgs[i];
@@ -144,6 +151,19 @@ async function main() {
       i += 1;
     } else if (arg.startsWith("--operator-map=")) {
       operatorMapArg = arg.slice("--operator-map=".length);
+    } else if (arg === "--schedule-set" || arg.startsWith("--schedule-set=")) {
+      const value = arg === "--schedule-set" ? rawArgs[(i += 1)] : arg.slice("--schedule-set=".length);
+      if (value === undefined || value.startsWith("--") || !/^[a-z0-9][a-z0-9_-]{0,39}$/.test(value)) {
+        usageError("--schedule-set needs a name like gapeka2026 (lowercase letters, digits, - or _).");
+      }
+      scheduleSet = value;
+      scheduleSetExplicit = true;
+    } else if (arg === "--start-date" || arg.startsWith("--start-date=")) {
+      const value = arg === "--start-date" ? rawArgs[(i += 1)] : arg.slice("--start-date=".length);
+      if (value === undefined || !/^\d{4}-\d{2}-\d{2}$/.test(value) || Number.isNaN(Date.parse(value))) {
+        usageError("--start-date needs a date like 2026-12-01.");
+      }
+      startDateArg = value;
     } else if (arg.startsWith("--")) {
       console.warn(`Ignoring unknown option ${arg}.`); // previous behaviour: unknown --flags were ignored
     } else {
@@ -246,8 +266,31 @@ async function main() {
       }));
   const calendar = new ServiceCalendar(openEndedCalendar, feed.calendarDates);
   console.log(respectCalendar ? "Calendar: start/end dates respected" : "Calendar: open-ended (start/end dates ignored)");
-  const startDateIso = new Date().toISOString().slice(0, 10);
+  const todayIso = new Date().toISOString().slice(0, 10);
+  const startDateIso = startDateArg ?? todayIso;
   const days = dateWindow(startDateIso, windowDays);
+  console.log(`Window: ${days[0]} .. ${days[days.length - 1]} (${days.length} days)`);
+
+  // Feed yang baru berlaku di masa depan dan masuk ke set `lama` akan langsung terlihat pengguna begitu tanggalnya
+  // tiba, tanpa tombol pergantian. Minta set eksplisit supaya itu tidak terjadi karena lupa opsi.
+  const earliestStart = feed.calendar.map((entry) => entry.startDate).sort()[0];
+  if (respectCalendar && earliestStart && earliestStart > todayIso && !scheduleSetExplicit) {
+    throw new Error(
+      `Feed ini baru berlaku mulai ${earliestStart} (masa depan). Tambahkan --schedule-set <nama> (mis. gapeka2026) ` +
+        `agar tidak langsung terlihat pengguna, atau --schedule-set lama bila memang disengaja.`,
+    );
+  }
+  if (scheduleSet !== "lama") {
+    // Fungsi import lama mengabaikan kolom yang tidak dikenal, sehingga tanpa migrasi saklar perjalanan akan diam-diam
+    // masuk ke set `lama` dan langsung terlihat. Pastikan migrasinya sudah ada sebelum menulis apa pun.
+    const { error: readyError } = await supabase.rpc("get_schedule_status");
+    if (readyError) {
+      throw new Error(
+        `Saklar jadwal belum ada di database (${readyError.message}). Terapkan migrasi 20261122090000_schedule_switch.sql dulu.`,
+      );
+    }
+  }
+  console.log(`Schedule set: ${scheduleSet}${scheduleSet === "lama" ? " (terlihat langsung)" : " (tersembunyi sampai diaktifkan)"}`);
 
   console.log("Upserting stations...");
   const { data: existingStations } = await supabase
@@ -363,6 +406,7 @@ async function main() {
     trip_number: string | null;
     data_source: "gtfs";
     service_date: string;
+    schedule_set?: string;
   };
   const tripInserts: TripInsert[] = [];
   const tripKeyToStopTimes = new Map<string, typeof feed.stopTimes>();
@@ -381,6 +425,8 @@ async function main() {
         trip_number: trip.tripShortName,
         data_source: "gtfs",
         service_date: day,
+        // Hanya dikirim untuk set bukan-bawaan, supaya import biasa tetap jalan sebelum migrasi saklar diterapkan.
+        ...(scheduleSet !== "lama" ? { schedule_set: scheduleSet } : {}),
       });
       tripKeyToStopTimes.set(key, stopTimesByTripId.get(trip.tripId) ?? []);
     }

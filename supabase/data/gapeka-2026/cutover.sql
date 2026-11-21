@@ -1,3 +1,11 @@
+-- CATATAN (skema saklar jadwal): pergantian ke GAPEKA 2026 sekarang lewat halaman Jadwal di admin web, bukan SQL ini.
+-- Blok 1, 1b dan 2 (menghapus jadwal lama) TIDAK diperlukan lagi dan jangan dijalankan: set `lama` dibiarkan sebagai
+-- jalan mundur. Yang masih berguna: blok 3 (mengambil id operator) dan blok 5 (cek lini ganda). Blok 4 tidak lagi
+-- bermakna (jadwal lama tidak punya perjalanan di sekitar 1 Desember); lihat jumlah per set di halaman Jadwal.
+-- Membatalkan import yang masih tersembunyi: delete from public.trips where schedule_set = 'gapeka2026';
+-- (stop_times ikut terhapus lewat cascade; set `lama` tidak tersentuh).
+-- Lihat README.md bagian "Skema saklar".
+
 -- GAPEKA 2026 cutover for the networks hosted in the database (KRL Jabodetabek, KRL Yogyakarta).
 -- NOT a migration and not run automatically. Run each block by hand in the Supabase SQL editor, in order, reading
 -- the output before going on. See README.md in this folder.

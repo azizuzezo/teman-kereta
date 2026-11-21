@@ -44,6 +44,7 @@ export const NAV_GROUPS: NavGroup[] = [
     items: [
       { href: "/service-alerts", label: "Peringatan layanan", icon: AlertIcon },
       { href: "/gtfs-import", label: "Impor GTFS", icon: ImportIcon },
+      { href: "/jadwal", label: "Jadwal", icon: ImportIcon },
     ],
   },
   {

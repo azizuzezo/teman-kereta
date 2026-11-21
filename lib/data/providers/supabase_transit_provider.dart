@@ -42,6 +42,24 @@ Duration? weekdayAlignedShift(
   return Duration(days: weeks * 7);
 }
 
+/// Membaca jawaban `get_schedule_window` (satu baris `first_date`,
+/// `last_date`, `schedule_set`). Null bila kosong atau tanggalnya tidak ada,
+/// misalnya set aktif belum punya perjalanan, sehingga pemanggil jatuh ke cara
+/// lama.
+@visibleForTesting
+({DateTime start, DateTime end})? parseScheduleWindow(Object? rows) {
+  if (rows is! List || rows.isEmpty) return null;
+  final row = rows.first;
+  if (row is! Map) return null;
+  final first = row['first_date'];
+  final last = row['last_date'];
+  if (first is! String || last is! String) return null;
+  final start = DateTime.tryParse(first);
+  final end = DateTime.tryParse(last);
+  if (start == null || end == null) return null;
+  return (start: start, end: end);
+}
+
 /// An optional boolean RPC column (added by the GAPEKA 2026 migration, see
 /// `supabase/data/gapeka-2026/CONTRACT.md` section A). Absent or null, as
 /// before that migration is applied, reads as false.
@@ -381,6 +399,17 @@ class SupabaseTransitProvider
   ({DateTime start, DateTime end})? _cachedWindow;
   DateTime? _windowFetchedAt;
 
+  /// Jendela jadwal dari RPC `get_schedule_window`; null bila RPC belum ada
+  /// (migrasi belum diterapkan) atau set aktif belum punya perjalanan.
+  Future<({DateTime start, DateTime end})?> _scheduleWindowFromRpc() async {
+    try {
+      final rows = await _client.rpc('get_schedule_window');
+      return parseScheduleWindow(rows);
+    } on Object {
+      return null;
+    }
+  }
+
   Future<({DateTime start, DateTime end})?> _serviceWindow() async {
     final fetchedAt = _windowFetchedAt;
     if (fetchedAt != null &&
@@ -388,23 +417,31 @@ class SupabaseTransitProvider
       return _cachedWindow;
     }
     try {
-      final first = await _client
-          .from('trips')
-          .select('service_date')
-          .order('service_date', ascending: true)
-          .limit(1);
-      final last = await _client
-          .from('trips')
-          .select('service_date')
-          .order('service_date', ascending: false)
-          .limit(1);
-      if (first.isEmpty || last.isEmpty) {
-        _cachedWindow = null;
+      // Rentang tanggal perjalanan pada set jadwal yang sedang aktif
+      // (get_schedule_window, migrasi saklar jadwal). Tanpa migrasi itu,
+      // jatuh ke cara lama: rentang seluruh tabel trips.
+      final window = await _scheduleWindowFromRpc();
+      if (window != null) {
+        _cachedWindow = window;
       } else {
-        _cachedWindow = (
-          start: DateTime.parse(first.first['service_date'] as String),
-          end: DateTime.parse(last.first['service_date'] as String),
-        );
+        final first = await _client
+            .from('trips')
+            .select('service_date')
+            .order('service_date', ascending: true)
+            .limit(1);
+        final last = await _client
+            .from('trips')
+            .select('service_date')
+            .order('service_date', ascending: false)
+            .limit(1);
+        if (first.isEmpty || last.isEmpty) {
+          _cachedWindow = null;
+        } else {
+          _cachedWindow = (
+            start: DateTime.parse(first.first['service_date'] as String),
+            end: DateTime.parse(last.first['service_date'] as String),
+          );
+        }
       }
       _windowFetchedAt = DateTime.now();
     } on Object {
@@ -845,6 +882,7 @@ class SupabaseTransitProvider
   /// memakai `vehicle_positions` apa adanya seperti sebelumnya.
   @override
   Stream<List<VehiclePosition>> watchVehiclePositions() {
+    // ignore: close_sinks, ditutup oleh pendengarnya lewat onCancel di bawah.
     late final StreamController<List<VehiclePosition>> controller;
     StreamSubscription<List<(VehiclePosition, bool)>>? baseSub;
     StreamSubscription<List<VehiclePosition>>? liveSub;

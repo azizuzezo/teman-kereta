@@ -115,8 +115,26 @@ export async function importGtfsFeed(params: {
   zipBytes: ArrayBuffer;
   startDateIso: string;
   windowDays: number;
+  /**
+   * Set jadwal tempat perjalanan ditaruh. `lama` (bawaan) langsung terlihat
+   * pengguna; set lain (mis. `gapeka2026`) tersembunyi sampai diaktifkan di
+   * halaman Jadwal.
+   */
+  scheduleSet?: string;
 }): Promise<GtfsImportSummary> {
   const { supabase, operatorId, zipBytes, startDateIso, windowDays } = params;
+  const scheduleSet = params.scheduleSet?.trim() || "lama";
+  if (scheduleSet !== "lama") {
+    // Fungsi import lama mengabaikan kolom yang tidak dikenal, jadi tanpa
+    // migrasi saklar perjalanan diam-diam masuk ke set `lama` dan langsung
+    // terlihat. Pastikan migrasinya ada sebelum menulis apa pun.
+    const { error: readyError } = await supabase.rpc("get_schedule_status");
+    if (readyError) {
+      throw new Error(
+        `Saklar jadwal belum ada di database (${readyError.message}). Terapkan migrasi 20261122090000_schedule_switch.sql dulu.`
+      );
+    }
+  }
 
   const files = await extractGtfsFiles(zipBytes);
   const feed = parseGtfsFeed(files);
@@ -247,6 +265,7 @@ export async function importGtfsFeed(params: {
     trip_number: string | null;
     data_source: "gtfs";
     service_date: string;
+    schedule_set?: string;
   };
   const tripInserts: TripInsert[] = [];
   const tripKeyToStopTimes = new Map<string, typeof feed.stopTimes>();
@@ -265,6 +284,7 @@ export async function importGtfsFeed(params: {
         trip_number: trip.tripShortName,
         data_source: "gtfs",
         service_date: day,
+        ...(scheduleSet !== "lama" ? { schedule_set: scheduleSet } : {}),
       });
       tripKeyToStopTimes.set(key, stopTimesByTripId.get(trip.tripId) ?? []);
     }

@@ -156,46 +156,56 @@ Alasan penyesuaian dari usulan awal:
 - **NAMBO** dicantumkan karena aplikasi mengenal kode itu; tidak ada feed di sini yang menghasilkan lintas NAMBO
   (perjalanan Nambo ada di lintas BOGOR).
 
-## Langkah cutover (beberapa hari sebelum 1 Desember, misalnya 28–30 November)
+## Skema saklar: semua disiapkan dulu, 1 Desember cukup satu tombol
 
-0. **Terapkan migrasi `supabase/migrations/20261118090000_gapeka_estimated_times.sql` lebih dulu.** Importer
-   (skrip dan admin web) sekarang menulis `stop_times.is_estimated`; tanpa kolom itu import gagal. Migrasi ini
-   juga mengubah keluaran 4 RPC (kolom baru ditambah di akhir; kolom lama tetap), jadi aplikasi versi sekarang
-   tetap jalan. Jangan deploy ulang admin web sebelum migrasi ini diterapkan.
+Perjalanan GAPEKA disimpan di **set jadwal** tersendiri (`gapeka2026`) yang tidak terlihat pengguna. Satu tombol di
+admin web (halaman **Jadwal**) menentukan set mana yang dilihat aplikasi; tanpa build ulang, tanpa SQL manual, tanpa
+menghapus jadwal lama. Tombol yang sama mengembalikan ke jadwal lama kapan saja.
 
-1. Bangun ulang feed (opsional, kalau sumber berubah):
-   `python3 -I supabase/data/gapeka-2026/build_import_feeds.py`
-2. Di Supabase SQL editor, jalankan blok **1** dan **1b** di `cutover.sql`. Baca jumlahnya.
-3. Jalankan blok **2** (hapus jadwal lama mulai 1 Desember), cocokkan jumlah barisnya, lalu `commit`.
-4. Ambil id operator dengan blok **3**.
-5. Import, jendela 30 hari (dihitung mulai hari ini):
+Cara kerjanya (migrasi `20261122090000_schedule_switch.sql`): `trips.schedule_set` menandai set tiap perjalanan
+(bawaan `lama`, jadi seluruh data sekarang tetap berlaku). `schedule_control` menyimpan set aktif dan satu pergantian
+terjadwal. Tiga RPC jadwal, estimasi posisi kereta, dan rentang jadwal (`get_schedule_window`) hanya membaca set yang
+aktif. Pergantian terjadwal berlaku tepat waktunya dengan jam server, tanpa cron.
+
+### Persiapan (boleh kapan saja, tidak terlihat pengguna)
+
+1. **Rilis aplikasi 1.5.0 dan tunggu pengguna memperbaruinya.** Aplikasi lama menganggap semua lintas selain YKPL
+   sebagai Jabodetabek, jadi jangan import zip `gapeka-kci`/`gapeka-kai` (lini baru) sebelum itu.
+2. **Terapkan migrasi berurutan:** `20261118090000_gapeka_estimated_times.sql`, lalu `20261122090000_schedule_switch.sql`.
+   Perilaku aplikasi tidak berubah (set `lama` aktif). Deploy admin web setelahnya.
+3. **Import dengan set `gapeka2026`**, jendela mulai tepat di hari berlaku. Id operator ambil dari blok 3 `cutover.sql`.
    ```bash
    cd admin
-   node node_modules/tsx/dist/cli.mjs scripts/import-real-gtfs.mts ../supabase/data/gapeka-2026/import/krl-jabodetabek.zip <operator-id> 30 --respect-calendar
-   node node_modules/tsx/dist/cli.mjs scripts/import-real-gtfs.mts ../supabase/data/gapeka-2026/import/krl-yogyakarta.zip <operator-id> 30 --respect-calendar
+   node node_modules/tsx/dist/cli.mjs scripts/import-real-gtfs.mts ../supabase/data/gapeka-2026/import/krl-jabodetabek.zip <operator-id> 30 --respect-calendar --schedule-set gapeka2026 --start-date 2026-12-01
+   node node_modules/tsx/dist/cli.mjs scripts/import-real-gtfs.mts ../supabase/data/gapeka-2026/import/krl-yogyakarta.zip <operator-id> 30 --respect-calendar --schedule-set gapeka2026 --start-date 2026-12-01
    ```
-   **`--respect-calendar` wajib.** Tanpa itu skrip ini menganggap kalender berlaku 2000–2099 (dibuat untuk feed
-   lama yang kalendernya habis 2025), sehingga jadwal GAPEKA ikut muncul sebelum 1 Desember. Log skrip harus
-   menulis `Calendar: start/end dates respected`. Importer di admin web (`/gtfs-import`) selalu menghormati
-   kalender. (`npm run import-gtfs` memakai `.bin/tsx`, yang tidak bisa dieksekusi di drive NTFS ini.)
-6. Jalankan blok **4** dan **5**: 30 November hanya jadwal lama, 1 Desember hanya GAPEKA 2026, tidak ada lintas ganda.
-7. **Layanan non-antarkota lain.** Jalankan `station_check.sql` dulu dan selesaikan setiap baris yang muncul. Butuh
-   id operator untuk `KCI` ("KAI Commuter") dan `KAI` (PT Kereta Api Indonesia); operator KAI mungkin belum ada di
-   database, cek dulu. Lalu, setelah migrasi langkah 0 dan aplikasi yang membaca `networks.json` siap:
+   Lalu layanan non-antarkota lain (jalankan `station_check.sql` dulu, selesaikan setiap baris yang muncul):
    ```bash
-   cd admin
-   node node_modules/tsx/dist/cli.mjs scripts/import-real-gtfs.mts ../supabase/data/gapeka-2026/import/gapeka-kci.zip 30 --operator-map KAI=<uuid-kai>,KCI=<uuid-kci> --respect-calendar
-   node node_modules/tsx/dist/cli.mjs scripts/import-real-gtfs.mts ../supabase/data/gapeka-2026/import/gapeka-kai.zip 30 --operator-map KAI=<uuid-kai>,KCI=<uuid-kci> --respect-calendar
+   node node_modules/tsx/dist/cli.mjs scripts/import-real-gtfs.mts ../supabase/data/gapeka-2026/import/gapeka-kci.zip 30 --operator-map KAI=<uuid-kai>,KCI=<uuid-kci> --respect-calendar --schedule-set gapeka2026 --start-date 2026-12-01
+   node node_modules/tsx/dist/cli.mjs scripts/import-real-gtfs.mts ../supabase/data/gapeka-2026/import/gapeka-kai.zip 30 --operator-map KAI=<uuid-kai>,KCI=<uuid-kci> --respect-calendar --schedule-set gapeka2026 --start-date 2026-12-01
    ```
-   Lintas ini belum punya jadwal lama, jadi tidak ada yang perlu dihapus (blok 1 dan 2 tidak berlaku).
-   Aplikasi versi sekarang menganggap semua lintas selain YKPL sebagai Jabodetabek, jadi **jangan import zip ini
-   sebelum aplikasi yang membaca `networks.json` dirilis**.
+   Skrip menolak feed yang berlaku di masa depan bila `--schedule-set` tidak diberikan, dan menolak set selain `lama`
+   bila migrasi saklar belum ada.
+4. **Periksa di halaman Jadwal:** set `gapeka2026` harus menampilkan jumlah perjalanan dan rentang tanggal
+   (2026-12-01 s/d 2026-12-30) yang masuk akal; set `lama` tetap yang aktif.
+
+### Pergantian
+
+5. Di halaman **Jadwal**, pada set `gapeka2026` tekan **Jadwalkan 1 Desember 00:00 WIB**. Jadwal berganti sendiri tepat
+   tengah malam. (Atau **Aktifkan sekarang** untuk berganti seketika.)
+6. **Kalau ada masalah:** tekan **Aktifkan sekarang** pada set `lama`. Seketika, tanpa kehilangan data.
+7. Aplikasi menyimpan rentang jadwal sampai 1 jam, jadi sebagian pengguna baru melihat pergantian dalam waktu itu.
+
+Catatan: stasiun dan lini bersifat global, bukan per set. Lini baru (Bandara, Bandung Raya, dst.) dan perubahan data
+stasiun ikut terlihat sejak diimpor; yang tersembunyi sampai pergantian adalah keberangkatan dan hasil pencarian rute.
 
 ## Setelah cutover
 
-- **Jendela import maksimal 30 hari.** Import ulang zip GAPEKA sebelum jendelanya habis (kalau import tanggal
-  28 November, sebelum 27 Desember), seperti biasa.
-- **Jangan import ulang feed lama** dengan jendela yang melewati 30 November.
+- **Jendela import maksimal 30 hari.** Import ulang zip GAPEKA dengan `--schedule-set gapeka2026` sebelum jendelanya
+  habis (jendela 1-30 Desember: sebelum 30 Desember). Aplikasi tetap menggeser jadwal per hari-minggu di dalam jendela
+  bila tanggal sudah lewat.
+- **Jangan import ulang feed lama** dengan jendela yang melewati 30 November, dan jangan menghapus set `lama` sampai
+  GAPEKA 2026 terbukti stabil (itu jalan mundur lewat tombol).
 - Importer menyimpan `timepoint=0` sebagai `stop_times.is_estimated = true` (migrasi 20261118090000). Aplikasi
   menampilkannya sebagai jam perkiraan mulai versi yang membaca kolom ini (rilis 1.4.0, sedang dikerjakan).
 - **Antarkota tidak tercakup di sini.** Data antarkota dibundel di aplikasi (`assets/intercity/intercity_v1.json`)

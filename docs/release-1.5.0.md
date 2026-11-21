@@ -28,13 +28,21 @@ Dukung Pengembang lewat QRIS langsung di dalam aplikasi (menu Profil).
 - **Build dan uji**: `flutter analyze` bersih untuk file yang diubah. Tes peta, perjalanan selesai, dan pelapor posisi lolos. Tes `track_motion` dan `vehicle_motion` baru ikut lolos. Empat tes lama gagal di luar area ini (`tmp_dump_test`, `tmp_pages_test`, `widget_test`). APK debug sudah dipasang dan dijalankan di emulator Android 35.
 - **Migrasi GAPEKA `20261118090000_gapeka_estimated_times.sql`**: BELUM diterapkan, sengaja menunggu cutover.
 
-## Yang masih harus dikerjakan
+## Urutan menuju 1 Desember (GAPEKA 2026 dengan satu tombol)
 
-0. **Deploy Patungan Yuk! dulu, baru rilis aplikasi.** Dukungan di aplikasi memanggil `POST https://patungan.gifts/api/app/dev-donation` (kode baru di proyek `Patungan Yuk!`: `src/admin/donatePublic.js`, `src/admin/server.js`, `test/appDevDonation.test.js`; belum di-commit). Status bayar dibaca dari `GET /status/:trxId` yang sudah ada. Aplikasi juga membaca `GET /api/app/dev-donation/config` tiap 6 detik selama popup terbuka: begitu pilihan QRIS di Patungan diubah (GoPay atau Mayar), formnya ikut berubah. Mayar mewajibkan email dan nomor HP: email diambil dari akun yang masuk, nomor HP diminta sekali lalu disimpan di akun (`user_metadata.donor_phone`). Sebelum endpoint itu aktif, layar dukungan menampilkan pesan gagal dan tombol "Bayar lewat halaman web" (popup web), jadi tidak ada jalan buntu. Setelah deploy, tes satu donasi kecil sungguhan (Rp10.000) dari aplikasi.
-1. **Putuskan update wajib atau tidak** (`min_supported_version_code`). Rekomendasi: jangan wajib, kecuali jadwal lama harus dimatikan di semua HP saat 1 Desember.
-2. **Cutover database GAPEKA 28-30 November** sesuai `supabase/data/gapeka-2026/README.md` (langkah database dijalankan manual).
-3. **Rotasi password database** (tercatat di `scripts/build-release.ps1` dan sempat tercetak di log sesi uji).
-4. Unggah AAB ke Play Console, isi "Yang baru" di atas, dan tambahkan rilisnya di admin web (Rilis) bila memakai pembaruan dalam aplikasi.
+Skema saklar: jadwal GAPEKA disiapkan di set `gapeka2026` yang tersembunyi, lalu satu tombol di admin web (halaman
+**Jadwal**) menggantinya, tanpa build ulang. Detail dan perintah ada di `supabase/data/gapeka-2026/README.md`.
+
+1. **Deploy Patungan** sudah dilakukan. Tes satu donasi kecil (Rp10.000) dari aplikasi di mode Mayar dan satu di mode GoPay.
+2. **Rilis aplikasi 1.5.0** (Play Console) dan tunggu pengguna memperbaruinya. Putuskan update wajib atau tidak
+   (`min_supported_version_code`); rekomendasi: jangan wajib.
+3. **Terapkan migrasi berurutan:** `20261118090000_gapeka_estimated_times.sql`, lalu `20261122090000_schedule_switch.sql`.
+   Aman: perilaku tidak berubah (set `lama` tetap aktif). Sudah diuji di produksi dalam transaksi yang di-rollback.
+   Lalu deploy admin web (halaman Jadwal, kolom "Set jadwal" di Impor GTFS).
+4. **Import GAPEKA dengan `--schedule-set gapeka2026 --start-date 2026-12-01`** (KRL Jabodetabek, KRL Yogyakarta, lalu KCI/KAI
+   setelah 1.5.0 beredar). Periksa jumlah di halaman Jadwal.
+5. **Halaman Jadwal: "Jadwalkan 1 Desember 00:00 WIB"** pada set `gapeka2026`. Kalau ada masalah: "Aktifkan sekarang" pada set `lama`.
+6. **Rotasi password database** (tercatat di `scripts/build-release.ps1` dan sempat tercetak di log sesi uji).
 
 ## Cara mengecek peta
 

@@ -35,6 +35,21 @@ export function GtfsImportForm({
       </SelectField>
       <FileField label="Berkas GTFS (.zip)" name="file" accept=".zip" required />
       <TextField
+        label="Set jadwal"
+        name="schedule_set"
+        defaultValue="lama"
+        required
+        fieldClassName="max-w-60"
+        hint="lama = langsung terlihat pengguna. Isi nama lain (mis. gapeka2026) untuk menyiapkan jadwal baru secara tersembunyi, lalu aktifkan di halaman Jadwal."
+      />
+      <TextField
+        label="Tanggal mulai (opsional)"
+        name="start_date"
+        type="date"
+        fieldClassName="max-w-60"
+        hint="Kosong = hari ini. Isi 2026-12-01 untuk GAPEKA 2026 supaya jendelanya mulai tepat di hari berlaku."
+      />
+      <TextField
         label="Jumlah hari ke depan yang diimpor"
         name="window_days"
         type="number"
