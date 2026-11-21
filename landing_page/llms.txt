@@ -1,0 +1,20 @@
+# Teman Kereta
+
+> Aplikasi Android independen untuk penumpang KRL Commuter Line Jabodetabek: alarm dan notifikasi turun stasiun, rute dan estimasi tarif, jadwal keberangkatan, posisi kereta dari GPS penumpang, dan forum kabar kepadatan. Gratis, tanpa iklan. Bukan aplikasi resmi KAI Commuter.
+
+## Halaman utama
+- [Beranda](https://temankereta.tech/): fitur, unduhan Google Play, FAQ
+- [Artikel](https://temankereta.tech/artikel/): panduan KRL dan aplikasi
+- [Forum KRL](https://temankereta.tech/forum): kabar kepadatan dan gangguan dari penumpang
+- [CCTV Stasiun](https://temankereta.tech/cctv/): tautan siaran CCTV DJKA Kemenhub
+- [Tentang](https://temankereta.tech/tentang/)
+
+## Panduan
+- [Aplikasi alarm turun stasiun KRL](https://temankereta.tech/artikel/aplikasi-alarm-turun-stasiun-krl/)
+- [Notifikasi KRL Commuter Line](https://temankereta.tech/artikel/notifikasi-krl-commuter-line/)
+- [Cek posisi, jadwal, rute, dan tarif KRL](https://temankereta.tech/artikel/cek-posisi-dan-jadwal-krl-commuter-line/)
+- [7 tips agar tidak kebablasan stasiun](https://temankereta.tech/artikel/tips-tidak-kebablasan-stasiun-krl/)
+- [Apa itu Teman Kereta](https://temankereta.tech/artikel/apa-itu-teman-kereta/)
+
+## Unduh
+- [Google Play](https://play.google.com/store/apps/details?id=id.temankereta.teman_kereta&hl=id)

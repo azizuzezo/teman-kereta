@@ -25,10 +25,31 @@ Cukup simpan file gambar screenshot ke dalam folder:
 
 ---
 
-## 📥 File Unduhan APK
+## 📥 Unduhan
 
-File APK diletakkan di:
-`landing_page/assets/downloads/teman-kereta-v1.0.apk`
+Sejak rilis resmi di Google Play, situs hanya punya **satu tombol unduhan**:
+[Teman Kereta di Google Play](https://play.google.com/store/apps/details?id=id.temankereta.teman_kereta&hl=id).
+Tidak ada lagi tombol atau tautan APK di halaman mana pun.
+
+APK tetap dibangun setiap rilis dengan `scripts/build-release.ps1`, diunggah
+ke Cloudflare R2 (bucket `temankereta-releases`, domain
+`dl.temankereta.web.id`), dan dicatat di tabel `app_releases` Supabase.
+Itu dipakai untuk notifikasi pembaruan di dalam aplikasi bagi pengguna yang
+dulu memasang lewat APK, bukan untuk situs ini.
+
+---
+
+## 📝 Halaman konten
+
+- `/artikel/` — pusat artikel dan panduan KRL.
+- `/artikel/apa-itu-teman-kereta/` — pengenalan aplikasi.
+- `/artikel/aplikasi-alarm-turun-stasiun-krl/`, `/artikel/notifikasi-krl-commuter-line/`, `/artikel/cek-posisi-dan-jadwal-krl-commuter-line/` — artikel SEO (alarm, notifikasi, jadwal/rute).
+- `/artikel/tips-tidak-kebablasan-stasiun-krl/` — tips perjalanan.
+- `/tentang/` — halaman tentang aplikasi dan pengelola.
+- `/terms` — syarat dan ketentuan (dipakai juga untuk review app TikTok/Meta).
+
+Setiap halaman baru harus ditambahkan ke `sitemap.xml` dan ditautkan dari
+halaman lain agar mudah ditemukan Google.
 
 ---
 

@@ -5,5 +5,18 @@ Allow: /
 Disallow: /threads-callback
 Disallow: /threads-data-deletion
 
-# Sitemaps
-Sitemap: https://temankereta.web.id/sitemap.xml
+# Crawler AI: konten publik boleh dibaca dan dikutip
+User-agent: GPTBot
+Allow: /
+User-agent: OAI-SearchBot
+Allow: /
+User-agent: ChatGPT-User
+Allow: /
+User-agent: PerplexityBot
+Allow: /
+User-agent: ClaudeBot
+Allow: /
+User-agent: Google-Extended
+Allow: /
+
+Sitemap: https://temankereta.tech/sitemap.xml

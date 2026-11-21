@@ -2,37 +2,118 @@
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9"
         xmlns:image="http://www.google.com/schemas/sitemap-image/1.1">
   <url>
-    <loc>https://temankereta.web.id/</loc>
-    <lastmod>2026-08-23</lastmod>
+    <loc>https://temankereta.tech/</loc>
+    <lastmod>2026-11-21</lastmod>
     <changefreq>weekly</changefreq>
     <priority>1.0</priority>
     <image:image>
-      <image:loc>https://temankereta.web.id/assets/branding/og-image.png</image:loc>
+      <image:loc>https://temankereta.tech/assets/branding/og-image.png</image:loc>
       <image:title>Teman Kereta - Teman Perjalanan KRL Setiap Hari</image:title>
       <image:caption>Aplikasi pendamping cerdas pejuang komuter KRL Jabodetabek</image:caption>
     </image:image>
     <image:image>
-      <image:loc>https://temankereta.web.id/assets/screenshots/hero.webp</image:loc>
+      <image:loc>https://temankereta.tech/assets/screenshots/hero.webp</image:loc>
       <image:title>Pengguna Teman Kereta</image:title>
       <image:caption>Perjalanan KRL lebih tenang dan bebas cemas kebablasan</image:caption>
     </image:image>
   </url>
   <url>
-    <loc>https://temankereta.web.id/forum</loc>
-    <lastmod>2026-08-23</lastmod>
+    <loc>https://temankereta.tech/cctv/</loc>
+    <lastmod>2026-11-14</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.8</priority>
+  </url>
+  <url>
+    <loc>https://temankereta.tech/forum</loc>
+    <lastmod>2026-10-22</lastmod>
     <changefreq>daily</changefreq>
     <priority>0.9</priority>
   </url>
   <url>
-    <loc>https://temankereta.web.id/privacy</loc>
-    <lastmod>2026-10-16</lastmod>
+    <loc>https://temankereta.tech/privacy</loc>
+    <lastmod>2026-10-22</lastmod>
     <changefreq>yearly</changefreq>
     <priority>0.5</priority>
   </url>
   <url>
-    <loc>https://temankereta.web.id/delete-account</loc>
-    <lastmod>2026-10-16</lastmod>
+    <loc>https://temankereta.tech/terms</loc>
+    <lastmod>2026-11-07</lastmod>
     <changefreq>yearly</changefreq>
     <priority>0.5</priority>
+  </url>
+  <url>
+    <loc>https://temankereta.tech/delete-account</loc>
+    <lastmod>2026-10-22</lastmod>
+    <changefreq>yearly</changefreq>
+    <priority>0.5</priority>
+  </url>
+  <url>
+    <loc>https://temankereta.tech/tentang/</loc>
+    <lastmod>2026-10-22</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.7</priority>
+  </url>
+  <url>
+    <loc>https://temankereta.tech/artikel/</loc>
+    <lastmod>2026-11-21</lastmod>
+    <changefreq>weekly</changefreq>
+    <priority>0.8</priority>
+    <image:image>
+      <image:loc>https://temankereta.tech/assets/branding/og-image.png</image:loc>
+      <image:title>Artikel Teman Kereta</image:title>
+      <image:caption>Panduan KRL dan aplikasi Teman Kereta</image:caption>
+    </image:image>
+  </url>
+  <url>
+    <loc>https://temankereta.tech/artikel/apa-itu-teman-kereta/</loc>
+    <lastmod>2026-10-22</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.8</priority>
+    <image:image>
+      <image:loc>https://temankereta.tech/assets/screenshots/app-beranda.webp</image:loc>
+      <image:title>Apa Itu Teman Kereta?</image:title>
+      <image:caption>Tampilan beranda aplikasi Teman Kereta</image:caption>
+    </image:image>
+  </url>
+  <url>
+    <loc>https://temankereta.tech/artikel/tips-tidak-kebablasan-stasiun-krl/</loc>
+    <lastmod>2026-10-22</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.8</priority>
+    <image:image>
+      <image:loc>https://temankereta.tech/assets/screenshots/app-pengingat.webp</image:loc>
+      <image:title>7 Tips Agar Tidak Kebablasan Stasiun</image:title>
+      <image:caption>Layar pengingat stasiun Teman Kereta</image:caption>
+    </image:image>
+  </url>
+  <url>
+    <loc>https://temankereta.tech/artikel/aplikasi-alarm-turun-stasiun-krl/</loc>
+    <lastmod>2026-11-21</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.8</priority>
+    <image:image>
+      <image:loc>https://temankereta.tech/assets/screenshots/app-pengingat.webp</image:loc>
+      <image:title>Aplikasi Alarm Turun Stasiun KRL: Cara Pakai agar Tidak Kebablasan</image:title>
+    </image:image>
+  </url>
+  <url>
+    <loc>https://temankereta.tech/artikel/notifikasi-krl-commuter-line/</loc>
+    <lastmod>2026-11-21</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.8</priority>
+    <image:image>
+      <image:loc>https://temankereta.tech/assets/screenshots/app-urutan-stasiun.webp</image:loc>
+      <image:title>Notifikasi KRL Commuter Line: Pengingat Tujuan, Transit, dan Tiba</image:title>
+    </image:image>
+  </url>
+  <url>
+    <loc>https://temankereta.tech/artikel/cek-posisi-dan-jadwal-krl-commuter-line/</loc>
+    <lastmod>2026-11-21</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.8</priority>
+    <image:image>
+      <image:loc>https://temankereta.tech/assets/screenshots/app-jadwal.webp</image:loc>
+      <image:title>Cek Posisi KRL, Jadwal, Rute, dan Tarif Commuter Line di Satu Aplikasi</image:title>
+    </image:image>
   </url>
 </urlset>
