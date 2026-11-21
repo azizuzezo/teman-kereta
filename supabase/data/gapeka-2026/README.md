@@ -173,21 +173,33 @@ aktif. Pergantian terjadwal berlaku tepat waktunya dengan jam server, tanpa cron
    sebagai Jabodetabek, jadi jangan import zip `gapeka-kci`/`gapeka-kai` (lini baru) sebelum itu.
 2. **Terapkan migrasi berurutan:** `20261118090000_gapeka_estimated_times.sql`, lalu `20261122090000_schedule_switch.sql`.
    Perilaku aplikasi tidak berubah (set `lama` aktif). Deploy admin web setelahnya.
-3. **Import dengan set `gapeka2026`**, jendela mulai tepat di hari berlaku. Id operator ambil dari blok 3 `cutover.sql`.
+3. **Import SEKALI dengan set `gapeka2026`**, jendela 7 hari yang mulai tepat di hari berlaku (1-7 Desember). Id operator
+   ambil dari blok 3 `cutover.sql`. **Tidak perlu import ulang** setelah itu: lihat "Kenapa cukup sekali" di bawah.
    ```bash
    cd admin
-   node node_modules/tsx/dist/cli.mjs scripts/import-real-gtfs.mts ../supabase/data/gapeka-2026/import/krl-jabodetabek.zip <operator-id> 30 --respect-calendar --schedule-set gapeka2026 --start-date 2026-12-01
-   node node_modules/tsx/dist/cli.mjs scripts/import-real-gtfs.mts ../supabase/data/gapeka-2026/import/krl-yogyakarta.zip <operator-id> 30 --respect-calendar --schedule-set gapeka2026 --start-date 2026-12-01
+   node node_modules/tsx/dist/cli.mjs scripts/import-real-gtfs.mts ../supabase/data/gapeka-2026/import/krl-jabodetabek.zip <operator-id> 7 --respect-calendar --schedule-set gapeka2026 --start-date 2026-12-01
+   node node_modules/tsx/dist/cli.mjs scripts/import-real-gtfs.mts ../supabase/data/gapeka-2026/import/krl-yogyakarta.zip <operator-id> 7 --respect-calendar --schedule-set gapeka2026 --start-date 2026-12-01
    ```
    Lalu layanan non-antarkota lain (jalankan `station_check.sql` dulu, selesaikan setiap baris yang muncul):
    ```bash
-   node node_modules/tsx/dist/cli.mjs scripts/import-real-gtfs.mts ../supabase/data/gapeka-2026/import/gapeka-kci.zip 30 --operator-map KAI=<uuid-kai>,KCI=<uuid-kci> --respect-calendar --schedule-set gapeka2026 --start-date 2026-12-01
-   node node_modules/tsx/dist/cli.mjs scripts/import-real-gtfs.mts ../supabase/data/gapeka-2026/import/gapeka-kai.zip 30 --operator-map KAI=<uuid-kai>,KCI=<uuid-kci> --respect-calendar --schedule-set gapeka2026 --start-date 2026-12-01
+   node node_modules/tsx/dist/cli.mjs scripts/import-real-gtfs.mts ../supabase/data/gapeka-2026/import/gapeka-kci.zip 7 --operator-map KAI=<uuid-kai>,KCI=<uuid-kci> --respect-calendar --schedule-set gapeka2026 --start-date 2026-12-01
+   node node_modules/tsx/dist/cli.mjs scripts/import-real-gtfs.mts ../supabase/data/gapeka-2026/import/gapeka-kai.zip 7 --operator-map KAI=<uuid-kai>,KCI=<uuid-kci> --respect-calendar --schedule-set gapeka2026 --start-date 2026-12-01
    ```
    Skrip menolak feed yang berlaku di masa depan bila `--schedule-set` tidak diberikan, dan menolak set selain `lama`
    bila migrasi saklar belum ada.
 4. **Periksa di halaman Jadwal:** set `gapeka2026` harus menampilkan jumlah perjalanan dan rentang tanggal
-   (2026-12-01 s/d 2026-12-30) yang masuk akal; set `lama` tetap yang aktif.
+   (2026-12-01 s/d 2026-12-07) yang masuk akal; set `lama` tetap yang aktif.
+
+### Kenapa cukup sekali (tanpa import ulang tiap hari)
+
+Tabel `trips` menyimpan perjalanan per tanggal, tetapi aplikasi tidak butuh tanggal hari ini ada di sana. Saat RPC tidak
+punya baris untuk hari ini, aplikasi mengambil jadwal pada hari-minggu yang sama di dalam jendela set aktif (kelipatan 7
+hari) dan memajukannya ke hari ini. Jadwal lama berjalan begitu sejak Agustus: hanya 7-13 Agustus yang ada di database,
+dan jadwal hari ini tetap tampil. GAPEKA 2026 tidak punya pola hari (semua harian), jadi satu pekan sudah mewakili seluruh
+masa berlakunya. Syaratnya jendela minimal 7 hari; 7 hari juga paling hemat ruang database (kira-kira separuh dari 14 hari).
+
+Keterbatasan yang sudah ada sejak jadwal lama: fitur yang butuh tanggal sungguhan, yaitu estimasi posisi kereta dari jadwal
+(`refresh_estimated_vehicle_positions`), hanya bekerja untuk tanggal yang ada di jendela. Posisi dari penumpang tidak terpengaruh.
 
 ### Pergantian
 
@@ -201,9 +213,8 @@ stasiun ikut terlihat sejak diimpor; yang tersembunyi sampai pergantian adalah k
 
 ## Setelah cutover
 
-- **Jendela import maksimal 30 hari.** Import ulang zip GAPEKA dengan `--schedule-set gapeka2026` sebelum jendelanya
-  habis (jendela 1-30 Desember: sebelum 30 Desember). Aplikasi tetap menggeser jadwal per hari-minggu di dalam jendela
-  bila tanggal sudah lewat.
+- **Tidak ada import ulang rutin.** GAPEKA berlaku sampai diganti GAPEKA berikutnya; import berikutnya hanya saat ada GAPEKA baru
+  (set baru, mis. `gapeka2027`, lalu tombol yang sama).
 - **Jangan import ulang feed lama** dengan jendela yang melewati 30 November, dan jangan menghapus set `lama` sampai
   GAPEKA 2026 terbukti stabil (itu jalan mundur lewat tombol).
 - Importer menyimpan `timepoint=0` sebagai `stop_times.is_estimated = true` (migrasi 20261118090000). Aplikasi
