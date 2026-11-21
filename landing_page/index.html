@@ -215,6 +215,37 @@
   <!-- Custom CSS -->
   <link rel="stylesheet" href="assets/css/style.css?v=21">
   <style>
+    /* Navbar kapsul + liquid glass */
+    .tk-glass-nav,.tk-glass-menu{
+      background:linear-gradient(135deg,rgba(255,255,255,.80),rgba(255,255,255,.66));
+      -webkit-backdrop-filter:blur(18px) saturate(170%);backdrop-filter:blur(18px) saturate(170%);
+      border:1px solid rgba(255,255,255,.55);
+      box-shadow:
+        inset 1.5px 1.5px 0 -0.5px rgba(255,255,255,.95),
+        inset -1.5px -1.5px 0 -0.5px rgba(255,255,255,.7),
+        inset 0 0 0 1px rgba(255,255,255,.18),
+        inset 0 -10px 18px -8px rgba(255,255,255,.55),
+        inset 0 12px 20px -10px rgba(255,255,255,.7),
+        0 12px 36px rgba(15,23,42,.16),0 2px 6px rgba(15,23,42,.08)}
+    .tk-lg-svg .tk-glass-nav{-webkit-backdrop-filter:url(#tk-lg);backdrop-filter:url(#tk-lg)}
+    .tk-glass-nav::before{content:"";position:absolute;inset:0;border-radius:inherit;pointer-events:none;
+      background:radial-gradient(70% 120% at 12% -10%,rgba(255,255,255,.55),transparent 55%),radial-gradient(60% 100% at 92% 120%,rgba(255,255,255,.35),transparent 60%)}
+    .tk-glass-nav::after{content:"";position:absolute;inset:0;border-radius:inherit;pointer-events:none;padding:1px;
+      background:linear-gradient(135deg,rgba(255,255,255,.95),rgba(255,255,255,0) 35%,rgba(255,255,255,0) 65%,rgba(255,255,255,.8));
+      -webkit-mask:linear-gradient(#000 0 0) content-box,linear-gradient(#000 0 0);-webkit-mask-composite:xor;mask-composite:exclude}
+    .tk-nav a{display:inline-flex;align-items:center;gap:.4rem;padding:.5rem .95rem;border-radius:9999px;transition:background-color .2s,color .2s,box-shadow .2s}
+    .tk-nav a:hover{background:rgba(255,255,255,.85);color:#2563eb;box-shadow:0 1px 3px rgba(15,23,42,.1)}
+    .tk-nav a.tk-xl-only{display:none}
+    @media (min-width:1280px){.tk-nav a.tk-xl-only{display:inline-flex}}
+    .tk-glass-nav>div:first-child{position:relative;z-index:2}
+    .tk-glass-nav::before,.tk-glass-nav::after{z-index:1}
+    .tk-glass-nav .tk-nav,.tk-glass-nav .tk-nav a{color:#334155}
+    .tk-glass-nav .tk-nav a:hover{color:#2563eb}
+    .tk-glass-nav a>div>span{text-shadow:0 0 8px rgba(255,255,255,.9),0 0 2px rgba(255,255,255,.9)}
+    .tk-glass-nav .tk-cta{color:#fff;isolation:isolate}
+    .tk-glass-nav .tk-cta svg{color:#fff;stroke:#fff;position:relative;z-index:1}
+    .tk-glass-menu{background:linear-gradient(135deg,rgba(255,255,255,.86),rgba(255,255,255,.72))}
+    @supports not ((backdrop-filter:blur(1px)) or (-webkit-backdrop-filter:blur(1px))){.tk-glass-nav,.tk-glass-menu{background:rgba(255,255,255,.96)}}
     /* QR unduh: sudut bidik + garis pemindai */
     .tk-qr-corner{position:absolute;width:14px;height:14px;border-color:#22d3ee;border-style:solid;border-width:0;transition:transform .3s}
     .tk-qr-corner.tl{top:-5px;left:-5px;border-top-width:3px;border-left-width:3px;border-top-left-radius:8px}
@@ -231,49 +262,58 @@
 
 <body class="bg-slate-50 text-slate-900 font-sans antialiased selection:bg-blue-600 selection:text-white overflow-x-hidden w-full max-w-full relative">
 
+  <!-- Liquid glass: pembiasan tepi (Chromium). Browser lain memakai blur biasa. -->
+  <svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false"><defs>
+    <filter id="tk-lg" x="0" y="0" width="100%" height="100%" color-interpolation-filters="sRGB">
+      <feGaussianBlur in="SourceGraphic" stdDeviation="7" result="b"/>
+      <feImage href="data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A//www.w3.org/2000/svg%22%20viewBox%3D%220%200%20100%20100%22%20preserveAspectRatio%3D%22none%22%3E%3Cdefs%3E%3ClinearGradient%20id%3D%22l%22%20x1%3D%220%22%20x2%3D%221%22%3E%3Cstop%20offset%3D%220%22%20stop-color%3D%22rgb%28255%2C128%2C128%29%22/%3E%3Cstop%20offset%3D%221%22%20stop-color%3D%22rgb%28128%2C128%2C128%29%22/%3E%3C/linearGradient%3E%3ClinearGradient%20id%3D%22r%22%20x1%3D%221%22%20x2%3D%220%22%3E%3Cstop%20offset%3D%220%22%20stop-color%3D%22rgb%280%2C128%2C128%29%22/%3E%3Cstop%20offset%3D%221%22%20stop-color%3D%22rgb%28128%2C128%2C128%29%22/%3E%3C/linearGradient%3E%3ClinearGradient%20id%3D%22t%22%20x1%3D%220%22%20y1%3D%220%22%20x2%3D%220%22%20y2%3D%221%22%3E%3Cstop%20offset%3D%220%22%20stop-color%3D%22rgb%28128%2C255%2C128%29%22/%3E%3Cstop%20offset%3D%221%22%20stop-color%3D%22rgb%28128%2C128%2C128%29%22/%3E%3C/linearGradient%3E%3ClinearGradient%20id%3D%22b%22%20x1%3D%220%22%20y1%3D%221%22%20x2%3D%220%22%20y2%3D%220%22%3E%3Cstop%20offset%3D%220%22%20stop-color%3D%22rgb%28128%2C0%2C128%29%22/%3E%3Cstop%20offset%3D%221%22%20stop-color%3D%22rgb%28128%2C128%2C128%29%22/%3E%3C/linearGradient%3E%3Cfilter%20id%3D%22bl%22%20x%3D%22-20%25%22%20y%3D%22-20%25%22%20width%3D%22140%25%22%20height%3D%22140%25%22%3E%3CfeGaussianBlur%20stdDeviation%3D%222.5%22/%3E%3C/filter%3E%3C/defs%3E%3Crect%20width%3D%22100%22%20height%3D%22100%22%20fill%3D%22rgb%28128%2C128%2C128%29%22/%3E%3Cg%20filter%3D%22url%28%23bl%29%22%3E%3Crect%20x%3D%220%22%20y%3D%220%22%20width%3D%227%22%20height%3D%22100%22%20fill%3D%22url%28%23l%29%22/%3E%3Crect%20x%3D%2293%22%20y%3D%220%22%20width%3D%227%22%20height%3D%22100%22%20fill%3D%22url%28%23r%29%22/%3E%3Crect%20x%3D%220%22%20y%3D%220%22%20width%3D%22100%22%20height%3D%2232%22%20fill%3D%22url%28%23t%29%22%20opacity%3D%22.85%22/%3E%3Crect%20x%3D%220%22%20y%3D%2268%22%20width%3D%22100%22%20height%3D%2232%22%20fill%3D%22url%28%23b%29%22%20opacity%3D%22.85%22/%3E%3C/g%3E%3C/svg%3E" x="0" y="0" width="100%" height="100%" preserveAspectRatio="none" result="map"/>
+      <feDisplacementMap in="b" in2="map" scale="46" xChannelSelector="R" yChannelSelector="G" result="d"/>
+      <feColorMatrix in="d" type="saturate" values="1.7"/>
+    </filter>
+  </defs></svg>
   <!-- ================= NAVBAR ================= -->
-  <header class="fixed top-0 left-0 right-0 w-full max-w-full z-50 glass-nav bg-white/95 backdrop-blur-xl border-b border-slate-200/80 shadow-xs transition-all duration-300">
-    <div class="tk-container h-16 sm:h-20 flex items-center justify-between">
+  <header class="tk-glass-nav fixed top-3 sm:top-4 inset-x-3 sm:inset-x-6 mx-auto max-w-6xl z-50 rounded-full transition-all duration-300">
+    <div class="relative h-14 sm:h-[68px] pl-3 pr-2.5 sm:pl-4 sm:pr-3 flex lg:grid lg:grid-cols-[1fr_auto_1fr] items-center justify-between gap-4">
 
       <!-- Brand Logo -->
-      <a href="#beranda" class="flex items-center gap-2.5 sm:gap-3 group">
+      <a href="#beranda" class="flex items-center gap-2.5 sm:gap-3 group justify-self-start min-w-0">
         <div class="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-blue-600 p-0.5 shadow-sm shadow-blue-600/20 group-hover:scale-105 transition-transform flex items-center justify-center">
           <img src="assets/branding/tk_icon.png" alt="Logo Teman Kereta" class="w-full h-full object-contain rounded-lg bg-white p-1" onerror="this.onerror=null; this.src='assets/screenshots/qr-code.svg';">
         </div>
         <div class="flex flex-col">
           <span class="text-base sm:text-lg font-bold tracking-tight text-slate-900 leading-tight">Teman Kereta</span>
-          <span class="text-[11px] sm:text-xs font-normal text-slate-500">Teman Perjalanan KRL</span>
+          <span class="text-[11px] sm:text-xs font-medium text-slate-700 truncate">Teman Perjalanan KRL</span>
         </div>
       </a>
 
       <!-- Desktop Nav Links -->
-      <nav class="hidden md:flex items-center gap-7 lg:gap-8 font-medium text-sm text-slate-600">
+      <nav class="tk-nav hidden lg:flex items-center gap-0.5 p-1 rounded-full bg-white/35 ring-1 ring-inset ring-white/60 font-medium text-sm text-slate-600 whitespace-nowrap">
         <a href="#beranda" class="hover:text-blue-600 transition-colors">Beranda</a>
         <a href="#fitur" class="hover:text-blue-600 transition-colors">Fitur</a>
         <a href="#tangkapan-layar" class="hover:text-blue-600 transition-colors">Tangkapan Layar</a>
         <a href="#cara-kerja" class="hover:text-blue-600 transition-colors">Cara Kerja</a>
         <a href="#faq" class="hover:text-blue-600 transition-colors">FAQ</a>
         <a href="/cctv/" class="inline-flex items-center gap-1.5 hover:text-blue-600 transition-colors"><span class="w-1.5 h-1.5 rounded-full bg-red-600" aria-hidden="true"></span>CCTV Stasiun</a>
-        <a href="/artikel/" class="hidden xl:inline-flex hover:text-blue-600 transition-colors">Artikel</a>
+        <a href="/artikel/" class="tk-xl-only hover:text-blue-600 transition-colors">Artikel</a>
       </nav>
 
       <!-- Desktop Action CTA -->
-      <div class="hidden md:flex items-center gap-2.5">
-        <a href="#unduh" class="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-700 active:bg-blue-800 text-white font-semibold text-sm shadow-sm shadow-blue-600/20 transition-all hover:-translate-y-0.5">
+      <div class="hidden lg:flex items-center justify-end gap-2.5">
+        <a href="#unduh" class="tk-cta inline-flex items-center gap-2 px-5 py-2.5 whitespace-nowrap rounded-full bg-blue-600 hover:bg-blue-700 active:bg-blue-800 text-white font-semibold text-sm shadow-md shadow-blue-600/30 ring-1 ring-inset ring-white/30 transition-all hover:-translate-y-0.5">
           <i data-lucide="download" class="w-4 h-4"></i>
           <span>Unduh Aplikasi</span>
         </a>
       </div>
 
       <!-- Mobile Hamburger Button -->
-      <button id="mobile-menu-btn" class="md:hidden p-2 rounded-xl bg-white border border-slate-200 text-slate-700 hover:bg-slate-50 transition-colors" aria-label="Toggle Menu">
+      <button id="mobile-menu-btn" class="lg:hidden p-2.5 rounded-full bg-white/60 border border-white/70 text-slate-700 hover:bg-white/90 transition-colors" aria-label="Toggle Menu">
         <i data-lucide="menu" class="w-5 h-5"></i>
       </button>
 
     </div>
 
     <!-- Mobile Dropdown Menu -->
-    <div id="mobile-menu" class="hidden md:hidden px-4 pt-2 pb-6 bg-white/95 backdrop-blur-xl border-b border-slate-200 space-y-2 shadow-lg">
+    <div id="mobile-menu" class="tk-glass-menu hidden lg:hidden absolute left-0 right-0 top-full mt-2 px-3 pt-3 pb-4 rounded-3xl space-y-1.5 max-h-[calc(100vh-6rem)] overflow-y-auto">
       <a href="#beranda" class="block px-4 py-2.5 rounded-xl text-slate-700 font-medium hover:bg-blue-50 hover:text-blue-600 transition-colors">Beranda</a>
       <a href="/forum" class="block px-4 py-2.5 rounded-xl font-bold text-blue-700 bg-blue-50/90 border border-blue-200 flex items-center justify-between shadow-xs">
         <div class="flex items-center gap-2.5">
@@ -1105,21 +1145,8 @@
               </div>
 
               <!-- QR ke Google Play: untuk pengunjung dari laptop (disembunyikan di HP) -->
-              <a href="https://play.google.com/store/apps/details?id=id.temankereta.teman_kereta&amp;hl=id" aria-label="Pindai QR untuk membuka Teman Kereta di Google Play" class="tk-qr group hidden sm:flex items-center gap-3.5 pl-2.5 pr-5 py-2.5 rounded-2xl bg-white/10 ring-1 ring-white/25 backdrop-blur hover:bg-white/15 hover:-translate-y-0.5 transition-all">
-                <span class="tk-qr-tile relative block w-[84px] h-[84px] shrink-0 rounded-xl bg-white p-2 shadow-lg shadow-black/20">
-                  <img src="assets/qr-google-play.svg" alt="" width="68" height="68" class="w-full h-full" loading="lazy">
-                  <img src="assets/branding/tk_icon.png" alt="" class="absolute left-1/2 top-1/2 w-[22px] h-[22px] -translate-x-1/2 -translate-y-1/2 rounded-md bg-white p-[2px] ring-2 ring-white">
-                  <span class="tk-qr-corner tl"></span><span class="tk-qr-corner tr"></span><span class="tk-qr-corner bl"></span><span class="tk-qr-corner br"></span>
-                  <span class="tk-qr-scan" aria-hidden="true"></span>
-                </span>
-                <span class="text-left leading-tight">
-                  <span class="flex items-center gap-1.5 text-[11px] uppercase tracking-wide font-semibold text-blue-100">
-                    <span class="relative flex w-2 h-2"><span class="absolute inline-flex w-full h-full rounded-full bg-emerald-300 opacity-75 animate-ping"></span><span class="relative inline-flex w-2 h-2 rounded-full bg-emerald-300"></span></span>
-                    Buka di laptop?
-                  </span>
-                  <span class="block text-lg font-semibold tracking-tight mt-0.5">Pindai pakai HP</span>
-                  <span class="block text-[11px] text-blue-100 mt-0.5">Langsung ke halaman instal</span>
-                </span>
+              <a href="https://play.google.com/store/apps/details?id=id.temankereta.teman_kereta&amp;hl=id" aria-label="Pindai QR untuk membuka Teman Kereta di Google Play" title="Pindai pakai HP" class="tk-qr hidden sm:block shrink-0 rounded-2xl bg-white p-3 shadow-xl shadow-black/25 hover:-translate-y-0.5 transition-transform">
+                <img src="assets/qr-google-play.svg" alt="QR code Teman Kereta di Google Play" width="152" height="152" class="block w-[152px] h-[152px]" loading="lazy">
               </a>
 
               </div>
@@ -1267,18 +1294,18 @@
   <footer class="bg-white text-slate-600 py-12 border-t border-slate-200 overflow-hidden w-full max-w-full">
     <div class="tk-container">
 
-      <div class="flex flex-col md:flex-row items-center justify-between gap-6 pb-8 border-b border-slate-100 text-center md:text-left">
-        <div class="flex items-center gap-3">
+      <div class="flex flex-col items-center gap-6 pb-8 border-b border-slate-100 text-center">
+        <div class="flex items-center gap-3 whitespace-nowrap">
           <div class="w-8 h-8 rounded-lg bg-blue-600 p-0.5 flex items-center justify-center shadow-sm shadow-blue-600/20">
             <img src="assets/branding/tk_icon.png" alt="Logo Teman Kereta" class="w-full h-full object-contain rounded-md" onerror="this.onerror=null; this.src='assets/screenshots/qr-code.svg';">
           </div>
-          <div class="flex items-baseline gap-2">
+          <div class="flex items-baseline gap-2 whitespace-nowrap">
             <span class="text-base font-bold text-slate-900 tracking-tight">Teman Kereta</span>
             <span class="text-xs font-medium text-slate-400">by duacincin.id</span>
           </div>
         </div>
 
-        <div class="flex flex-wrap items-center justify-center gap-6 text-sm text-slate-600 font-medium">
+        <div class="flex flex-wrap items-center justify-center gap-x-6 gap-y-3 max-w-3xl text-sm text-slate-600 font-medium">
           <a href="#beranda" class="hover:text-blue-600 transition-colors">Beranda</a>
           <a href="#fitur" class="hover:text-blue-600 transition-colors">Fitur</a>
           <a href="#tangkapan-layar" class="hover:text-blue-600 transition-colors">Tangkapan Layar</a>
@@ -1293,7 +1320,7 @@
         </div>
       </div>
 
-      <div class="pt-6 flex flex-col sm:flex-row items-center justify-between gap-4 text-xs text-slate-400 text-center sm:text-left">
+      <div class="pt-6 flex flex-col items-center gap-2 text-xs text-slate-400 text-center">
         <div>
           &copy; 2026 Teman Kereta by duacincin.id. Aplikasi independen, bukan aplikasi resmi KAI Commuter.
         </div>
@@ -1340,5 +1367,8 @@
         .catch(function () {});
     })();
   </script>
+<script>
+  (function(){try{var u=navigator.userAgent;if(/Chrome\//.test(u)&&!/Edg\/|OPR\//.test(u)||/Edg\//.test(u)||/OPR\//.test(u)){if(!/Firefox/.test(u))document.documentElement.classList.add('tk-lg-svg');}}catch(e){}})();
+</script>
 </body>
 </html>
