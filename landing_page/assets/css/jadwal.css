@@ -327,3 +327,7 @@ button.jd-tr:hover { background: #f7f9fc; }
 .jd-st-head h2, .jd-sh-head h2, .jd-hero h1 { text-wrap: balance; }
 .jd-tr:not(.jd-th) { content-visibility: auto; contain-intrinsic-size: auto 56px; }
 .jd-dir-to, .jd-td-r b, .jd-next-to { overflow-wrap: anywhere; }
+
+/* ---------- Ruang untuk navbar kapsul bersama (tk-navbar.css) ---------- */
+.jd-hero { padding-top: calc(2.25rem + 84px); }
+@media (max-width: 639px) { .jd-hero { padding-top: calc(1.5rem + 68px); } }

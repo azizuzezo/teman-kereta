@@ -85,9 +85,57 @@
       animation: pulseSoft 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
     }
   </style>
+  <link rel="stylesheet" href="/assets/css/tk-navbar.css?v=2">
 </head>
 
 <body class="bg-slate-100/70 text-slate-900 font-sans antialiased min-h-screen pb-20 md:pb-10 relative">
+  <!-- Liquid glass: pembiasan tepi (Chromium). Browser lain memakai blur biasa. -->
+  <svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false"><defs>
+    <filter id="tk-lg" x="0" y="0" width="100%" height="100%" color-interpolation-filters="sRGB">
+      <feGaussianBlur in="SourceGraphic" stdDeviation="7" result="b"/>
+      <feImage href="data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A//www.w3.org/2000/svg%22%20viewBox%3D%220%200%20100%20100%22%20preserveAspectRatio%3D%22none%22%3E%3Cdefs%3E%3ClinearGradient%20id%3D%22l%22%20x1%3D%220%22%20x2%3D%221%22%3E%3Cstop%20offset%3D%220%22%20stop-color%3D%22rgb%28255%2C128%2C128%29%22/%3E%3Cstop%20offset%3D%221%22%20stop-color%3D%22rgb%28128%2C128%2C128%29%22/%3E%3C/linearGradient%3E%3ClinearGradient%20id%3D%22r%22%20x1%3D%221%22%20x2%3D%220%22%3E%3Cstop%20offset%3D%220%22%20stop-color%3D%22rgb%280%2C128%2C128%29%22/%3E%3Cstop%20offset%3D%221%22%20stop-color%3D%22rgb%28128%2C128%2C128%29%22/%3E%3C/linearGradient%3E%3ClinearGradient%20id%3D%22t%22%20x1%3D%220%22%20y1%3D%220%22%20x2%3D%220%22%20y2%3D%221%22%3E%3Cstop%20offset%3D%220%22%20stop-color%3D%22rgb%28128%2C255%2C128%29%22/%3E%3Cstop%20offset%3D%221%22%20stop-color%3D%22rgb%28128%2C128%2C128%29%22/%3E%3C/linearGradient%3E%3ClinearGradient%20id%3D%22b%22%20x1%3D%220%22%20y1%3D%221%22%20x2%3D%220%22%20y2%3D%220%22%3E%3Cstop%20offset%3D%220%22%20stop-color%3D%22rgb%28128%2C0%2C128%29%22/%3E%3Cstop%20offset%3D%221%22%20stop-color%3D%22rgb%28128%2C128%2C128%29%22/%3E%3C/linearGradient%3E%3Cfilter%20id%3D%22bl%22%20x%3D%22-20%25%22%20y%3D%22-20%25%22%20width%3D%22140%25%22%20height%3D%22140%25%22%3E%3CfeGaussianBlur%20stdDeviation%3D%222.5%22/%3E%3C/filter%3E%3C/defs%3E%3Crect%20width%3D%22100%22%20height%3D%22100%22%20fill%3D%22rgb%28128%2C128%2C128%29%22/%3E%3Cg%20filter%3D%22url%28%23bl%29%22%3E%3Crect%20x%3D%220%22%20y%3D%220%22%20width%3D%227%22%20height%3D%22100%22%20fill%3D%22url%28%23l%29%22/%3E%3Crect%20x%3D%2293%22%20y%3D%220%22%20width%3D%227%22%20height%3D%22100%22%20fill%3D%22url%28%23r%29%22/%3E%3Crect%20x%3D%220%22%20y%3D%220%22%20width%3D%22100%22%20height%3D%2232%22%20fill%3D%22url%28%23t%29%22%20opacity%3D%22.85%22/%3E%3Crect%20x%3D%220%22%20y%3D%2268%22%20width%3D%22100%22%20height%3D%2232%22%20fill%3D%22url%28%23b%29%22%20opacity%3D%22.85%22/%3E%3C/g%3E%3C/svg%3E" x="0" y="0" width="100%" height="100%" preserveAspectRatio="none" result="map"/>
+      <feDisplacementMap in="b" in2="map" scale="46" xChannelSelector="R" yChannelSelector="G" result="d"/>
+      <feColorMatrix in="d" type="saturate" values="1.7"/>
+    </filter>
+  </defs></svg>
+  <!--TKN:MULAI-->
+  <header class="tkn">
+    <div class="tkn-bar">
+      <a href="/" class="tkn-brand" aria-label="Teman Kereta, ke beranda">
+        <span class="tkn-logo"><img src="/assets/branding/tk_icon.png" alt="" width="36" height="36"></span>
+        <span class="tkn-name"><b>Teman Kereta</b><small>Teman Perjalanan KRL</small></span>
+      </a>
+      <nav class="tkn-nav" aria-label="Navigasi utama">
+        <a href="/">Beranda</a>
+        <a href="/#fitur">Fitur</a>
+        <a href="/#cara-kerja">Cara Kerja</a>
+        <a href="/jadwal/">Jadwal</a>
+        <a href="/cctv/"><span class="tkn-live" aria-hidden="true"></span>CCTV Stasiun</a>
+        <a href="/artikel/">Artikel</a>
+      </nav>
+      <div class="tkn-end">
+        <a href="/#unduh" class="tkn-cta"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="m7 10 5 5 5-5"/><path d="M12 15V3"/></svg><span>Unduh Aplikasi</span></a>
+      </div>
+      <button type="button" id="tkn-burger" class="tkn-burger" aria-label="Buka menu" aria-expanded="false" aria-controls="tkn-menu">
+        <svg class="tkn-lines" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h16"/></svg>
+        <svg class="tkn-x" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18"/></svg>
+      </button>
+    </div>
+    <nav id="tkn-menu" class="tkn-menu" aria-label="Navigasi utama" hidden>
+      <a href="/">Beranda</a>
+      <a href="/forum" aria-current="page">Forum Komunitas KRL</a>
+      <a href="/#fitur">Fitur</a>
+      <a href="/#cara-kerja">Cara Kerja</a>
+      <a href="/#faq">FAQ</a>
+      <a href="/jadwal/">Jadwal KRL</a>
+      <a href="/cctv/"><span class="tkn-live" aria-hidden="true"></span>CCTV Stasiun</a>
+      <a href="/artikel/">Artikel</a>
+      <a href="/tentang/">Tentang</a>
+      <a href="/#unduh" class="tkn-cta"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="m7 10 5 5 5-5"/><path d="M12 15V3"/></svg><span>Unduh di Google Play</span></a>
+    </nav>
+  </header>
+  <!--TKN:SELESAI-->
+  <div class="tkn-space" aria-hidden="true"></div>
 
   <!-- ================= IN-SCREEN FLOATING POPUP TOAST (NOTIFIKASI SELAMAT DATANG) ================= -->
   <div id="toast-container" class="fixed top-5 left-1/2 -translate-x-1/2 z-50 pointer-events-none transition-all duration-300 transform -translate-y-12 opacity-0 flex flex-col items-center">
@@ -106,7 +154,7 @@
   </div>
 
   <!-- ================= TOP HEADER ================= -->
-  <header class="sticky top-0 z-40 bg-white/95 backdrop-blur-md border-b border-slate-200/90 shadow-sm">
+  <header class="sticky top-[76px] sm:top-[92px] z-40 bg-white/95 backdrop-blur-md border-b border-slate-200/90 shadow-sm">
     <div class="max-w-6xl mx-auto px-4 sm:px-6 h-14 sm:h-16 flex items-center justify-between gap-4">
       
       <!-- Brand Logo & Back to Home -->
@@ -1986,5 +2034,6 @@
 
     initApp();
   </script>
+  <script src="/assets/js/tk-navbar.js?v=1" defer></script>
 </body>
 </html>
